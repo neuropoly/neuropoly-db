@@ -1,0 +1,17 @@
+# ElasticSearch Python client (9.x compatible with ES 9.x and 10.x)
+elasticsearch>=9.0,<10
+
+# Neuroimaging metadata
+pybids>=0.16
+pydicom>=2.4
+
+# Embeddings
+sentence-transformers>=2.2
+
+# Jupyter & data
+jupyter
+pandas
+tqdm
+
+# NIfTI headers (optional, for advanced exploration)
+nibabel
