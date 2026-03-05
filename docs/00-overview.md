@@ -92,7 +92,10 @@ This course installs a non-trivial stack. Here's what goes on your disk:
 | Embedding model download (`all-MiniLM-L6-v2`) | ~90 MB |
 | BIDS datasets (all bids-examples, ~80 datasets) | ~60 MB |
 | ES index data (after ingestion) | < 10 MB |
-| **Total** | **~11 GB** |
+| Ollama binary *(optional — for LLM query expansion)* | ~200 MB |
+| Ollama LLM model (`llama3`) *(optional)* | ~4.7 GB |
+| **Total (without Ollama)** | **~11 GB** |
+| **Total (with Ollama + llama3)** | **~16 GB** |
 
 The bulk of the space (~6 GB) goes to PyTorch and NVIDIA CUDA libraries that
 `sentence-transformers` pulls in. The neuroimaging datasets and ES index are
@@ -236,7 +239,51 @@ Having dozens of datasets with different scanners, field strengths, and
 metadata richness makes the search demos in Notebooks 2–3 far more
 meaningful — you'll see real score variation instead of identical results.
 
-### 6. Verify everything
+### 6. Install Ollama for LLM query expansion *(optional)*
+
+Notebooks 05–07 include a **query expansion** feature that enriches search
+queries with domain-specific synonyms before sending them to ElasticSearch.
+Two backends are available — **Ollama** (local LLM, higher quality) and a
+built-in **rule-based synonym map** (always works, no extra setup needed).
+
+Skip this step if you just want the rule-based fallback.
+
+**Install the Ollama CLI:**
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+**Start the Ollama server** (keep this running while using the notebooks):
+
+```bash
+ollama serve
+```
+
+**Pull the model** (~4.7 GB download, run in a second terminal):
+
+```bash
+ollama pull llama3
+```
+
+Verify it works:
+
+```bash
+curl -s http://localhost:11434/api/tags | python3 -m json.tool
+# Expected: a JSON object listing "llama3" under "models"
+```
+
+> **Smaller alternative:** `llama3.2:1b` (~1 GB) is faster and uses less RAM,
+> at the cost of slightly lower expansion quality. Pull it with
+> `ollama pull llama3.2:1b` and update `ollama_model="llama3.2:1b"` in the
+> `_llm_expand()` call in the notebooks.
+
+> **No Ollama?** The notebooks detect the connection automatically. If Ollama
+> is not reachable, they silently fall back to the rule-based synonym map.
+> The cell will print which backend is active so you always know which path
+> is running.
+
+### 7. Verify everything
 
 ```bash
 # ES is up
@@ -244,6 +291,9 @@ curl -s http://localhost:9200 | grep "name"
 
 # Datasets are present (should show ~80 directories)
 ls data/ | head -20
+
+# Ollama is up (only if you installed it)
+curl -s http://localhost:11434/api/tags | python3 -m json.tool
 ```
 
 You're ready. Proceed to **[Chapter 1: Vector Database Concepts](01-vector-db-concepts.md)**.

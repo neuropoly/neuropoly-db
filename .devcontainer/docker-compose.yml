@@ -1,0 +1,94 @@
+# =============================================================================
+# Dev Container — NeuroPoly DB
+#
+# Services run in an isolated Docker network (neuropoly-dev).
+# No ports are bound to the host — VS Code tunnels them automatically via
+# forwardPorts in devcontainer.json.
+#
+# Internal endpoints (used by notebooks via env vars):
+#   Elasticsearch : http://elasticsearch:9200
+#   Kibana        : http://kibana:5601
+#   Ollama        : http://ollama:11434
+#
+# To pull an Ollama model after the container starts:
+#   docker exec -it ollama-dev ollama pull llama3
+# =============================================================================
+
+services:
+
+  # ── Python dev workspace ──────────────────────────────────────────────────
+  workspace:
+    image: mcr.microsoft.com/devcontainers/python:3.12-bullseye
+    volumes:
+      - ..:/workspaces/neuropoly-db:cached
+      # Shadow the host .venv with a container-local named volume so the
+      # host's existing .venv (different Python / CUDA build) is invisible
+      # inside the container and postCreate can create a clean one.
+      - venv-data:/workspaces/neuropoly-db/.venv
+    command: sleep infinity
+    environment:
+      ES_HOST:     http://elasticsearch:9200
+      KIBANA_URL:  http://kibana:5601
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - neuropoly-dev
+
+  # ── Elasticsearch 9.3 ────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.0
+    container_name: es-neuroimaging-dev
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false      # local dev only — never in production
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - neuropoly-dev
+
+  # ── Kibana 9.3 ───────────────────────────────────────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:9.3.0
+    container_name: kibana-neuroimaging-dev
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - neuropoly-dev
+
+  # ── Ollama (local LLM for query expansion) ───────────────────────────────
+  # To pull a model after the container starts:
+  #   docker exec -it ollama-dev ollama pull llama3
+  # Or, for a smaller model (~1 GB):
+  #   docker exec -it ollama-dev ollama pull llama3.2:1b
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-dev
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - neuropoly-dev
+
+networks:
+  neuropoly-dev:
+    driver: bridge
+
+volumes:
+  es-data:
+  ollama-data:
+  venv-data:

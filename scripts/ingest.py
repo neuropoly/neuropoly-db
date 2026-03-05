@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -21,8 +22,8 @@ from elasticsearch import Elasticsearch, helpers
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
-EMBEDDING_DIMS = 384
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_DIMS = 768
+EMBEDDING_MODEL = "all-mpnet-base-v2"
 
 INDEX_SETTINGS = {
     "number_of_replicas": 0
@@ -30,42 +31,44 @@ INDEX_SETTINGS = {
 
 INDEX_MAPPINGS = {
     "properties": {
-            "dataset":   {"type": "keyword"},
-            "subject":   {"type": "keyword"},
-            "session":   {"type": "keyword"},
-            "task":      {"type": "keyword"},
-            "run":       {"type": "keyword"},
-            "suffix":    {"type": "keyword"},
-            "datatype":  {"type": "keyword"},
-            "age":       {"type": "float"},
-            "sex":       {"type": "keyword"},
-            "RepetitionTime":        {"type": "float"},
-            "EchoTime":              {"type": "float"},
-            "FlipAngle":             {"type": "float"},
-            "MagneticFieldStrength": {"type": "float"},
-            "SliceThickness":        {"type": "float"},
-            "InversionTime":         {"type": "float"},
-            "Manufacturer":           {"type": "keyword"},
-            "ManufacturersModelName": {"type": "keyword"},
-            "InstitutionName":        {"type": "keyword"},
-            "PhaseEncodingDirection": {"type": "keyword"},
-            "PulseSequenceType":      {"type": "keyword"},
-            "MRAcquisitionType":      {"type": "keyword"},
-            "ScanningSequence":       {"type": "keyword"},
-            "BodyPart":               {"type": "keyword"},
-            "ReceiveCoilName":        {"type": "keyword"},
-            "TaskName":          {"type": "text"},
-            "TaskDescription":   {"type": "text"},
-            "SeriesDescription": {"type": "text"},
-            "ProtocolName":      {"type": "text"},
-            "description_text":   {"type": "text"},
-            "metadata_embedding": {
-                "type": "dense_vector",
-                "dims": EMBEDDING_DIMS,
-                "similarity": "cosine",
-                "index_options": {"type": "int8_hnsw"},
-            },
-            "bids_path": {"type": "keyword"},
+        "dataset":   {"type": "keyword"},
+        "subject":   {"type": "keyword"},
+        "session":   {"type": "keyword"},
+        "task":      {"type": "keyword"},
+        "run":       {"type": "keyword"},
+        "suffix":    {"type": "keyword"},
+        "datatype":  {"type": "keyword"},
+        "age":       {"type": "float"},
+        "sex":       {"type": "keyword"},
+        "RepetitionTime":        {"type": "float"},
+        "EchoTime":              {"type": "float"},
+        "FlipAngle":             {"type": "float"},
+        "MagneticFieldStrength": {"type": "float"},
+        "SliceThickness":        {"type": "float"},
+        "InversionTime":         {"type": "float"},
+        "Manufacturer":           {"type": "keyword"},
+        "ManufacturersModelName": {"type": "keyword"},
+        "InstitutionName":        {"type": "keyword"},
+        "PhaseEncodingDirection": {"type": "keyword"},
+        "PulseSequenceType":      {"type": "keyword"},
+        "MRAcquisitionType":      {"type": "keyword"},
+        "ScanningSequence":       {"type": "keyword"},
+        "BodyPart":               {"type": "keyword"},
+        "ReceiveCoilName":        {"type": "keyword"},
+        "TaskName":          {"type": "text"},
+        "TaskDescription":   {"type": "text"},
+        "SeriesDescription": {"type": "text"},
+        "ProtocolName":      {"type": "text"},
+        "description_text":   {"type": "text"},
+        "metadata_embedding": {
+            "type": "dense_vector",
+            "dims": 768,
+            "similarity": "cosine",
+            "index_options": {"type": "int8_hnsw"},
+        },
+        "bids_path": {"type": "keyword"},
+        "study_description": {"type": "text"},
+        "modality_group": {"type": "keyword"},
     }
 }
 
@@ -172,92 +175,176 @@ def _is_valid(value) -> bool:
     return True
 
 
-def build_description_text(entities: dict, metadata: dict, participant_info: dict) -> str:
+# Modality groups: map suffix → broad research category used in description_text
+MODALITY_GROUPS = {
+    "bold":       "functional",
+    "sbref":      "functional",
+    "boldref":    "functional",
+    "T1w":        "structural",
+    "T2w":        "structural",
+    "FLAIR":      "structural",
+    "FLASH":      "structural",
+    "inplaneT2":  "structural",
+    "UNIT1":      "structural",
+    "dwi":        "diffusion",
+    "phasediff":  "fieldmap",
+    "magnitude1": "fieldmap",
+    "magnitude2": "fieldmap",
+    "magnitude":  "fieldmap",
+    "fieldmap":   "fieldmap",
+    "epi":        "fieldmap",
+    "T1map":      "quantitative",
+    "T2map":      "quantitative",
+    "T2starmap":  "quantitative",
+    "MTsat":      "quantitative",
+    "MTRmap":     "quantitative",
+    "Chimap":     "quantitative",
+    "TB1map":     "quantitative",
+    "asl":        "perfusion",
+    "m0scan":     "perfusion",
+    "pet":        "pet",
+    "svs":        "spectroscopy",
+    "mrsi":       "spectroscopy",
+}
+
+
+def build_description_text(
+    entities: dict,
+    metadata: dict,
+    participant_info: dict,
+    study_description: str = "",
+) -> str:
+    """
+    Build a rich, prose-style description text for BM25 and embedding.
+
+    Strategy: start from the modality, layer in scanner/protocol details,
+    then task/study context.  Expand abbreviations inline so both BM25 and
+    the embedding encoder see human-readable terms.
+    """
     parts = []
     suffix = entities.get("suffix", "")
-    parts.append(SUFFIX_DESCRIPTIONS.get(suffix, suffix))
+    modality = MODALITY_GROUPS.get(suffix, "")
 
-    task_name = metadata.get("TaskName", entities.get("task", ""))
+    # --- Modality + suffix ---
+    suffix_desc = SUFFIX_DESCRIPTIONS.get(suffix, suffix)
+    if modality:
+        parts.append(f"{suffix_desc} ({modality} MRI)")
+    else:
+        parts.append(suffix_desc)
+
+    # --- Task / paradigm ---
+    task_name = metadata.get("TaskName", "") or entities.get("task", "")
+    task_entity = entities.get("task", "")
     if task_name:
         parts.append(f"task: {task_name}")
+    elif task_entity:
+        parts.append(f"task: {task_entity}")
 
+    # Task description — include up to 300 chars for richer semantic context
     task_desc = metadata.get("TaskDescription", "")
     if task_desc:
-        parts.append(task_desc[:120])
+        parts.append(task_desc[:300])
 
+    # --- Scanner & acquisition ---
     field_strength = metadata.get("MagneticFieldStrength")
     if field_strength:
-        parts.append(f"{field_strength}T")
+        # Include numeric value AND prose for BM25 + embedding
+        tesla_map = {1.5: "1.5 Tesla", 3.0: "3 Tesla", 7.0: "7 Tesla",
+                     3: "3 Tesla", 7: "7 Tesla"}
+        tesla_str = tesla_map.get(field_strength, f"{field_strength} Tesla")
+        parts.append(f"{tesla_str} ({field_strength}T) MRI scanner")
 
     manufacturer = metadata.get("Manufacturer", "")
     model_name = metadata.get("ManufacturersModelName", "")
     if manufacturer:
-        scanner = manufacturer
+        scanner = f"{manufacturer} scanner"
         if model_name:
-            scanner += f" {model_name}"
+            scanner += f" model {model_name}"
         parts.append(scanner)
-
-    acq_type = metadata.get("MRAcquisitionType", "")
-    if acq_type:
-        parts.append(f"acquisition: {acq_type}")
-
-    pulse_seq = metadata.get("PulseSequenceType", "")
-    if pulse_seq:
-        parts.append(f"sequence: {pulse_seq}")
-
-    scanning_seq = metadata.get("ScanningSequence", "")
-    if scanning_seq:
-        parts.append(f"ScanningSequence={scanning_seq}")
-
-    tr = metadata.get("RepetitionTime")
-    if tr is not None:
-        parts.append(f"RepetitionTime={tr}s")
-
-    te = metadata.get("EchoTime")
-    if te is not None:
-        parts.append(f"EchoTime={te}s")
-
-    ti = metadata.get("InversionTime")
-    if ti is not None:
-        parts.append(f"InversionTime={ti}s")
-
-    fa = metadata.get("FlipAngle")
-    if fa is not None:
-        parts.append(f"FlipAngle={fa}deg")
-
-    body_part = metadata.get("BodyPart", metadata.get("BodyPartExamined", ""))
-    if body_part:
-        parts.append(f"body: {body_part}")
-
-    coil = metadata.get("ReceiveCoilName", "")
-    if coil:
-        parts.append(f"coil: {coil}")
 
     inst = metadata.get("InstitutionName", "")
     if inst:
-        parts.append(f"Institution: {inst}")
+        parts.append(f"acquired at {inst}")
 
+    # --- Acquisition parameters ---
+    acq_type = metadata.get("MRAcquisitionType", "")
+    if acq_type:
+        parts.append(f"{acq_type} acquisition")
+
+    pulse_seq = metadata.get("PulseSequenceType", "")
+    scanning_seq = metadata.get("ScanningSequence", "")
+    if pulse_seq:
+        parts.append(f"pulse sequence: {pulse_seq}")
+    elif scanning_seq:
+        parts.append(f"scanning sequence: {scanning_seq}")
+
+    tr = metadata.get("RepetitionTime")
+    if tr is not None:
+        parts.append(f"RepetitionTime {tr}s")
+
+    te = metadata.get("EchoTime")
+    if te is not None:
+        parts.append(f"EchoTime {te}s")
+
+    ti = metadata.get("InversionTime")
+    if ti is not None:
+        parts.append(f"InversionTime {ti}s")
+
+    fa = metadata.get("FlipAngle")
+    if fa is not None:
+        parts.append(f"FlipAngle {fa} degrees")
+
+    body_part = metadata.get("BodyPart", metadata.get("BodyPartExamined", ""))
+    if body_part:
+        parts.append(f"body part: {body_part}")
+
+    coil = metadata.get("ReceiveCoilName", "")
+    if coil:
+        parts.append(f"receive coil: {coil}")
+
+    # --- Protocol / series ---
     series_desc = metadata.get("SeriesDescription", "")
     if series_desc:
-        parts.append(series_desc)
+        parts.append(f"series: {series_desc}")
 
     protocol = metadata.get("ProtocolName", "")
     if protocol and protocol != series_desc:
         parts.append(f"protocol: {protocol}")
 
+    # --- Study-level context from dataset_description.json ---
+    if study_description:
+        parts.append(study_description[:200])
+
+    # --- Demographics ---
     age = participant_info.get("age")
     sex = participant_info.get("sex")
     if _is_valid(age):
-        parts.append(f"age {age}")
+        parts.append(f"participant age {age}")
     if _is_valid(sex):
-        parts.append(f"sex {sex}")
+        parts.append(f"participant sex {sex}")
 
     return " | ".join(parts)
+
+
+def get_modality_group(suffix: str) -> str:
+    return MODALITY_GROUPS.get(suffix, "other")
 
 
 def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_name):
     nifti_files = layout.get(extension=".nii.gz")
     dataset_root = Path(dataset_dir).resolve()
+
+    # Extract study-level description from dataset_description.json
+    study_desc_path = dataset_root / "dataset_description.json"
+    study_description = ""
+    if study_desc_path.exists():
+        try:
+            dd = json.loads(study_desc_path.read_text())
+            study_description = dd.get(
+                "Name", "") + " " + dd.get("HowToAcknowledge", "")
+            study_description = study_description.strip()
+        except Exception:
+            pass
 
     file_data = []
     for bf in nifti_files:
@@ -265,7 +352,8 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
         metadata = layout.get_metadata(bf.path)
         subj_id = f"sub-{entities.get('subject', '')}"
         participant_info = participant_lookup.get(subj_id, {})
-        desc_text = build_description_text(entities, metadata, participant_info)
+        desc_text = build_description_text(entities, metadata, participant_info,
+                                           study_description=study_description)
         file_data.append({
             "entities": entities,
             "metadata": metadata,
@@ -276,7 +364,8 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
 
     desc_texts = [fd["desc_text"] for fd in file_data]
     print(f"  Encoding {len(desc_texts)} descriptions...")
-    embeddings = model.encode(desc_texts, show_progress_bar=True, batch_size=32)
+    embeddings = model.encode(
+        desc_texts, show_progress_bar=True, batch_size=32)
 
     for fd, embedding in zip(file_data, embeddings):
         entities = fd["entities"]
@@ -314,6 +403,8 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
             "ProtocolName":      metadata.get("ProtocolName"),
             "description_text":   fd["desc_text"],
             "metadata_embedding": embedding.tolist(),
+            "study_description":  study_description,
+            "modality_group":     get_modality_group(str(entities.get("suffix", ""))),
             "bids_path": fd["bids_path"],
         }
 
@@ -330,27 +421,35 @@ def find_bids_datasets(data_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest BIDS metadata into ElasticSearch")
-    parser.add_argument("--data-dir", default="data", help="Parent directory containing BIDS datasets")
-    parser.add_argument("--dataset-dir", default=None, help="Path to a single BIDS dataset (overrides --data-dir)")
-    parser.add_argument("--es-url", default="http://localhost:9200", help="ElasticSearch URL")
+    parser = argparse.ArgumentParser(
+        description="Ingest BIDS metadata into ElasticSearch")
+    parser.add_argument("--data-dir", default="data",
+                        help="Parent directory containing BIDS datasets")
+    parser.add_argument("--dataset-dir", default=None,
+                        help="Path to a single BIDS dataset (overrides --data-dir)")
+    parser.add_argument(
+        "--es-url", default="http://localhost:9200", help="ElasticSearch URL")
     parser.add_argument("--index", default="neuroimaging", help="Index name")
-    parser.add_argument("--recreate", action="store_true", help="Delete and recreate the index before ingesting")
+    parser.add_argument("--recreate", action="store_true",
+                        help="Delete and recreate the index before ingesting")
     args = parser.parse_args()
 
     # Determine which datasets to ingest
     if args.dataset_dir:
         dataset_dir = Path(args.dataset_dir)
         if not dataset_dir.exists():
-            raise FileNotFoundError(f"Dataset not found: {dataset_dir.resolve()}")
+            raise FileNotFoundError(
+                f"Dataset not found: {dataset_dir.resolve()}")
         dataset_dirs = [dataset_dir]
     else:
         data_dir = Path(args.data_dir)
         if not data_dir.exists():
-            raise FileNotFoundError(f"Data directory not found: {data_dir.resolve()}")
+            raise FileNotFoundError(
+                f"Data directory not found: {data_dir.resolve()}")
         dataset_dirs = find_bids_datasets(data_dir)
         if not dataset_dirs:
-            raise FileNotFoundError(f"No BIDS datasets found in {data_dir.resolve()}")
+            raise FileNotFoundError(
+                f"No BIDS datasets found in {data_dir.resolve()}")
 
     print(f"Datasets to ingest: {[d.name for d in dataset_dirs]}")
 
@@ -369,7 +468,8 @@ def main():
         client.indices.delete(index=index_name)
         print(f"Deleted existing index '{index_name}'")
     if not client.indices.exists(index=index_name):
-        client.indices.create(index=index_name, settings=INDEX_SETTINGS, mappings=INDEX_MAPPINGS)
+        client.indices.create(
+            index=index_name, settings=INDEX_SETTINGS, mappings=INDEX_MAPPINGS)
         print(f"Created index '{index_name}'")
     else:
         print(f"Index '{index_name}' already exists — appending documents")
@@ -403,7 +503,8 @@ def main():
                 {"_index": index_name, "_source": doc}
                 for doc in generate_documents(layout, participant_lookup, model, dataset_dir, ds_name)
             )
-            success, errors = helpers.bulk(client, actions, raise_on_error=False, refresh="wait_for")
+            success, errors = helpers.bulk(
+                client, actions, raise_on_error=False, refresh="wait_for")
             total_success += success
             if errors:
                 total_errors += len(errors)

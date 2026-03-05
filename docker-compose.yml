@@ -20,6 +20,7 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false       # Local dev only — NEVER in production
+      - xpack.ml.enabled=true              # Required for ELSER sparse embeddings
       - ES_JAVA_OPTS=-Xms1g -Xmx1g        # Adjust based on available RAM
     ports:
       - "9200:9200"
