@@ -1,0 +1,6 @@
+# PyTorch CPU-only (SM 6.1 / 1080Ti doesn't support any current CUDA-enabled PyTorch)
+# All current PyTorch versions require CUDA capability 7.0+
+torch
+torchvision
+torchaudio
+

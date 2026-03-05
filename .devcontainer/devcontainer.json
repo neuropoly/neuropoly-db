@@ -1,0 +1,67 @@
+{
+  "name": "NeuroPoly DB",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/neuropoly-db",
+
+  // Set vm.max_map_count on the host before starting containers (required by Elasticsearch).
+  // Runs on the LOCAL machine — not inside the container.
+  "initializeCommand": "sudo sysctl -w vm.max_map_count=262144 || echo 'WARNING: Could not set vm.max_map_count. Set it manually if Elasticsearch fails to start: sudo sysctl -w vm.max_map_count=262144'",
+
+  // Run as the non-root vscode user (uid 1000) — matches the image default.
+  // postCreate.sh does a sudo chown to claim the venv-data volume on first use.
+  "remoteUser": "vscode",
+
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+
+  // VS Code will tunnel these ports from the internal Docker network to localhost —
+  // no host-level port binding needed, no allocation conflicts.
+  "forwardPorts": [9200, 5601, 11434],
+  "portsAttributes": {
+    "9200": { "label": "Elasticsearch", "onAutoForward": "silent" },
+    "5601": { "label": "Kibana", "onAutoForward": "openBrowserOnce" },
+    "11434": { "label": "Ollama", "onAutoForward": "silent" }
+  },
+
+  // All notebooks read these env vars — internal Docker network hostnames,
+  // no hardcoded localhost ports needed.
+  "remoteEnv": {
+    "ES_HOST":     "http://elasticsearch:9200",
+    "KIBANA_URL":  "http://kibana:5601",
+    "OLLAMA_HOST": "http://ollama:11434"
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/neuropoly-db/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "jupyter.notebookFileRoot": "${workspaceFolder}",
+        "jupyter.kernels.filter": [
+          { "path": "/workspaces/neuropoly-db/.venv/bin/python", "type": "pythonEnvironment" }
+        ],
+        "notebook.formatOnSave.enabled": true,
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        // Jupyter
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        // Docker
+        "ms-azuretools.vscode-docker",
+        // Elasticsearch — syntax highlighting + autocomplete for ES queries
+        "elastic.elasticsearch-for-vscode",
+        // REST Client — test ES queries directly from .http files
+        "humao.rest-client",
+        // Markdown
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint"
+      ]
+    }
+  }
+}
