@@ -16,6 +16,7 @@ REPO_URL="https://github.com/bids-standard/bids-examples.git"
 TMP_DIR="${DATA_DIR}/_bids_examples_tmp"
 
 echo "==> Downloading BIDS example datasets..."
+mkdir -p "${DATA_DIR}"
 
 # If data/ already has datasets, offer a quick summary and exit
 existing=$(find "${DATA_DIR}" -maxdepth 2 -name "dataset_description.json" 2>/dev/null | wc -l)

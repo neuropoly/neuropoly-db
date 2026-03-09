@@ -31,44 +31,105 @@ INDEX_SETTINGS = {
 
 INDEX_MAPPINGS = {
     "properties": {
-            "dataset":   {"type": "keyword"},
-            "subject":   {"type": "keyword"},
-            "session":   {"type": "keyword"},
-            "task":      {"type": "keyword"},
-            "run":       {"type": "keyword"},
-            "suffix":    {"type": "keyword"},
-            "datatype":  {"type": "keyword"},
-            "age":       {"type": "float"},
-            "sex":       {"type": "keyword"},
-            "RepetitionTime":        {"type": "float"},
-            "EchoTime":              {"type": "float"},
-            "FlipAngle":             {"type": "float"},
-            "MagneticFieldStrength": {"type": "float"},
-            "SliceThickness":        {"type": "float"},
-            "InversionTime":         {"type": "float"},
-            "Manufacturer":           {"type": "keyword"},
-            "ManufacturersModelName": {"type": "keyword"},
-            "InstitutionName":        {"type": "keyword"},
-            "PhaseEncodingDirection": {"type": "keyword"},
-            "PulseSequenceType":      {"type": "keyword"},
-            "MRAcquisitionType":      {"type": "keyword"},
-            "ScanningSequence":       {"type": "keyword"},
-            "BodyPart":               {"type": "keyword"},
-            "ReceiveCoilName":        {"type": "keyword"},
-            "TaskName":          {"type": "text"},
-            "TaskDescription":   {"type": "text"},
-            "SeriesDescription": {"type": "text"},
-            "ProtocolName":      {"type": "text"},
-            "description_text":   {"type": "text"},
-            "metadata_embedding": {
-                "type": "dense_vector",
-                "dims": 768,
-                "similarity": "cosine",
-                "index_options": {"type": "int8_hnsw"},
-            },
-            "bids_path": {"type": "keyword"},
-            "study_description": {"type": "text"},
-            "modality_group": {"type": "keyword"},
+        # === Dataset & BIDS entities ===
+        "dataset":   {"type": "keyword"},
+        "subject":   {"type": "keyword"},
+        "session":   {"type": "keyword"},
+        "task":      {"type": "keyword"},
+        "run":       {"type": "keyword"},
+        "suffix":    {"type": "keyword"},
+        "datatype":  {"type": "keyword"},
+
+        # === Participant demographics ===
+        "age":       {"type": "float"},
+        "sex":       {"type": "keyword"},
+
+        # === MRI physics — universal ===
+        "RepetitionTime":        {"type": "float"},
+        "EchoTime":              {"type": "float"},
+        "FlipAngle":             {"type": "float"},
+        "MagneticFieldStrength": {"type": "float"},
+        "SliceThickness":        {"type": "float"},
+        "InversionTime":         {"type": "float"},
+
+        # === MRI physics — functional fMRI ===
+        "MultibandAccelerationFactor":       {"type": "float"},
+        "NumberOfVolumesDiscardedByScanner": {"type": "float"},
+        "NumberOfVolumesDiscardedByUser":    {"type": "float"},
+        "TotalReadoutTime":                  {"type": "float"},
+        "EffectiveEchoSpacing":              {"type": "float"},
+
+        # === MRI physics — fieldmap (dual-echo) ===
+        "EchoTime1":  {"type": "float"},
+        "EchoTime2":  {"type": "float"},
+
+        # === MRI physics — quantitative / relaxometry ===
+        "RepetitionTimePreparation": {"type": "float"},
+        "RepetitionTimeExcitation":  {"type": "float"},
+
+        # === MRI physics — perfusion (ASL) ===
+        "PostLabelingDelay":  {"type": "float"},
+        "LabelingDuration":   {"type": "float"},
+
+        # === MRI physics — spectroscopy ===
+        "NumberOfSpectralPoints": {"type": "float"},
+        "SpectralWidth":          {"type": "float"},
+        "NumberOfAverages":       {"type": "float"},
+
+        # === Scanner / acquisition — categorical ===
+        "Manufacturer":           {"type": "keyword"},
+        "ManufacturersModelName": {"type": "keyword"},
+        "InstitutionName":        {"type": "keyword"},
+        "PhaseEncodingDirection": {"type": "keyword"},
+        "PulseSequenceType":      {"type": "keyword"},
+        "MRAcquisitionType":      {"type": "keyword"},
+        "ScanningSequence":       {"type": "keyword"},
+        "BodyPart":               {"type": "keyword"},
+        "ReceiveCoilName":        {"type": "keyword"},
+        "SoftwareVersions":       {"type": "keyword"},
+        "ImageType":              {"type": "keyword"},
+        "SequenceName":           {"type": "keyword"},
+        "PulseSequenceName":      {"type": "keyword"},
+
+        # === Modality-specific — quantitative MRI ===
+        "MTState":         {"type": "keyword"},
+        "ResonantNucleus": {"type": "keyword"},
+
+        # === Modality-specific — diffusion ===
+        "DiffusionScheme": {"type": "keyword"},
+
+        # === Modality-specific — perfusion (ASL) ===
+        "ArterialSpinLabelingType": {"type": "keyword"},
+        "M0Type":                   {"type": "keyword"},
+        "BackgroundSuppression":    {"type": "keyword"},
+
+        # === Modality-specific — PET ===
+        "TracerName":        {"type": "keyword"},
+        "TracerRadionuclide": {"type": "keyword"},
+        "PharmaceuticalName": {"type": "keyword"},
+
+        # === Modality-specific — spectroscopy ===
+        "WaterSuppression": {"type": "keyword"},
+
+        # === Text — full-text searchable ===
+        "TaskName":          {"type": "text"},
+        "TaskDescription":   {"type": "text"},
+        "SeriesDescription": {"type": "text"},
+        "ProtocolName":      {"type": "text"},
+        "CogAtlasID":        {"type": "text"},
+        "Instructions":      {"type": "text"},
+
+        # === Computed fields ===
+        "description_text":   {"type": "text"},
+        "metadata_embedding": {
+            "type": "dense_vector",
+            "dims": 768,
+            "similarity": "cosine",
+            "index_options": {"type": "int8_hnsw"},
+        },
+        "bids_path":         {"type": "keyword"},
+        "study_description": {"type": "text"},
+        "modality_group":    {"type": "keyword"},
     }
 }
 
@@ -215,115 +276,272 @@ def build_description_text(
     study_description: str = "",
 ) -> str:
     """
-    Build a rich, prose-style description text for BM25 and embedding.
+    Build a natural-prose description for BM25 and embedding encoding.
 
-    Strategy: start from the modality, layer in scanner/protocol details,
-    then task/study context.  Expand abbreviations inline so both BM25 and
-    the embedding encoder see human-readable terms.
+    Uses modality-specific sentence templates so sentence-transformer models
+    receive text that closely resembles the natural-language queries they were
+    trained on.  Each modality includes the most discriminating fields for that
+    scan type (e.g. ASL labeling parameters for perfusion, tracer info for PET).
     """
-    parts = []
     suffix = entities.get("suffix", "")
-    modality = MODALITY_GROUPS.get(suffix, "")
-
-    # --- Modality + suffix ---
+    modality = MODALITY_GROUPS.get(suffix, "other")
     suffix_desc = SUFFIX_DESCRIPTIONS.get(suffix, suffix)
-    if modality:
-        parts.append(f"{suffix_desc} ({modality} MRI)")
-    else:
-        parts.append(suffix_desc)
 
-    # --- Task / paradigm ---
-    task_name = metadata.get("TaskName", "") or entities.get("task", "")
-    task_entity = entities.get("task", "")
-    if task_name:
-        parts.append(f"task: {task_name}")
-    elif task_entity:
-        parts.append(f"task: {task_entity}")
+    # ── Shared scanner context ─────────────────────────────────────────────────
+    field = metadata.get("MagneticFieldStrength")
+    manufacturer = safe_str(metadata.get("Manufacturer"))
+    model_name = safe_str(metadata.get("ManufacturersModelName"))
+    institution = safe_str(metadata.get("InstitutionName"))
+    acq_type = safe_str(metadata.get("MRAcquisitionType"))
+    pulse_seq = safe_str(metadata.get("PulseSequenceType")
+                         or metadata.get("ScanningSequence"))
+    series_desc = safe_str(metadata.get("SeriesDescription"))
+    protocol = safe_str(metadata.get("ProtocolName"))
+    coil = safe_str(metadata.get("ReceiveCoilName"))
+    body_part = safe_str(metadata.get("BodyPart")
+                         or metadata.get("BodyPartExamined"))
 
-    # Task description — include up to 300 chars for richer semantic context
-    task_desc = metadata.get("TaskDescription", "")
-    if task_desc:
-        parts.append(task_desc[:300])
-
-    # --- Scanner & acquisition ---
-    field_strength = metadata.get("MagneticFieldStrength")
-    if field_strength:
-        # Include numeric value AND prose for BM25 + embedding
-        tesla_map = {1.5: "1.5 Tesla", 3.0: "3 Tesla", 7.0: "7 Tesla",
-                     3: "3 Tesla", 7: "7 Tesla"}
-        tesla_str = tesla_map.get(field_strength, f"{field_strength} Tesla")
-        parts.append(f"{tesla_str} ({field_strength}T) MRI scanner")
-
-    manufacturer = metadata.get("Manufacturer", "")
-    model_name = metadata.get("ManufacturersModelName", "")
+    # Build "on a X Tesla Y Z scanner" phrase
+    scanner_parts = []
+    if field:
+        tesla_map = {1.5: "1.5 Tesla", 3.0: "3 Tesla", 3: "3 Tesla",
+                     7.0: "7 Tesla", 7: "7 Tesla"}
+        scanner_parts.append(tesla_map.get(field, f"{field} Tesla"))
     if manufacturer:
-        scanner = f"{manufacturer} scanner"
-        if model_name:
-            scanner += f" model {model_name}"
-        parts.append(scanner)
+        scanner_parts.append(manufacturer)
+    if model_name:
+        scanner_parts.append(model_name)
+    scanner_phrase = ("on a " + " ".join(scanner_parts) +
+                      " scanner") if scanner_parts else ""
+    location_phrase = f" at {institution}" if institution else ""
 
-    inst = metadata.get("InstitutionName", "")
-    if inst:
-        parts.append(f"acquired at {inst}")
-
-    # --- Acquisition parameters ---
-    acq_type = metadata.get("MRAcquisitionType", "")
-    if acq_type:
-        parts.append(f"{acq_type} acquisition")
-
-    pulse_seq = metadata.get("PulseSequenceType", "")
-    scanning_seq = metadata.get("ScanningSequence", "")
-    if pulse_seq:
-        parts.append(f"pulse sequence: {pulse_seq}")
-    elif scanning_seq:
-        parts.append(f"scanning sequence: {scanning_seq}")
-
+    # Standard acquisition parameters
     tr = metadata.get("RepetitionTime")
-    if tr is not None:
-        parts.append(f"RepetitionTime {tr}s")
-
     te = metadata.get("EchoTime")
-    if te is not None:
-        parts.append(f"EchoTime {te}s")
-
     ti = metadata.get("InversionTime")
-    if ti is not None:
-        parts.append(f"InversionTime {ti}s")
-
     fa = metadata.get("FlipAngle")
+    param_parts = []
+    if tr is not None:
+        param_parts.append(f"TR {tr} s")
+    if te is not None:
+        param_parts.append(f"TE {te} s")
+    if ti is not None:
+        param_parts.append(f"TI {ti} s")
     if fa is not None:
-        parts.append(f"FlipAngle {fa} degrees")
+        param_parts.append(f"flip angle {fa}°")
+    param_str = "; ".join(param_parts)
 
-    body_part = metadata.get("BodyPart", metadata.get("BodyPartExamined", ""))
-    if body_part:
-        parts.append(f"body part: {body_part}")
-
-    coil = metadata.get("ReceiveCoilName", "")
-    if coil:
-        parts.append(f"receive coil: {coil}")
-
-    # --- Protocol / series ---
-    series_desc = metadata.get("SeriesDescription", "")
-    if series_desc:
-        parts.append(f"series: {series_desc}")
-
-    protocol = metadata.get("ProtocolName", "")
-    if protocol and protocol != series_desc:
-        parts.append(f"protocol: {protocol}")
-
-    # --- Study-level context from dataset_description.json ---
-    if study_description:
-        parts.append(study_description[:200])
-
-    # --- Demographics ---
+    # Demographics
     age = participant_info.get("age")
     sex = participant_info.get("sex")
+    demo_parts = []
     if _is_valid(age):
-        parts.append(f"participant age {age}")
+        demo_parts.append(f"age {age}")
     if _is_valid(sex):
-        parts.append(f"participant sex {sex}")
+        demo_parts.append(f"sex {sex}")
+    demo_str = ("Participant: " + ", ".join(demo_parts) +
+                ".") if demo_parts else ""
 
-    return " | ".join(parts)
+    # ── Modality-specific prose ────────────────────────────────────────────────
+    if modality == "functional":
+        task_name = safe_str(metadata.get("TaskName") or entities.get("task"))
+        task_desc = safe_str(metadata.get("TaskDescription"))
+        mbaf = metadata.get("MultibandAccelerationFactor")
+        nvd_s = metadata.get("NumberOfVolumesDiscardedByScanner")
+        nvd_u = metadata.get("NumberOfVolumesDiscardedByUser")
+        trt = metadata.get("TotalReadoutTime")
+        cog_id = safe_str(metadata.get("CogAtlasID"))
+        instructions = safe_str(metadata.get("Instructions"))
+
+        task_clause = f" acquired during the {task_name} task" if task_name else ""
+        sentence = f"A {suffix_desc} scan{task_clause}"
+        if scanner_phrase:
+            sentence += f" {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if task_desc:
+            sentence += f" Task: {task_desc[:250]}."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+        if mbaf:
+            sentence += f" Multiband acceleration factor: {int(mbaf)}."
+        if nvd_s or nvd_u:
+            sentence += (f" Dummy scans discarded: {int(nvd_s or 0)} (scanner)"
+                         f" + {int(nvd_u or 0)} (user).")
+        if trt:
+            sentence += f" Total readout time: {trt} s."
+        if cog_id:
+            sentence += f" Cognitive Atlas task: {cog_id}."
+        if instructions:
+            sentence += f" Instructions: {instructions[:200]}."
+
+    elif modality == "structural":
+        acq_prefix = f"{acq_type} " if acq_type else ""
+        sentence = f"A {acq_prefix}{suffix_desc} scan"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if pulse_seq:
+            sentence += f" Pulse sequence: {pulse_seq}."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+        if coil:
+            sentence += f" Receive coil: {coil}."
+        if body_part:
+            sentence += f" Body part: {body_part}."
+
+    elif modality == "diffusion":
+        diff_scheme = safe_str(metadata.get("DiffusionScheme"))
+        trt = metadata.get("TotalReadoutTime")
+        ees = metadata.get("EffectiveEchoSpacing")
+        ped = safe_str(metadata.get("PhaseEncodingDirection"))
+
+        sentence = f"A {suffix_desc} scan"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if diff_scheme:
+            sentence += f" Diffusion scheme: {diff_scheme}."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+        if trt:
+            sentence += f" Total readout time: {trt} s."
+        if ees:
+            sentence += f" Effective echo spacing: {ees} s."
+        if ped:
+            sentence += f" Phase encoding direction: {ped}."
+
+    elif modality == "fieldmap":
+        te1 = metadata.get("EchoTime1")
+        te2 = metadata.get("EchoTime2")
+        trt = metadata.get("TotalReadoutTime")
+        ees = metadata.get("EffectiveEchoSpacing")
+        ped = safe_str(metadata.get("PhaseEncodingDirection"))
+
+        sentence = f"A {suffix_desc} for B0 field mapping and distortion correction"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if te1 or te2:
+            echo_parts = []
+            if te1:
+                echo_parts.append(f"EchoTime1 {te1} s")
+            if te2:
+                echo_parts.append(f"EchoTime2 {te2} s")
+            sentence += f" {', '.join(echo_parts)}."
+        elif te:
+            sentence += f" Echo time: {te} s."
+        if trt:
+            sentence += f" Total readout time: {trt} s."
+        if ees:
+            sentence += f" Effective echo spacing: {ees} s."
+        if ped:
+            sentence += f" Phase encoding direction: {ped}."
+
+    elif modality == "quantitative":
+        rtp = metadata.get("RepetitionTimePreparation")
+        rte = metadata.get("RepetitionTimeExcitation")
+        mt_state = safe_str(metadata.get("MTState"))
+        nucleus = safe_str(metadata.get("ResonantNucleus"))
+
+        sentence = f"A {suffix_desc} quantitative MRI map"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+        if rtp:
+            sentence += f" Repetition time preparation: {rtp} s."
+        if rte:
+            sentence += f" Repetition time excitation: {rte} s."
+        if mt_state:
+            sentence += f" Magnetization transfer state: {mt_state}."
+        if nucleus:
+            sentence += f" Resonant nucleus: {nucleus}."
+
+    elif modality == "perfusion":
+        asl_type = safe_str(metadata.get("ArterialSpinLabelingType"))
+        pld = metadata.get("PostLabelingDelay")
+        ld = metadata.get("LabelingDuration")
+        bg_sup = safe_str(metadata.get("BackgroundSuppression"))
+        m0_type = safe_str(metadata.get("M0Type"))
+
+        asl_qualifier = f"{asl_type} " if asl_type else ""
+        sentence = (f"An {asl_qualifier}arterial spin labeling (ASL) perfusion MRI scan "
+                    f"measuring cerebral blood flow (CBF)")
+        if scanner_phrase:
+            sentence += f", acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if pld:
+            sentence += f" Post-labeling delay: {pld} s."
+        if ld:
+            sentence += f" Labeling duration: {ld} s."
+        if bg_sup:
+            sentence += f" Background suppression: {bg_sup}."
+        if m0_type:
+            sentence += f" M0 calibration type: {m0_type}."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+
+    elif modality == "pet":
+        tracer = safe_str(metadata.get("TracerName"))
+        radionuclide = safe_str(metadata.get("TracerRadionuclide"))
+        pharma = safe_str(metadata.get("PharmaceuticalName"))
+
+        tracer_clause = f" using the tracer {tracer}" if tracer else ""
+        radionuclide_clause = f" ({radionuclide})" if radionuclide else ""
+        sentence = f"A positron emission tomography (PET) scan{tracer_clause}{radionuclide_clause}"
+        if institution:
+            sentence += f" acquired at {institution}"
+        sentence += "."
+        if pharma:
+            sentence += f" Pharmaceutical: {pharma}."
+
+    elif modality == "spectroscopy":
+        nucleus = safe_str(metadata.get("ResonantNucleus"))
+        ws = safe_str(metadata.get("WaterSuppression"))
+        sw = metadata.get("SpectralWidth")
+        nsp = metadata.get("NumberOfSpectralPoints")
+        n_avg = metadata.get("NumberOfAverages")
+
+        nucleus_clause = f" of the {nucleus} nucleus" if nucleus else ""
+        sentence = f"A {suffix_desc} scan{nucleus_clause}"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if ws:
+            sentence += f" Water suppression: {ws}."
+        if sw:
+            sentence += f" Spectral width: {sw} Hz."
+        if nsp:
+            sentence += f" Number of spectral points: {int(nsp)}."
+        if n_avg:
+            sentence += f" Number of averages: {n_avg}."
+
+    else:
+        # Fallback for unlisted modalities
+        sentence = f"A {suffix_desc} scan"
+        if scanner_phrase:
+            sentence += f" acquired {scanner_phrase}{location_phrase}"
+        sentence += "."
+        if param_str:
+            sentence += f" Parameters: {param_str}."
+
+    # ── Append cross-cutting context ──────────────────────────────────────────
+    if series_desc:
+        sentence += f" Series: {series_desc}."
+    if protocol and protocol != series_desc:
+        sentence += f" Protocol: {protocol}."
+    if study_description:
+        sentence += f" Study: {study_description[:200]}."
+    if demo_str:
+        sentence += f" {demo_str}"
+
+    # For non-functional modalities that still carry a task entity
+    task_name = safe_str(metadata.get("TaskName") or entities.get("task"))
+    if task_name and modality != "functional":
+        sentence = f"Task: {task_name}. " + sentence
+
+    return sentence.strip()
 
 
 def get_modality_group(suffix: str) -> str:
@@ -331,7 +549,7 @@ def get_modality_group(suffix: str) -> str:
 
 
 def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_name):
-    nifti_files = layout.get(extension=".nii.gz")
+    nifti_files = layout.get(extension=[".nii.gz", ".nii"])
     dataset_root = Path(dataset_dir).resolve()
 
     # Extract study-level description from dataset_description.json
@@ -340,7 +558,8 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
     if study_desc_path.exists():
         try:
             dd = json.loads(study_desc_path.read_text())
-            study_description = dd.get("Name", "") + " " + dd.get("HowToAcknowledge", "")
+            study_description = dd.get(
+                "Name", "") + " " + dd.get("HowToAcknowledge", "")
             study_description = study_description.strip()
         except Exception:
             pass
@@ -363,7 +582,8 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
 
     desc_texts = [fd["desc_text"] for fd in file_data]
     print(f"  Encoding {len(desc_texts)} descriptions...")
-    embeddings = model.encode(desc_texts, show_progress_bar=True, batch_size=32)
+    embeddings = model.encode(
+        desc_texts, show_progress_bar=True, batch_size=32)
 
     for fd, embedding in zip(file_data, embeddings):
         entities = fd["entities"]
@@ -380,12 +600,33 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
             "datatype":  str(entities.get("datatype", "")),
             "age":       safe_float(participant_info.get("age")),
             "sex":       safe_str(participant_info.get("sex")),
+            # Universal MRI physics
             "RepetitionTime":        safe_float(metadata.get("RepetitionTime")),
             "EchoTime":              safe_float(metadata.get("EchoTime")),
             "FlipAngle":             safe_float(metadata.get("FlipAngle")),
             "MagneticFieldStrength": safe_float(metadata.get("MagneticFieldStrength")),
             "SliceThickness":        safe_float(metadata.get("SliceThickness")),
             "InversionTime":         safe_float(metadata.get("InversionTime")),
+            # Functional fMRI
+            "MultibandAccelerationFactor":       safe_float(metadata.get("MultibandAccelerationFactor")),
+            "NumberOfVolumesDiscardedByScanner": safe_float(metadata.get("NumberOfVolumesDiscardedByScanner")),
+            "NumberOfVolumesDiscardedByUser":    safe_float(metadata.get("NumberOfVolumesDiscardedByUser")),
+            "TotalReadoutTime":                  safe_float(metadata.get("TotalReadoutTime")),
+            "EffectiveEchoSpacing":              safe_float(metadata.get("EffectiveEchoSpacing")),
+            # Fieldmap (dual-echo)
+            "EchoTime1":  safe_float(metadata.get("EchoTime1")),
+            "EchoTime2":  safe_float(metadata.get("EchoTime2")),
+            # Quantitative / relaxometry
+            "RepetitionTimePreparation": safe_float(metadata.get("RepetitionTimePreparation")),
+            "RepetitionTimeExcitation":  safe_float(metadata.get("RepetitionTimeExcitation")),
+            # Perfusion (ASL)
+            "PostLabelingDelay": safe_float(metadata.get("PostLabelingDelay")),
+            "LabelingDuration":  safe_float(metadata.get("LabelingDuration")),
+            # Spectroscopy
+            "NumberOfSpectralPoints": safe_float(metadata.get("NumberOfSpectralPoints")),
+            "SpectralWidth":          safe_float(metadata.get("SpectralWidth")),
+            "NumberOfAverages":       safe_float(metadata.get("NumberOfAverages")),
+            # Scanner / acquisition — categorical
             "Manufacturer":           metadata.get("Manufacturer"),
             "ManufacturersModelName": metadata.get("ManufacturersModelName"),
             "InstitutionName":        metadata.get("InstitutionName"),
@@ -395,16 +636,43 @@ def generate_documents(layout, participant_lookup, model, dataset_dir, dataset_n
             "ScanningSequence":       metadata.get("ScanningSequence"),
             "BodyPart":               metadata.get("BodyPart", metadata.get("BodyPartExamined")),
             "ReceiveCoilName":        metadata.get("ReceiveCoilName"),
+            "SoftwareVersions":       metadata.get("SoftwareVersions"),
+            "ImageType":              metadata.get("ImageType"),
+            "SequenceName":           metadata.get("SequenceName"),
+            "PulseSequenceName":      metadata.get("PulseSequenceName"),
+            # Quantitative MRI
+            "MTState":         metadata.get("MTState"),
+            "ResonantNucleus": metadata.get("ResonantNucleus"),
+            # Diffusion
+            "DiffusionScheme": metadata.get("DiffusionScheme"),
+            # Perfusion (ASL) — categorical
+            "ArterialSpinLabelingType": metadata.get("ArterialSpinLabelingType"),
+            "M0Type":                   metadata.get("M0Type"),
+            "BackgroundSuppression":    metadata.get("BackgroundSuppression"),
+            # PET
+            "TracerName":        metadata.get("TracerName"),
+            "TracerRadionuclide": metadata.get("TracerRadionuclide"),
+            "PharmaceuticalName": metadata.get("PharmaceuticalName"),
+            # Spectroscopy
+            "WaterSuppression": metadata.get("WaterSuppression"),
+            # Text fields
             "TaskName":          metadata.get("TaskName"),
             "TaskDescription":   metadata.get("TaskDescription"),
             "SeriesDescription": metadata.get("SeriesDescription"),
             "ProtocolName":      metadata.get("ProtocolName"),
+            "CogAtlasID":        metadata.get("CogAtlasID"),
+            "Instructions":      metadata.get("Instructions"),
+            # Computed
             "description_text":   fd["desc_text"],
             "metadata_embedding": embedding.tolist(),
             "study_description":  study_description,
             "modality_group":     get_modality_group(str(entities.get("suffix", ""))),
             "bids_path": fd["bids_path"],
         }
+
+        # Strip None values so absent fields are truly missing in ES (not null).
+        # This keeps _source clean and ensures `exists` queries behave correctly.
+        doc = {k: v for k, v in doc.items() if v is not None}
 
         yield doc
 
@@ -419,27 +687,35 @@ def find_bids_datasets(data_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest BIDS metadata into ElasticSearch")
-    parser.add_argument("--data-dir", default="data", help="Parent directory containing BIDS datasets")
-    parser.add_argument("--dataset-dir", default=None, help="Path to a single BIDS dataset (overrides --data-dir)")
-    parser.add_argument("--es-url", default="http://localhost:9200", help="ElasticSearch URL")
+    parser = argparse.ArgumentParser(
+        description="Ingest BIDS metadata into ElasticSearch")
+    parser.add_argument("--data-dir", default="data",
+                        help="Parent directory containing BIDS datasets")
+    parser.add_argument("--dataset-dir", default=None,
+                        help="Path to a single BIDS dataset (overrides --data-dir)")
+    parser.add_argument(
+        "--es-url", default="http://localhost:9200", help="ElasticSearch URL")
     parser.add_argument("--index", default="neuroimaging", help="Index name")
-    parser.add_argument("--recreate", action="store_true", help="Delete and recreate the index before ingesting")
+    parser.add_argument("--recreate", action="store_true",
+                        help="Delete and recreate the index before ingesting")
     args = parser.parse_args()
 
     # Determine which datasets to ingest
     if args.dataset_dir:
         dataset_dir = Path(args.dataset_dir)
         if not dataset_dir.exists():
-            raise FileNotFoundError(f"Dataset not found: {dataset_dir.resolve()}")
+            raise FileNotFoundError(
+                f"Dataset not found: {dataset_dir.resolve()}")
         dataset_dirs = [dataset_dir]
     else:
         data_dir = Path(args.data_dir)
         if not data_dir.exists():
-            raise FileNotFoundError(f"Data directory not found: {data_dir.resolve()}")
+            raise FileNotFoundError(
+                f"Data directory not found: {data_dir.resolve()}")
         dataset_dirs = find_bids_datasets(data_dir)
         if not dataset_dirs:
-            raise FileNotFoundError(f"No BIDS datasets found in {data_dir.resolve()}")
+            raise FileNotFoundError(
+                f"No BIDS datasets found in {data_dir.resolve()}")
 
     print(f"Datasets to ingest: {[d.name for d in dataset_dirs]}")
 
@@ -458,7 +734,8 @@ def main():
         client.indices.delete(index=index_name)
         print(f"Deleted existing index '{index_name}'")
     if not client.indices.exists(index=index_name):
-        client.indices.create(index=index_name, settings=INDEX_SETTINGS, mappings=INDEX_MAPPINGS)
+        client.indices.create(
+            index=index_name, settings=INDEX_SETTINGS, mappings=INDEX_MAPPINGS)
         print(f"Created index '{index_name}'")
     else:
         print(f"Index '{index_name}' already exists — appending documents")
@@ -492,7 +769,8 @@ def main():
                 {"_index": index_name, "_source": doc}
                 for doc in generate_documents(layout, participant_lookup, model, dataset_dir, ds_name)
             )
-            success, errors = helpers.bulk(client, actions, raise_on_error=False, refresh="wait_for")
+            success, errors = helpers.bulk(
+                client, actions, raise_on_error=False, refresh="wait_for")
             total_success += success
             if errors:
                 total_errors += len(errors)
