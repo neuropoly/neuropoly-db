@@ -1,0 +1,15 @@
+# Neurobagel CLI
+bagel==0.11.4
+
+# Neuroimaging metadata
+pybids>=0.16
+pydicom>=2.4
+
+# Jupyter & data
+jupyter
+ipywidgets
+pandas
+tqdm
+
+# NIfTI headers (optional, for advanced exploration)
+nibabel
