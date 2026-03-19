@@ -1,0 +1,3 @@
+[submodule "neurogabel-recipes"]
+	path = neurogabel-recipes
+	url = https://github.com/neurobagel/recipes.git
