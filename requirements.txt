@@ -9,7 +9,6 @@ pydicom>=2.4
 sentence-transformers>=2.2
 transformers>=4.35     # SPLADE sparse encoder (PoC 2, Notebook 07)
 matplotlib             # benchmark plots (Notebook 07)
-peft                   # parameter-efficient fine-tuning (Notebook 05)
 
 # Jupyter & data
 jupyter

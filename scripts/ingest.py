@@ -35,29 +35,35 @@ INDEX_MAPPINGS = {
         "dataset":   {"type": "keyword"},
         "subject":   {"type": "keyword"},
         "session":   {"type": "keyword"},
-        "task":      {"type": "keyword"},
         "run":       {"type": "keyword"},
         "suffix":    {"type": "keyword"},
         "datatype":  {"type": "keyword"},
+        "ImageType": {"type": "keyword"},
 
         # === Participant demographics ===
         "age":       {"type": "float"},
         "sex":       {"type": "keyword"},
+        "BodyPart":               {"type": "keyword"},
 
-        # === MRI physics — universal ===
-        "RepetitionTime":        {"type": "float"},
-        "EchoTime":              {"type": "float"},
-        "FlipAngle":             {"type": "float"},
-        "MagneticFieldStrength": {"type": "float"},
-        "SliceThickness":        {"type": "float"},
-        "InversionTime":         {"type": "float"},
-
-        # === MRI physics — functional fMRI ===
+        # === MRI physics — sequence universal ===
+        "RepetitionTime":                    {"type": "float"},
+        "EchoTime":                          {"type": "float"},
+        "FlipAngle":                         {"type": "float"},
+        "SliceThickness":                    {"type": "float"},
+        "InversionTime":                     {"type": "float"},
         "MultibandAccelerationFactor":       {"type": "float"},
-        "NumberOfVolumesDiscardedByScanner": {"type": "float"},
-        "NumberOfVolumesDiscardedByUser":    {"type": "float"},
         "TotalReadoutTime":                  {"type": "float"},
         "EffectiveEchoSpacing":              {"type": "float"},
+        "PhaseEncodingDirection":            {"type": "keyword"},
+        "PulseSequenceType":                 {"type": "keyword"},
+        "MRAcquisitionType":                 {"type": "keyword"},
+        "ScanningSequence":                  {"type": "keyword"},
+        "SequenceName":                      {"type": "keyword"},
+        "PulseSequenceName":                 {"type": "keyword"},
+        "BackgroundSuppression":             {"type": "keyword"},
+
+        # === MRI physics — functional fMRI ===
+        "task":                              {"type": "keyword"},
 
         # === MRI physics — fieldmap (dual-echo) ===
         "EchoTime1":  {"type": "float"},
@@ -74,22 +80,14 @@ INDEX_MAPPINGS = {
         # === MRI physics — spectroscopy ===
         "NumberOfSpectralPoints": {"type": "float"},
         "SpectralWidth":          {"type": "float"},
-        "NumberOfAverages":       {"type": "float"},
 
         # === Scanner / acquisition — categorical ===
         "Manufacturer":           {"type": "keyword"},
         "ManufacturersModelName": {"type": "keyword"},
         "InstitutionName":        {"type": "keyword"},
-        "PhaseEncodingDirection": {"type": "keyword"},
-        "PulseSequenceType":      {"type": "keyword"},
-        "MRAcquisitionType":      {"type": "keyword"},
-        "ScanningSequence":       {"type": "keyword"},
-        "BodyPart":               {"type": "keyword"},
+        "MagneticFieldStrength":  {"type": "float"},
         "ReceiveCoilName":        {"type": "keyword"},
         "SoftwareVersions":       {"type": "keyword"},
-        "ImageType":              {"type": "keyword"},
-        "SequenceName":           {"type": "keyword"},
-        "PulseSequenceName":      {"type": "keyword"},
 
         # === Modality-specific — quantitative MRI ===
         "MTState":         {"type": "keyword"},
@@ -101,19 +99,21 @@ INDEX_MAPPINGS = {
         # === Modality-specific — perfusion (ASL) ===
         "ArterialSpinLabelingType": {"type": "keyword"},
         "M0Type":                   {"type": "keyword"},
-        "BackgroundSuppression":    {"type": "keyword"},
 
         # === Modality-specific — PET ===
-        "TracerName":        {"type": "keyword"},
+        "TracerName":         {"type": "keyword"},
         "TracerRadionuclide": {"type": "keyword"},
         "PharmaceuticalName": {"type": "keyword"},
 
         # === Modality-specific — spectroscopy ===
         "WaterSuppression": {"type": "keyword"},
 
+        # === MISC metadata fields ===
+        "NumberOfVolumesDiscardedByScanner": {"type": "float"},
+        "NumberOfVolumesDiscardedByUser":    {"type": "float"},
+        "NumberOfAverages":                  {"type": "float"},
+
         # === Text — full-text searchable ===
-        "TaskName":          {"type": "text"},
-        "TaskDescription":   {"type": "text"},
         "SeriesDescription": {"type": "text"},
         "ProtocolName":      {"type": "text"},
         "CogAtlasID":        {"type": "text"},
