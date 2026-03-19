@@ -1,0 +1,53 @@
+{
+  "name": "NeuroPoly DB",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/neuropoly-db",
+
+  // Run as the non-root vscode user (uid 1000) — matches the image default.
+  // postCreate.sh does a sudo chown to claim the venv-data volume on first use.
+  "remoteUser": "vscode",
+
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+
+  // VS Code will tunnel these ports from the internal Docker network to localhost —
+  // no host-level port binding needed, no allocation conflicts.
+  "forwardPorts": [],
+  "portsAttributes": {
+  },
+
+  // All notebooks read these env vars — internal Docker network hostnames,
+  // no hardcoded localhost ports needed.
+  "remoteEnv": {
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/workspaces/neuropoly-db/.venv/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "jupyter.notebookFileRoot": "${workspaceFolder}",
+        "jupyter.kernels.filter": [
+          { "path": "/workspaces/neuropoly-db/.venv/bin/python", "type": "pythonEnvironment" }
+        ],
+        "notebook.formatOnSave.enabled": true,
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        // Python
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        // Jupyter
+        "ms-toolsai.jupyter",
+        "ms-toolsai.jupyter-keymap",
+        "ms-toolsai.jupyter-renderers",
+        // Docker
+        "ms-azuretools.vscode-docker",
+        // Markdown
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint"
+      ]
+    }
+  }
+}

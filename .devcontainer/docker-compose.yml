@@ -1,0 +1,37 @@
+# =============================================================================
+# Dev Container — NeuroPoly DB
+#
+# Services run in an isolated Docker network (neuropoly-dev).
+# No ports are bound to the host — VS Code tunnels them automatically via
+# forwardPorts in devcontainer.json.
+#
+# Internal endpoints (used by notebooks via env vars):
+#   Elasticsearch : http://elasticsearch:9200
+#   Kibana        : http://kibana:5601
+#   Ollama        : http://ollama:11434
+#
+# To pull an Ollama model after the container starts:
+#   docker exec -it ollama-dev ollama pull llama3
+# =============================================================================
+
+services:
+
+  # ── Python dev workspace ──────────────────────────────────────────────────
+  workspace:
+    image: mcr.microsoft.com/devcontainers/python:3.12-bullseye
+    volumes:
+      - ..:/workspaces/neuropoly-db:cached
+      # Shadow the host .venv with a container-local named volume so the
+      # host's existing .venv (different Python / CUDA build) is invisible
+      # inside the container and postCreate can create a clean one.
+      - venv-data:/workspaces/neuropoly-db/.venv
+    command: sleep infinity
+    networks:
+      - neuropoly-dev
+
+networks:
+  neuropoly-dev:
+    driver: bridge
+
+volumes:
+  venv-data:
