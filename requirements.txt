@@ -1,6 +1,9 @@
 # Neurobagel CLI
 bagel==0.11.4
 
+# Gitea API client
+py-gitea==0.2.10
+
 # Neuroimaging metadata
 pybids>=0.16
 pydicom>=2.4

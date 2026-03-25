@@ -1,3 +1,13 @@
 venv/
 .venv/
-data/*
+data/
+data.neuro.polymtl.ca/
+test/
+
+# Ignore wireguard config if present
+wg0.conf
+
+.env
+
+*.pyc
+__pycache__/

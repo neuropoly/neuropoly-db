@@ -11,6 +11,11 @@
   "initializeCommand": "bash .devcontainer/initialize.sh",
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
 
+  "features": {
+    "ghcr.io/devcontainers-extra/features/uv:1": { },
+    "ghcr.io/devcontainers-extra/features/wireguard-apt-get:1": { }
+  },
+
   // Expose inherited Neurobagel services in the VS Code workspace.
   "forwardPorts": [
     "gateway:80",
