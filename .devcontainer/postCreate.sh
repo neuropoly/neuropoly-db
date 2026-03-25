@@ -6,7 +6,7 @@ cd /workspaces/neuropoly-db
 
 # ── 0. Fix volume ownership ────────────────────────────────────────────────
 # The venv-data named volume is created as root:root by Docker. Claim it for
-# the current user (vscode, uid 1000) so pip can write into it.
+# the current user (vscode, uid 1000) so Python package tools can write into it.
 # This is a no-op on subsequent runs once the volume is already owned correctly.
 sudo chown -R "$(id -u):$(id -g)" .venv 2>/dev/null || true
 
@@ -16,26 +16,32 @@ echo "────────────────────────�
 
 # ── 1. Python virtual environment ─────────────────────────────────────────
 echo ""
+export UV_PROJECT_ENVIRONMENT=".venv"
+
 if [ -f ".venv/bin/activate" ]; then
     echo "==> .venv already exists — skipping creation."
     source .venv/bin/activate
 else
-    echo "==> Creating virtual environment (.venv)..."
-    python3 -m venv .venv
+    echo "==> Creating virtual environment with uv (.venv)..."
+    uv venv --allow-existing .venv
     source .venv/bin/activate
 fi
 
-# ── 2. Project dependencies ───────────────────────────────────────────────
-# Hash-based check: reinstalls automatically when requirements.txt changes.
-# This ensures stale venv-data volumes are refreshed when dependencies change.
+# ── 2. Project installation ───────────────────────────────────────────────
+# Hash-based check: reinstalls automatically when pyproject.toml / uv.lock change.
+# This ensures stale venv-data volumes are refreshed when project dependencies change.
 echo ""
-_REQ_HASH="$(md5sum requirements.txt | awk '{print $1}')"
+if [ -f "uv.lock" ]; then
+    _REQ_HASH="$(cat pyproject.toml uv.lock | md5sum | awk '{print $1}')"
+else
+    _REQ_HASH="$(md5sum pyproject.toml | awk '{print $1}')"
+fi
 _REQ_HASH_FILE=".venv/.req-hash"
 if [ -f "$_REQ_HASH_FILE" ] && [ "$(cat "$_REQ_HASH_FILE")" = "$_REQ_HASH" ]; then
-    echo "==> Project dependencies up to date (requirements.txt unchanged) — skipping."
+    echo "==> Project install up to date (pyproject.toml/uv.lock unchanged) — skipping."
 else
-    echo "==> Installing project dependencies..."
-    pip install --quiet -r requirements.txt
+    echo "==> Syncing project with uv..."
+    uv sync --active --quiet
     echo "$_REQ_HASH" > "$_REQ_HASH_FILE"
 fi
 
@@ -79,7 +85,21 @@ else
     fi
 fi
 
-# ── 5. Summary ────────────────────────────────────────────────────────────
+# ── 5. Wireguard setup (if config file present) ───────────────────────────────────────────────
+WG_CONFIG="/workspaces/neuropoly-db/wg0.conf"
+if [ -f "$WG_CONFIG" ]; then
+    echo ""
+    echo "==> Wireguard config detected at $WG_CONFIG — setting up wg-quick..."
+    sudo cp "$WG_CONFIG" "/etc/wireguard/wg0.conf"
+    sudo chmod 600 "/etc/wireguard/wg0.conf"
+    echo "   Wireguard config copied to /etc/wireguard/wg0.conf with permissions 600."
+    echo "   You can start the Wireguard interface with: sudo wg-quick up wg0"
+else
+    echo ""
+    echo "==> No Wireguard config found at $WG_CONFIG — skipping wg-quick setup."
+fi
+
+# ── 6. Summary ────────────────────────────────────────────────────────────
 echo ""
 echo "──────────────────────────────────────────────────────────"
 echo " ✅  Setup complete"

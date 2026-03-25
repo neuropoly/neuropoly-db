@@ -25,18 +25,24 @@ services:
       - neuropoly-dev
 
   api:
+    # Avoid host port collisions in devcontainer workflows; access via gateway
+    # and VS Code service forwarding instead.
+    ports: !override []
     networks:
       - neuropoly-dev
 
   graph:
+    ports: !override []
     networks:
       - neuropoly-dev
 
   federation:
+    ports: !override []
     networks:
       - neuropoly-dev
 
   query_federation:
+    ports: !override []
     networks:
       - neuropoly-dev
 
@@ -53,7 +59,14 @@ services:
 
   # ── Python dev workspace ──────────────────────────────────────────────────
   workspace:
-    image: mcr.microsoft.com/devcontainers/python:3.12-bullseye
+    image: mcr.microsoft.com/devcontainers/python:3.12-bookworm
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
     volumes:
       - ..:/workspaces/neuropoly-db:cached
       # Shadow the host .venv with a container-local named volume so the
