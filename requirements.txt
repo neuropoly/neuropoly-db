@@ -1,15 +1,16 @@
-# ElasticSearch Python client (9.x compatible with ES 9.x and 10.x)
-elasticsearch>=9.0,<10
+# Neurobagel CLI
+bagel==0.11.4
+
+# Gitea API client
+py-gitea==0.2.10
 
 # Neuroimaging metadata
 pybids>=0.16
 pydicom>=2.4
 
-# Embeddings
-sentence-transformers>=2.2
-
 # Jupyter & data
 jupyter
+ipywidgets
 pandas
 tqdm
 

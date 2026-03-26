@@ -1,0 +1,6 @@
+participant_id	age	sex	diagnosis	cognitive_score
+sub-01	22	M	CTRL	95.5
+sub-02	28	F	PD	78.2
+sub-03	35	M	CTRL	92.1
+sub-04	31	F	PD	85.0
+sub-05	26	M	CTRL	98.3

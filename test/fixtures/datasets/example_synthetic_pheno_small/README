@@ -1,0 +1,39 @@
+# Example Synthetic Phenotype Dataset (Small)
+
+## Description
+
+This is a placeholder dataset for testing Neurobagel annotation automation.
+It contains minimal phenotypic data with 5 columns and 3 participants.
+
+**PLACEHOLDER**: Replace `participants.tsv` and other files with your own anonymized dataset.
+
+## Structure
+
+- `participants.tsv`: Phenotypic data (5 columns, 3 rows)
+  - `participant_id`: Subject identifier
+  - `age`: Age in years
+  - `sex`: Biological sex (M/F)
+  - `condition`: Clinical condition or control group
+  - `scanner`: Scanning equipment used
+
+## Columns
+
+| Column | Type | Description |
+|--------|------|---|
+| participant_id | string | Unique participant identifier |
+| age | continuous | Age in years |
+| sex | categorical | Biological sex (M/F) |
+| condition | categorical | Clinical status (CTRL, PD, etc.) |
+| scanner | categorical | MRI scanner model |
+
+## Instructions for Users
+
+1. Replace the synthetic data in `participants.tsv` with your own anonymized dataset
+2. Keep the same column structure and BIDS format
+3. Update this README with your actual dataset description
+4. Uses the same format for annotation automation testing
+
+## BIDS Compliance
+
+This dataset follows BIDS format for phenotypic data.
+See [BIDS Phenotypic Data](https://bids-specification.readthedocs.io/en/stable/03-modality-agnostic-files.html#phenotypic-data) for details.

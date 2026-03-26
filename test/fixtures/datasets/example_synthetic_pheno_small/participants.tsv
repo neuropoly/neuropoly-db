@@ -1,0 +1,4 @@
+participant_id	age	sex	condition	scanner
+sub-001	22	M	CTRL	3T_SIEMENS_PRISMA
+sub-002	28	F	PD	3T_SIEMENS_PRISMA
+sub-003	35	M	CTRL	3T_GE_DISCOVERY

@@ -1,0 +1,170 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0 -- /workspaces/neuropoly-db/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspaces/neuropoly-db
+configfile: pyproject.toml
+plugins: anyio-4.12.1, typeguard-4.5.1, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 134 items
+
+test/test_annotation_automation.py::TestAnnotationConfig::test_config_default_manual_mode PASSED [  0%]
+test/test_annotation_automation.py::TestAnnotationConfig::test_config_custom_mode PASSED [  1%]
+test/test_annotation_automation.py::TestAnnotationConfig::test_config_with_ai_provider PASSED [  2%]
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_manual_mode PASSED [  2%]
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_rejects_ai_in_manual_mode PASSED [  3%]
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_assist_mode PASSED [  4%]
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_auto_mode PASSED [  5%]
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_full_auto_mode PASSED [  5%]
+test/test_annotation_steps.py::TestAnnotationStep::test_step_enum_values PASSED [  6%]
+test/test_annotation_steps.py::TestAnnotationStep::test_step_enum_names PASSED [  7%]
+test/test_annotation_steps.py::TestStepInfo::test_step_info_creation PASSED [  8%]
+test/test_annotation_steps.py::TestStepInfo::test_step_navigator_config_upload PASSED [  8%]
+test/test_annotation_steps.py::TestStepNavigator::test_get_step_info_all_steps PASSED [  9%]
+test/test_annotation_steps.py::TestStepNavigator::test_get_step_info_unknown PASSED [ 10%]
+test/test_annotation_steps.py::TestStepNavigator::test_get_steps_in_order PASSED [ 11%]
+test/test_annotation_steps.py::TestStepNavigator::test_step_config_completeness PASSED [ 11%]
+test/test_annotation_steps.py::TestStepNavigator::test_fallback_selectors_coverage PASSED [ 12%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_column_card_selector PASSED [ 13%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_value_mapping_selector PASSED [ 14%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_download_button_selector PASSED [ 14%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_get_column_row PASSED [ 15%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_get_column_row_numbering PASSED [ 16%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_get_value_mapping_row PASSED [ 17%]
+test/test_annotation_steps.py::TestAnnotationUIPatterns::test_get_value_mapping_row_multiple PASSED [ 17%]
+test/test_annotation_steps.py::TestUIPatternCompleteness::test_all_form_selectors_defined PASSED [ 18%]
+test/test_annotation_steps.py::TestUIPatternCompleteness::test_input_vs_select_selectors PASSED [ 19%]
+test/test_annotation_steps.py::TestEdgeCases::test_large_column_index PASSED [ 20%]
+test/test_annotation_steps.py::TestEdgeCases::test_large_value_index PASSED [ 20%]
+test/test_browser_session.py::TestBrowserSessionInit::test_init_defaults PASSED [ 21%]
+test/test_browser_session.py::TestBrowserSessionInit::test_init_custom_config PASSED [ 22%]
+test/test_browser_session.py::TestBrowserSessionInit::test_init_timeout_conversion_ms PASSED [ 23%]
+test/test_browser_session.py::TestBrowserSessionConfig::test_annotation_url_constant PASSED [ 23%]
+test/test_browser_session.py::TestBrowserSessionConfig::test_artifacts_dir_optional PASSED [ 24%]
+test/test_browser_session.py::TestBrowserSessionConfig::test_artifacts_dir_path PASSED [ 25%]
+test/test_browser_session.py::TestBrowserSessionCleanup::test_cleanup_no_crash_uninitialized PASSED [ 26%]
+test/test_browser_session.py::TestBrowserSessionCleanup::test_context_manager_cleanup_on_success PASSED [ 26%]
+test/test_browser_session.py::TestBrowserSessionFileOperations::test_upload_file_not_exists FAILED [ 27%]
+test/test_browser_session.py::TestBrowserSessionFileOperations::test_upload_file_path_validation PASSED [ 28%]
+test/test_browser_session.py::TestBrowserSessionErrorHandling::test_navigate_not_launched PASSED [ 29%]
+test/test_browser_session.py::TestBrowserSessionErrorHandling::test_click_not_launched PASSED [ 29%]
+test/test_browser_session.py::TestBrowserSessionErrorHandling::test_fill_not_launched PASSED [ 30%]
+test/test_browser_session.py::TestBrowserSessionAttributes::test_initial_state PASSED [ 31%]
+test/test_browser_session.py::TestBrowserSessionAttributes::test_headless_modes PASSED [ 32%]
+test/test_browser_session.py::TestArtifactCapture::test_artifacts_dir_none_skips_capture PASSED [ 32%]
+test/test_browser_session.py::TestArtifactCapture::test_artifacts_dir_creates_trace_path PASSED [ 33%]
+test/test_browser_session.py::TestEdgeCases::test_timeout_zero PASSED    [ 34%]
+test/test_browser_session.py::TestEdgeCases::test_timeout_large PASSED   [ 35%]
+test/test_browser_session.py::TestEdgeCases::test_multiple_cleanup_calls PASSED [ 35%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_normalize_header PASSED [ 36%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_exact_match_basic PASSED [ 37%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_exact_match_no_match PASSED [ 38%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_fuzzy_match_high_confidence PASSED [ 38%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_fuzzy_match_partial PASSED [ 39%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_fuzzy_match_no_match PASSED [ 40%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_fuzzy_match_confidence_scaling PASSED [ 41%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_match_header_exact_priority PASSED [ 41%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_match_header_fuzzy_fallback PASSED [ 42%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_match_header_no_match PASSED [ 43%]
+test/test_fuzzy_matcher.py::TestFuzzyMatcher::test_match_header_thresholds PASSED [ 44%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_exact PASSED [ 44%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_alias PASSED [ 45%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_fuzzy PASSED [ 46%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_no_match PASSED [ 47%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_get_mapping_data PASSED [ 47%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_with_static_mappings PASSED [ 48%]
+test/test_fuzzy_matcher.py::TestColumnMatcher::test_column_matcher_initialization PASSED [ 49%]
+test/test_fuzzy_matcher.py::TestConfidenceScaling::test_exact_match_confidence_1_0 PASSED [ 50%]
+test/test_fuzzy_matcher.py::TestConfidenceScaling::test_fuzzy_match_confidence_range PASSED [ 50%]
+test/test_fuzzy_matcher.py::TestConfidenceScaling::test_no_match_returns_none PASSED [ 51%]
+test/test_fuzzy_matcher.py::TestEdgeCases::test_empty_candidates PASSED  [ 52%]
+test/test_fuzzy_matcher.py::TestEdgeCases::test_empty_header PASSED      [ 52%]
+test/test_fuzzy_matcher.py::TestEdgeCases::test_special_characters_in_header PASSED [ 53%]
+test/test_fuzzy_matcher.py::TestEdgeCases::test_whitespace_handling PASSED [ 54%]
+test/test_mapping_resolver.py::TestMappingResolver::test_resolve_static_exact_match PASSED [ 55%]
+test/test_mapping_resolver.py::TestMappingResolver::test_resolve_fuzzy_match PASSED [ 55%]
+test/test_mapping_resolver.py::TestMappingResolver::test_resolve_unresolved PASSED [ 56%]
+test/test_mapping_resolver.py::TestMappingResolver::test_resolve_column_data_preservation PASSED [ 57%]
+test/test_mapping_resolver.py::TestMappingResolver::test_resolve_columns_batch PASSED [ 58%]
+test/test_mapping_resolver.py::TestMappingResolver::test_cache_hit PASSED [ 58%]
+test/test_mapping_resolver.py::TestMappingResolver::test_cache_clear PASSED [ 59%]
+test/test_mapping_resolver.py::TestMappingResolver::test_thresholds_respected PASSED [ 60%]
+test/test_mapping_resolver.py::TestMappingResolver::test_user_dictionary_override PASSED [ 61%]
+test/test_mapping_resolver.py::TestResolvedMapping::test_resolved_mapping_creation PASSED [ 61%]
+test/test_mapping_resolver.py::TestResolvedMapping::test_resolved_mapping_with_empty_data PASSED [ 62%]
+test/test_mapping_resolver.py::TestResolutionSummary::test_resolution_summary_all_resolved PASSED [ 63%]
+test/test_mapping_resolver.py::TestResolutionSummary::test_resolution_summary_mixed PASSED [ 64%]
+test/test_mapping_resolver.py::TestResolutionSummary::test_resolution_summary_confidence_distribution PASSED [ 64%]
+test/test_mapping_resolver.py::TestResolutionSummary::test_resolution_summary_source_counts PASSED [ 65%]
+test/test_mapping_resolver.py::TestResolutionSummary::test_resolution_summary_unresolved_list PASSED [ 66%]
+test/test_mapping_resolver.py::TestPrecedenceOrder::test_static_dict_priority PASSED [ 67%]
+test/test_mapping_resolver.py::TestPrecedenceOrder::test_fuzzy_fallback PASSED [ 67%]
+test/test_mapping_resolver.py::TestPrecedenceOrder::test_unresolved_last_resort PASSED [ 68%]
+test/test_mapping_resolver.py::TestStaticMappingsIntegration::test_resolver_loads_static_mappings PASSED [ 69%]
+test/test_mapping_resolver.py::TestStaticMappingsIntegration::test_real_static_mappings_resolve PASSED [ 70%]
+test/test_mapping_resolver.py::TestEdgeCases::test_empty_column_name PASSED [ 70%]
+test/test_mapping_resolver.py::TestEdgeCases::test_column_with_special_chars PASSED [ 71%]
+test/test_mapping_resolver.py::TestEdgeCases::test_unicode_column_name PASSED [ 72%]
+test/test_mapping_resolver.py::TestEdgeCases::test_very_long_column_name PASSED [ 73%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_load_builtin_mappings PASSED [ 73%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_builtin_mappings_context PASSED [ 74%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_participant_id_mapping PASSED [ 75%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_age_mapping_has_format PASSED [ 76%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_sex_mapping_has_levels PASSED [ 76%]
+test/test_phenotype_mappings.py::TestMappingsRegistry::test_merge_mappings_respects_user_priority PASSED [ 77%]
+test/test_provenance.py::TestColumnProvenance::test_provenance_static_source PASSED [ 78%]
+test/test_provenance.py::TestColumnProvenance::test_provenance_ai_source_with_model PASSED [ 79%]
+test/test_provenance.py::TestProvenanceReport::test_report_creation_manual_mode PASSED [ 79%]
+test/test_provenance.py::TestProvenanceReport::test_report_full_auto_mode PASSED [ 80%]
+test/test_provenance.py::TestAddColumnProvenance::test_add_static_column PASSED [ 81%]
+test/test_provenance.py::TestAddColumnProvenance::test_add_ai_column_with_threshold PASSED [ 82%]
+test/test_provenance.py::TestAddColumnProvenance::test_add_multiple_columns_and_count_sources PASSED [ 82%]
+test/test_provenance.py::TestAddWarning::test_add_warning PASSED         [ 83%]
+test/test_provenance.py::TestAddWarning::test_duplicate_warnings_not_added PASSED [ 84%]
+test/test_provenance.py::TestProvenanceSerialization::test_save_and_load_provenance PASSED [ 85%]
+test/test_provenance.py::TestProvenanceSerialization::test_provenance_file_not_found PASSED [ 85%]
+test/test_ui_interaction.py::TestColumnAnnotationData::test_creation PASSED [ 86%]
+test/test_ui_interaction.py::TestColumnAnnotationData::test_defaults PASSED [ 87%]
+test/test_ui_interaction.py::TestValueAnnotationData::test_categorical_value PASSED [ 88%]
+test/test_ui_interaction.py::TestValueAnnotationData::test_missing_value PASSED [ 88%]
+test/test_ui_interaction.py::TestFormatAnnotationData::test_continuous_format PASSED [ 89%]
+test/test_ui_interaction.py::TestFormatAnnotationData::test_format_defaults PASSED [ 90%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_column_annotation_from_resolved PASSED [ 91%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_column_annotation_infer_categorical PASSED [ 91%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_column_annotation_infer_continuous PASSED [ 92%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_value_annotations_with_levels PASSED [ 93%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_value_annotations_no_mapping PASSED [ 94%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_format_annotation PASSED [ 94%]
+test/test_ui_interaction.py::TestAnnotationUIBuilder::test_build_format_annotation_defaults PASSED [ 95%]
+test/test_ui_interaction.py::TestFormFillerActions::test_fill_column_annotation_stub PASSED [ 96%]
+test/test_ui_interaction.py::TestFormFillerActions::test_fill_value_annotations_stub PASSED [ 97%]
+test/test_ui_interaction.py::TestFormFillerActions::test_fill_format_annotation_stub PASSED [ 97%]
+test/test_ui_interaction.py::TestEdgeCases::test_build_value_annotations_empty_list PASSED [ 98%]
+test/test_ui_interaction.py::TestEdgeCases::test_build_value_annotations_large_list PASSED [ 99%]
+test/test_ui_interaction.py::TestEdgeCases::test_column_annotation_missing_mapping_data PASSED [100%]
+
+=================================== FAILURES ===================================
+E   RuntimeError: Browser not launched. Call launch() first.
+/workspaces/neuropoly-db/src/npdb/managers/browser_session.py:116: RuntimeError: Browser not launched. Call launch() first.
+=============================== warnings summary ===============================
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_manual_mode
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_assist_mode
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_auto_mode
+test/test_annotation_automation.py::TestAnnotationManager::test_manager_init_full_auto_mode
+  /workspaces/neuropoly-db/src/npdb/managers/annotation_automation.py:84: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    timestamp=datetime.utcnow().isoformat(),
+
+test/test_provenance.py::TestProvenanceReport::test_report_creation_manual_mode
+test/test_provenance.py::TestProvenanceReport::test_report_full_auto_mode
+test/test_provenance.py::TestAddColumnProvenance::test_add_static_column
+test/test_provenance.py::TestAddColumnProvenance::test_add_ai_column_with_threshold
+test/test_provenance.py::TestAddColumnProvenance::test_add_multiple_columns_and_count_sources
+test/test_provenance.py::TestAddWarning::test_add_warning
+test/test_provenance.py::TestAddWarning::test_duplicate_warnings_not_added
+test/test_provenance.py::TestProvenanceSerialization::test_save_and_load_provenance
+  /workspaces/neuropoly-db/.venv/lib/python3.12/site-packages/pydantic/main.py:250: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/test_browser_session.py::TestBrowserSessionFileOperations::test_upload_file_not_exists
+================== 1 failed, 133 passed, 12 warnings in 6.83s ==================

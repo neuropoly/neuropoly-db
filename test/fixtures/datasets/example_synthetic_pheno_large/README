@@ -1,0 +1,56 @@
+# Example Synthetic Phenotype Dataset (Large)
+
+## Description
+
+This is a placeholder dataset for testing complex annotation scenarios.
+It contains comprehensive phenotypic data with 20+ columns and 10 participants,
+including demographics, clinical assessments, and MRI imaging metadata.
+
+**PLACEHOLDER**: Replace `participants.tsv` with your own anonymized dataset.
+
+## Dataset Characteristics
+
+- **Participants**: 10 subjects (6 with Parkinson's disease, 4 controls)
+- **Columns**: 16 phenotypic variables covering demographics, clinical status, and imaging
+- **Types**: Mix of continuous (age, scores) and categorical (sex, condition, medication)
+
+## Column Reference
+
+| Column | Type | Description | Examples |
+|--------|------|---|---|
+| participant_id | string | Unique identifier | sub-001, sub-002 |
+| age | continuous | Age in years | 45-67 |
+| sex | categorical | Biological sex | M, F |
+| condition | categorical | Clinical group | PD, CTRL |
+| scanner | categorical | MRI scanner | 3T_SIEMENS_PRISMA |
+| disease_duration | continuous | Disease duration in years | 0-15 |
+| medication_status | categorical | Medication regimen | levodopa, none, combinations |
+| mmse_score | continuous | Mini-Mental State Exam | 19-30 |
+| updrs_total | continuous | UPDRS total score | 0-84 |
+| updrs_motor | continuous | UPDRS motor score | 0-52 |
+| updrs_cognitive | continuous | UPDRS cognitive score | 0-12 |
+| mri_field_strength | continuous | Field strength (Tesla) | 1.5, 3 |
+| mri_protocol | categorical | MRI sequence | T1w_T2w, T1w_FLAIR |
+| assessment_date | date | Assessment date | YYYY-MM-DD |
+| cognitive_status | categorical | Cognitive classification | normal, MCI, dementia |
+| disease_subtype | categorical | PD subtype or NA | tremor, rigid, mixed, NA |
+
+## BIDS Compliance
+
+This dataset follows BIDS format for phenotypic data.
+See [BIDS Phenotypic Data](https://bids-specification.readthedocs.io/en/stable/03-modality-agnostic-files.html#phenotypic-data) specification.
+
+## Neurobagel Annotation
+
+This dataset is designed for testing Neurobagel phenotype annotation with:
+- Multiple clinical assessment variables (UPDRS, MMSE)
+- Disease-related variables (disease_duration, subtype)
+- Imaging metadata (scanner, protocol, field strength)
+- Mixed variable types for testing categorical and continuous handling
+
+## Instructions for Use
+
+1. Replace synthetic data with your own anonymized dataset (maintain structure)
+2. Keep column names for compatibility with annotation tests
+3. Update README and CHANGES with your actual dataset info
+4. Verify phenotypic data meets BIDS phenotypic format

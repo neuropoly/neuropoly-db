@@ -1,0 +1,45 @@
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"
+
+[project]
+name = "npdb"
+version = "0.1.0"
+description = "NeuroPoly database tooling and managers"
+requires-python = ">=3.12"
+dependencies = [
+  "bagel==0.11.4",
+  "py-gitea==0.2.10",
+  "pybids>=0.16",
+  "pydicom>=2.4",
+  "jupyter",
+  "ipywidgets",
+  "pandas",
+  "tqdm",
+  "nibabel",
+  "python-dotenv>=1.2.2",
+  "typer>=0.24.1",
+  "rich>=14.3.3",
+  "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.23",
+]
+
+test = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.23",
+]
+
+annotation-automation = [
+  "playwright>=1.40",
+  "rapidfuzz>=3.0",
+  "pydantic>=2.0",
+  "tenacity>=8.0",
+]
+
+[project.scripts]
+npdb = "npdb.cli:npdb"
