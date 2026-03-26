@@ -50,7 +50,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             raise RuntimeError(f"Failed to clone repository: {e}\n{stack}")
 
     def extend_description(self, dataset: str, local_clone: str):
-        repo = next(iter([d for d in self.datasets if d.name == dataset]))
+        # repo = next(iter([d for d in self.datasets if d.name == dataset]))
         desc_path = os.path.join(local_clone, "dataset_description.json")
         with open(desc_path, "r") as f:
             description = json.load(f)
@@ -59,9 +59,9 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         description["Name"] = dataset
 
         # If the authors list is empty or missing, pull all collaborators as authors
-        if not description.get("Authors"):
-            collaborators = repo.get_users_with_access()
-            description["Authors"] = [c.id for c in collaborators]
+        # if not description.get("Authors"):
+        #     collaborators = repo.get_users_with_access()
+        #     description["Authors"] = [c.id for c in collaborators]
 
         # If no keywords, add at least the dataset name
         if not description.get("Keywords"):

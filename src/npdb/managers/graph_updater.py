@@ -5,7 +5,7 @@ Provides functions to update the Neurobagel GraphDB instance with new JSON-LD da
 without requiring container restart.
 """
 
-import jsonww
+import json
 import logging
 from pathlib import Path
 from base64 import b64encode

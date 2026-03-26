@@ -36,7 +36,8 @@ class BagelMixin:
             "--pheno", phenotypes_tsv,
             "--dictionary", phenotypes_annotations,
             "--dataset-description", dataset_description,
-            "--output", os.path.join(self.db.root, f"{dataset_name}.jsonld")
+            "--output", os.path.join(self.db.root, f"{dataset_name}.jsonld"),
+            "--overwrite"
         )
 
     def bagel_bids(
