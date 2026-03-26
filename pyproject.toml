@@ -20,6 +20,25 @@ dependencies = [
   "python-dotenv>=1.2.2",
   "typer>=0.24.1",
   "rich>=14.3.3",
+  "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.23",
+]
+
+test = [
+  "pytest>=7.0",
+  "pytest-asyncio>=0.23",
+]
+
+annotation-automation = [
+  "playwright>=1.40",
+  "rapidfuzz>=3.0",
+  "pydantic>=2.0",
+  "tenacity>=8.0",
 ]
 
 [project.scripts]

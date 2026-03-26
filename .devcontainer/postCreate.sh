@@ -45,7 +45,32 @@ else
     echo "$_REQ_HASH" > "$_REQ_HASH_FILE"
 fi
 
-# ── 3. Jupyter kernel ─────────────────────────────────────────────────────
+# ── 3. Playwright browser installation ────────────────────────────────────
+# Install system dependencies and browser binaries for Playwright automation.
+# Required for annotation automation features.
+echo ""
+echo "==> Installing Playwright system dependencies and browsers..."
+
+# Install system packages required by Playwright
+sudo apt-get update -qq > /dev/null 2>&1 || true
+sudo apt-get install -qq -y \
+    libgconf-2-4 \
+    libnss3 \
+    libxss1 \
+    libappindicator1 \
+    libindicator7 \
+    xdg-utils \
+    fonts-liberation \
+    libasound2 \
+    > /dev/null 2>&1 || true
+
+# Install Playwright browsers (uses pre-cached layers if available)
+python -m playwright install --with-deps chromium > /dev/null 2>&1 || {
+    echo "   WARNING: Playwright browser installation had issues (may still work)"
+}
+echo "   ✓ Playwright system dependencies and browsers ready"
+
+# ── 4. Jupyter kernel ─────────────────────────────────────────────────────
 # Always re-register (fast, <1s). Uses --sys-prefix so the kernel spec lives
 # inside .venv/ and persists with the venv-data volume across rebuilds.
 echo ""
@@ -54,7 +79,7 @@ python -m ipykernel install --sys-prefix \
     --name neuropoly-db \
     --display-name "Python (neuropoly-db)"
 
-# ── 4. Terminal header hook ───────────────────────────────────────────────
+# ── 5. Terminal header hook ───────────────────────────────────────────────
 echo ""
 echo "==> Installing terminal header hook (.bashrc)..."
 
@@ -85,7 +110,7 @@ else
     fi
 fi
 
-# ── 5. Wireguard setup (if config file present) ───────────────────────────────────────────────
+# ── 6. Wireguard setup (if config file present) ───────────────────────────────────────────────
 WG_CONFIG="/workspaces/neuropoly-db/wg0.conf"
 if [ -f "$WG_CONFIG" ]; then
     echo ""

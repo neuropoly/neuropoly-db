@@ -20,7 +20,8 @@ class BagelMixin:
         self._run_bagel_cli(
             "bids2tsv",
             "--bids-dir", bids_directory,
-            "--output", output_tsv
+            "--output", output_tsv,
+            "--overwrite"
         )
 
     def bagel_pheno(
@@ -35,7 +36,7 @@ class BagelMixin:
             "--pheno", phenotypes_tsv,
             "--dictionary", phenotypes_annotations,
             "--dataset-description", dataset_description,
-            "--output", os.path.join(self.root, f"{dataset_name}.jsonld")
+            "--output", os.path.join(self.db.root, f"{dataset_name}.jsonld")
         )
 
     def bagel_bids(
@@ -43,7 +44,7 @@ class BagelMixin:
         dataset_name: str,
         bids_table: str
     ):
-        jsonld_path = os.path.join(self.root, f"{dataset_name}.jsonld")
+        jsonld_path = os.path.join(self.db.root, f"{dataset_name}.jsonld")
         self._run_bagel_cli(
             "bids",
             "--jsonld-path", jsonld_path,

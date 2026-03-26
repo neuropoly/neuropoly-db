@@ -1,0 +1,22 @@
+{
+  "model": "neural-chat:latest",
+  "description": "Test model configuration for Ollama integration",
+  "version": "1.0",
+  "test_prompts": [
+    {
+      "input": "What is the SNOMED code for age?",
+      "expected_contains": ["age", "years", "SNOMED"],
+      "context": "Testing basic terminology lookup"
+    },
+    {
+      "input": "Map 'sex' column to Neurobagel phenotype",
+      "expected_contains": ["sex", "biological", "phenotype"],
+      "context": "Testing column mapping capability"
+    }
+  ],
+  "confidence_thresholds": {
+    "auto_mode": 0.7,
+    "full_auto_mode": 0.5
+  },
+  "notes": "PLACEHOLDER: Verify this model is available on your system by running 'ollama pull neural-chat:latest' before running tests with Ollama integration."
+}
