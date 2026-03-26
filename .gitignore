@@ -2,7 +2,7 @@ venv/
 .venv/
 data/
 data.neuro.polymtl.ca/
-test/
+benchmark/
 
 # Ignore wireguard config if present
 wg0.conf

@@ -1,0 +1,4 @@
+1.0.0 2024-01-01
+- Initial release: complex synthetic phenotype dataset for testing
+- Includes 20+ columns with demographics, clinical assessments, and imaging metadata
+- PLACEHOLDER: Replace with actual dataset when populated with real anonymized data

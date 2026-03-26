@@ -1,0 +1,52 @@
+{
+  "@context": {
+    "nb": "http://neurobagel.org/vocab/",
+    "snomed": "http://purl.bioontology.org/ontology/SNOMEDCT/",
+    "ncit": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#"
+  },
+  "mappings": {
+    "participant_id": {
+      "variable": "nb:ParticipantID",
+      "confidence": 1.0,
+      "variableType": "Identifier",
+      "aliases": ["partid", "id", "subject_id", "subid"]
+    },
+    "sub_id": {
+      "variable": "nb:ParticipantID",
+      "confidence": 0.95,
+      "variableType": "Identifier",
+      "aliases": ["sub-id"]
+    },
+    "session_id": {
+      "variable": "nb:SessionID",
+      "confidence": 1.0,
+      "variableType": "Identifier",
+      "aliases": ["ses_id", "visit_id", "session"]
+    },
+    "age": {
+      "variable": "nb:Age",
+      "format": "nb:FromFloat",
+      "confidence": 0.95,
+      "variableType": "Continuous",
+      "aliases": ["age_years", "age_at_baseline"]
+    },
+    "sex": {
+      "variable": "nb:Sex",
+      "confidence": 0.95,
+      "variableType": "Categorical",
+      "aliases": ["gender", "biological_sex"],
+      "levels": {
+        "M": {"termURL": "snomed:248153007", "label": "Male"},
+        "F": {"termURL": "snomed:248152002", "label": "Female"},
+        "O": {"termURL": "snomed:32570681000036106", "label": "Other"}
+      }
+    },
+    "diagnosis": {
+      "variable": "nb:Diagnosis",
+      "confidence": 0.7,
+      "variableType": "Categorical",
+      "aliases": ["group", "condition", "disease_status"],
+      "note": "Moderate confidence; requires semantic validation of categorical values"
+    }
+  }
+}

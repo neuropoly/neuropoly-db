@@ -1,0 +1,16 @@
+# BIDS ignore file
+# Standard BIDS excludes
+
+# OS-specific
+.DS_Store
+.gitkeep
+*.swp
+
+# Testing
+.pytest_cache
+__pycache__
+
+# IDE
+.vscode
+.idea
+*.pyc

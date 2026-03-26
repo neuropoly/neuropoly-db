@@ -8,6 +8,18 @@ import tempfile
 
 from npdb.managers.gitea import GiteaManager, OrganizationMixin
 from npdb.managers.neurobagel import BagelMixin, NeurobagelManager
+from npdb.managers.annotation_automation import AnnotationManager, AnnotationConfig
+from npdb.managers.phenotype_mappings import load_static_mappings, load_user_mappings, merge_mappings
+from npdb.managers.provenance import ProvenanceReport, add_column_provenance, add_warning, save_provenance
+from npdb.managers.fuzzy_matcher import FuzzyMatcher, ColumnMatcher
+from npdb.managers.mapping_resolver import MappingResolver, ResolvedMapping
+from npdb.managers.browser_session import BrowserSession
+from npdb.managers.annotation_steps import AnnotationStep, StepNavigator, AnnotationUIPatterns
+from npdb.managers.ui_interaction import (
+    ColumnAnnotationData, ValueAnnotationData, FormatAnnotationData,
+    AnnotationUIBuilder, FormFillerActions
+)
+from npdb.managers.graph_updater import GraphUpdater
 
 
 class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
@@ -16,13 +28,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             self, url=url, user=user, token=token, ssl_verify=ssl_verify)
         OrganizationMixin.__init__(
             self, organization="datasets", client=self.client)
-
-    # def dataset_description(self, dataset: str):
-    #     repo = next(iter([d for d in self.datasets if d.name == dataset]))
-    #     content = next(iter([a for a in repo.get_git_content()
-    #                          if a.name == "dataset_description.json"]))
-
-    #     return json.loads(base64.b64decode(repo.get_file_content(content)))
 
     def clone_repository(self, dataset: str, local_path: str, light: bool = False):
         repo = next(iter([d for d in self.datasets if d.name == dataset]))
@@ -98,8 +103,8 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         dataset_description: dict
     ):
         # Generate TSV from BIDS directory
-        with tempfile.NamedTemporaryFile(suffix=".tsv") as tmp_file:
-            with tempfile.NamedTemporaryFile(suffix=".json") as tmp_desc:
+        with tempfile.NamedTemporaryFile(suffix=".tsv", mode='w+', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".json", mode='w+', delete=False) as tmp_desc:
                 json.dump(dataset_description, tmp_desc)
                 tmp_desc.flush()
 
@@ -119,3 +124,13 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                     dataset_name=dataset,
                     bids_table=tmp_file.name
                 )
+
+        # Clean up temp files
+        try:
+            os.unlink(tmp_file.name)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp_desc.name)
+        except OSError:
+            pass

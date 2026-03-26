@@ -19,10 +19,15 @@ include:
 
 services:
 
-  # Ensure inherited Neurobagel services are reachable from the workspace.
+  # Seed datasets from workspace directory at devcontainer build time
   init_data:
     networks:
       - neuropoly-dev
+    environment:
+      # Mount seed-datasets directory from workspace so all JSON-LD files are loaded at startup
+      LOCAL_GRAPH_DATA: /seed-datasets
+    volumes:
+      - ../seed-datasets:/seed-datasets:ro
 
   api:
     # Avoid host port collisions in devcontainer workflows; access via gateway
