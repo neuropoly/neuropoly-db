@@ -1,68 +1,15 @@
 # =============================================================================
 # Dev Container — NeuroPoly DB
 #
-# Inherit Neurobagel stack from neurobagel-recipes and place all services on
-# a shared isolated network (neuropoly-dev) so the workspace can resolve them
-# by service name.
+# Used as the SECOND compose file alongside ../docker-compose.yml.
+# All Neurobagel services (graph, api, federation, proxy) come from root.
+# This file only adds the Python dev workspace container.
 #
-# Internal endpoints (used by notebooks and service-to-service calls):
-#   API         : http://api:8000
-#   GraphDB     : http://graph:7200
-#   Federation  : http://federation:8000
-#   Query tool  : http://query_federation:5173
-#
-# Browser endpoint:
-#   Forward gateway:80 from VS Code Ports and open the generated URL.
+# Paths are relative to the PROJECT DIRECTORY (repo root), because
+# devcontainer.json lists ../docker-compose.yml first.
 # =============================================================================
-include: 
-  - ../neurobagel-recipes/docker-compose.yml
 
 services:
-
-  # Seed datasets from workspace directory at devcontainer build time
-  init_data:
-    networks:
-      - neuropoly-dev
-    environment:
-      # Mount seed-datasets directory from workspace so all JSON-LD files are loaded at startup
-      LOCAL_GRAPH_DATA: /seed-datasets
-    volumes:
-      - ../seed-datasets:/seed-datasets:ro
-
-  api:
-    # Avoid host port collisions in devcontainer workflows; access via gateway
-    # and VS Code service forwarding instead.
-    ports: !override []
-    networks:
-      - neuropoly-dev
-
-  graph:
-    ports: !override []
-    networks:
-      - neuropoly-dev
-
-  federation:
-    ports: !override []
-    networks:
-      - neuropoly-dev
-
-  query_federation:
-    ports: !override []
-    networks:
-      - neuropoly-dev
-
-  gateway:
-    image: nginx:1.27-alpine
-    depends_on:
-      - query_federation
-      - federation
-      - api
-    volumes:
-      - "./nginx/dev-gateway.conf:/etc/nginx/conf.d/default.conf:ro"
-    networks:
-      - neuropoly-dev
-
-  # ── Python dev workspace ──────────────────────────────────────────────────
   workspace:
     image: mcr.microsoft.com/devcontainers/python:3.12-bookworm
     cap_add:
@@ -73,25 +20,13 @@ services:
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     volumes:
-      - ..:/workspaces/neuropoly-db:cached
-      # Shadow the host .venv with a container-local named volume so the
-      # host's existing .venv (different Python / CUDA build) is invisible
-      # inside the container and postCreate can create a clean one.
+      # "." = repo root (project directory set by first compose file)
+      - .:/workspaces/neuropoly-db:cached
+      # Shadow host .venv with a container-local named volume
       - venv-data:/workspaces/neuropoly-db/.venv
     command: sleep infinity
-    networks:
-      - neuropoly-dev
     depends_on:
-      - init_data
-      - api
-      - graph
-      - federation
-      - query_federation
-      - gateway
-
-networks:
-  neuropoly-dev:
-    driver: bridge
+      - proxy
 
 volumes:
   venv-data:

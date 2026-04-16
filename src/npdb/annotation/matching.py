@@ -4,12 +4,11 @@ Fuzzy column header matcher for deterministic phenotype mapping.
 Uses rapidfuzz for scoring column headers against known phenotype variable names.
 Provides confidence-calibrated matching for exact, fuzzy, and no-match cases.
 """
-
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 from rapidfuzz import fuzz, process
 
 
-class FuzzyMatcher:
+class PhenotypeMatcher:
     """
     Matches column headers to phenotype variables using fuzzy string matching.
 
@@ -34,7 +33,7 @@ class FuzzyMatcher:
         and strips whitespace.
         """
         normalized = header.lower().strip()
-        for old, new in FuzzyMatcher.NORMALIZATION_MAP.items():
+        for old, new in PhenotypeMatcher.NORMALIZATION_MAP.items():
             normalized = normalized.replace(old, new)
         # Collapse multiple spaces
         normalized = " ".join(normalized.split())
@@ -52,9 +51,9 @@ class FuzzyMatcher:
         Returns:
             (matched_candidate, confidence) if exact match found, else None.
         """
-        normalized_header = FuzzyMatcher.normalize_header(header)
+        normalized_header = PhenotypeMatcher.normalize_header(header)
         normalized_candidates = {
-            FuzzyMatcher.normalize_header(c): c for c in candidates}
+            PhenotypeMatcher.normalize_header(c): c for c in candidates}
 
         if normalized_header in normalized_candidates:
             return (normalized_candidates[normalized_header], 1.0)
@@ -81,9 +80,9 @@ class FuzzyMatcher:
         if not candidates:
             return None
 
-        normalized_header = FuzzyMatcher.normalize_header(header)
+        normalized_header = PhenotypeMatcher.normalize_header(header)
         normalized_candidates = [
-            FuzzyMatcher.normalize_header(c) for c in candidates]
+            PhenotypeMatcher.normalize_header(c) for c in candidates]
 
         # Use token_set_ratio for partial matches (e.g., "age_at_baseline" vs "age")
         result = process.extractOne(
@@ -127,12 +126,12 @@ class FuzzyMatcher:
             (match, confidence, source) where source is "exact" or "fuzzy", or None.
         """
         # Attempt exact match
-        exact_result = FuzzyMatcher.exact_match(header, candidates)
+        exact_result = PhenotypeMatcher.exact_match(header, candidates)
         if exact_result and exact_result[1] >= exact_threshold:
             return (exact_result[0], exact_result[1], "exact")
 
         # Attempt fuzzy match
-        fuzzy_result = FuzzyMatcher.fuzzy_match(header, candidates)
+        fuzzy_result = PhenotypeMatcher.fuzzy_match(header, candidates)
         if fuzzy_result and fuzzy_result[1] >= fuzzy_threshold:
             return (fuzzy_result[0], fuzzy_result[1], "fuzzy")
 
@@ -187,7 +186,7 @@ class ColumnMatcher:
         Returns:
             (mapping_key, confidence, source) or None if no match found.
         """
-        match_result = FuzzyMatcher.match_header(
+        match_result = PhenotypeMatcher.match_header(
             header,
             self.all_known_names,
             exact_threshold=exact_threshold,

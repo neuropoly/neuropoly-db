@@ -3,13 +3,12 @@ Tests for the GraphUpdater hot-reload functionality.
 """
 
 import json
+import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
-import pytest
-
-from npdb.managers.graph_updater import GraphUpdater
+from npdb.external.neurobagel.graph import GraphUpdater
 
 
 class TestGraphUpdater:
@@ -18,10 +17,14 @@ class TestGraphUpdater:
     def test_init_defaults(self):
         """Test GraphUpdater initialization with defaults."""
         updater = GraphUpdater(username="user", password="pass")
-        assert updater.graph_host == "graphdb"
+        # Allow for both devcontainer and standalone defaults
+        assert updater.graph_host in ["graphdb", "graph"]
         assert updater.graph_port == 7200
         assert updater.graph_db == "repositories/my_db"
-        assert updater.base_url == "http://graphdb:7200/repositories/my_db"
+        assert updater.base_url in [
+            "http://graphdb:7200/repositories/my_db",
+            "http://graph:7200/repositories/my_db"
+        ]
 
     def test_init_custom_values(self):
         """Test GraphUpdater initialization with custom values."""
@@ -54,18 +57,18 @@ class TestGraphUpdater:
         """Test upload fails when file doesn't exist."""
         updater = GraphUpdater(username="user", password="pass")
         nonexistent = Path("/tmp/nonexistent_file_12345.jsonld")
-        
+
         with pytest.raises(FileNotFoundError):
             updater.upload_jsonld(nonexistent)
 
-    @patch("npdb.managers.graph_updater.httpx.post")
+    @patch("npdb.external.neurobagel.graph.httpx.post")
     def test_upload_jsonld_success(self, mock_post):
         """Test successful JSON-LD upload."""
         # Create temporary JSON-LD file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonld', delete=False) as f:
             json.dump({"@context": {}, "@id": "test"}, f)
             temp_file = Path(f.name)
-        
+
         try:
             # Mock successful response
             mock_response = Mock()
@@ -83,11 +86,11 @@ class TestGraphUpdater:
         finally:
             temp_file.unlink()
 
-    @patch("npdb.managers.graph_updater.httpx.post")
+    @patch("npdb.external.neurobagel.graph.httpx.post")
     def test_upload_jsonld_http_error(self, mock_post):
         """Test upload fails on HTTP error."""
         import httpx
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonld', delete=False) as f:
             json.dump({"@context": {}, "@id": "test"}, f)
             temp_file = Path(f.name)
@@ -97,9 +100,10 @@ class TestGraphUpdater:
             mock_response = Mock(spec=httpx.Response)
             mock_response.status_code = 400
             mock_response.text = "Invalid RDF"
-            
+
             # Use httpx.HTTPStatusError which is a real class
-            error = httpx.HTTPStatusError("Bad Request", request=Mock(), response=mock_response)
+            error = httpx.HTTPStatusError(
+                "Bad Request", request=Mock(), response=mock_response)
             mock_post.side_effect = error
 
             updater = GraphUpdater(username="user", password="pass")
@@ -127,7 +131,7 @@ class TestGraphUpdater:
 
             assert result is True
             assert metadata_file.exists()
-            
+
             with open(metadata_file) as f:
                 data = json.load(f)
             assert "dataset-001" in data
@@ -163,13 +167,13 @@ class TestGraphUpdater:
             assert "existing-001" in data
             assert "dataset-002" in data
 
-    @patch("npdb.managers.graph_updater.httpx.post")
+    @patch("npdb.external.neurobagel.graph.httpx.post")
     def test_hot_reload_dataset_success(self, mock_post):
         """Test successful hot-reload of dataset."""
         with tempfile.TemporaryDirectory() as tmpdir:
             jsonld_file = Path(tmpdir) / "whole-spine.jsonld"
             metadata_file = Path(tmpdir) / "datasets_metadata.json"
-            
+
             jsonld_file.write_text(json.dumps({"@context": {}, "@id": "test"}))
 
             # Mock successful GraphDB upload
@@ -188,7 +192,7 @@ class TestGraphUpdater:
             assert result is True
             assert metadata_file.exists()
 
-    @patch("npdb.managers.graph_updater.httpx.post")
+    @patch("npdb.external.neurobagel.graph.httpx.post")
     def test_hot_reload_dataset_without_metadata(self, mock_post):
         """Test hot-reload without metadata file update."""
         with tempfile.TemporaryDirectory() as tmpdir:

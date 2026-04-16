@@ -4,10 +4,10 @@ UI interaction helpers for annotation tool form filling.
 Handles column annotation, value annotation, and format specification.
 Bridges MappingResolver results to Playwright form inputs.
 """
-
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
-from npdb.managers.mapping_resolver import ResolvedMapping
+from typing import Any, Dict, List, Optional
+
+from npdb.automation.mappings.resolvers import ResolvedMapping
 
 
 @dataclass
@@ -160,7 +160,7 @@ class FormFillerActions:
             browser_session: BrowserSession instance with page.
             column_annotation: ColumnAnnotationData to fill.
         """
-        from npdb.managers.annotation_steps import AnnotationUIPatterns as UI
+        from npdb.annotation.automation import AnnotationUIPatterns as UI
 
         await browser_session.fill(
             UI.COLUMN_DESCRIPTION_INPUT,
@@ -187,7 +187,7 @@ class FormFillerActions:
             browser_session: BrowserSession instance.
             value_annotations: List of ValueAnnotationData to fill.
         """
-        from npdb.managers.annotation_steps import AnnotationUIPatterns as UI
+        from npdb.annotation.automation import AnnotationUIPatterns as UI
 
         for idx, annotation in enumerate(value_annotations):
             selector = UI.get_value_mapping_row(annotation.column_index, idx)
@@ -212,7 +212,7 @@ class FormFillerActions:
             browser_session: BrowserSession instance.
             format_annotation: FormatAnnotationData to fill.
         """
-        from npdb.managers.annotation_steps import AnnotationUIPatterns as UI
+        from npdb.annotation.automation import AnnotationUIPatterns as UI
 
         await browser_session.select_option(
             UI.FORMAT_SELECT,
@@ -247,7 +247,7 @@ class FormFillerActions:
             RuntimeError: If download button not found or download fails.
             TimeoutError: If download doesn't complete within timeout.
         """
-        from npdb.managers.annotation_steps import AnnotationUIPatterns as UI
+        from npdb.annotation.automation import AnnotationUIPatterns as UI
 
         try:
             # Click export button

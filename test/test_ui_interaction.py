@@ -5,12 +5,16 @@ Tests annotation data building and form filler actions.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from npdb.managers.ui_interaction import (
-    ColumnAnnotationData, ValueAnnotationData, FormatAnnotationData,
-    AnnotationUIBuilder, FormFillerActions
+from unittest.mock import AsyncMock
+
+from npdb.automation.mappings.resolvers import ResolvedMapping
+from npdb.automation.playwright.resolver import (
+    AnnotationUIBuilder,
+    ColumnAnnotationData,
+    FormatAnnotationData,
+    FormFillerActions,
+    ValueAnnotationData
 )
-from npdb.managers.mapping_resolver import ResolvedMapping
 
 
 class TestColumnAnnotationData:

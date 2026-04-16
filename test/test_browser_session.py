@@ -5,9 +5,9 @@ Tests session lifecycle, navigation, file operations, and error handling.
 """
 
 import pytest
-import tempfile
 from pathlib import Path
-from npdb.managers.browser_session import BrowserSession
+
+from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
 
 
 class TestBrowserSessionInit:
@@ -15,7 +15,7 @@ class TestBrowserSessionInit:
 
     def test_init_defaults(self):
         """Test BrowserSession with default configuration."""
-        session = BrowserSession()
+        session = NBAnnotationToolBrowserSession()
 
         assert session.headless is True
         assert session.timeout == 300000  # 300s * 1000ms
@@ -25,7 +25,8 @@ class TestBrowserSessionInit:
     def test_init_custom_config(self):
         """Test BrowserSession with custom configuration."""
         artifacts_dir = Path("/tmp/artifacts")
-        session = BrowserSession(headless=False, timeout=600, artifacts_dir=artifacts_dir)
+        session = NBAnnotationToolBrowserSession(
+            headless=False, timeout=600, artifacts_dir=artifacts_dir)
 
         assert session.headless is False
         assert session.timeout == 600000
@@ -33,7 +34,7 @@ class TestBrowserSessionInit:
 
     def test_init_timeout_conversion_ms(self):
         """Test that timeout is converted to milliseconds."""
-        session = BrowserSession(timeout=100)
+        session = NBAnnotationToolBrowserSession(timeout=100)
         assert session.timeout == 100000  # 100 * 1000
 
 
@@ -42,17 +43,17 @@ class TestBrowserSessionConfig:
 
     def test_annotation_url_constant(self):
         """Test annotation URL constant."""
-        assert BrowserSession.ANNOTATION_URL == "https://annotate.neurobagel.org"
+        assert NBAnnotationToolBrowserSession.ANNOTATION_URL == "https://annotate.neurobagel.org"
 
     def test_artifacts_dir_optional(self):
         """Test that artifacts_dir is optional."""
-        session = BrowserSession()
+        session = NBAnnotationToolBrowserSession()
         assert session.artifacts_dir is None
 
     def test_artifacts_dir_path(self):
         """Test artifacts_dir is stored as Path."""
         path = Path("/tmp/test")
-        session = BrowserSession(artifacts_dir=path)
+        session = NBAnnotationToolBrowserSession(artifacts_dir=path)
         assert session.artifacts_dir == path
         assert isinstance(session.artifacts_dir, Path)
 
@@ -62,7 +63,7 @@ class TestBrowserSessionCleanup:
 
     def test_cleanup_no_crash_uninitialized(self):
         """Test cleanup doesn't crash on uninitialized session."""
-        session = BrowserSession()
+        session = NBAnnotationToolBrowserSession()
         # Should not raise
         import asyncio
         asyncio.run(session.cleanup())
@@ -73,7 +74,7 @@ class TestBrowserSessionCleanup:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             assert session.browser is None
             # Cleanup should handle None gracefully
             await session.cleanup()
@@ -89,7 +90,7 @@ class TestBrowserSessionFileOperations:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             # Both FileNotFoundError (file not found) and RuntimeError (not launched) are possible
             with pytest.raises((FileNotFoundError, RuntimeError)):
                 await session.upload_file(Path("/nonexistent/file.tsv"), "input[type='file']")
@@ -103,7 +104,7 @@ class TestBrowserSessionFileOperations:
 
         async def test():
             with tempfile.NamedTemporaryFile(suffix=".tsv") as f:
-                session = BrowserSession()
+                session = NBAnnotationToolBrowserSession()
                 # File exists, but session.page is None so will raise RuntimeError
                 with pytest.raises(RuntimeError, match="not launched"):
                     await session.upload_file(Path(f.name), "input[type='file']")
@@ -119,7 +120,7 @@ class TestBrowserSessionErrorHandling:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             with pytest.raises(RuntimeError, match="not launched"):
                 await session.navigate_to()
 
@@ -130,7 +131,7 @@ class TestBrowserSessionErrorHandling:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             with pytest.raises(RuntimeError, match="not launched"):
                 await session.click("button")
 
@@ -141,7 +142,7 @@ class TestBrowserSessionErrorHandling:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             with pytest.raises(RuntimeError, match="not launched"):
                 await session.fill("input", "text")
 
@@ -153,7 +154,7 @@ class TestBrowserSessionAttributes:
 
     def test_initial_state(self):
         """Test initial session state."""
-        session = BrowserSession()
+        session = NBAnnotationToolBrowserSession()
 
         assert session.browser is None
         assert session.context is None
@@ -163,8 +164,8 @@ class TestBrowserSessionAttributes:
 
     def test_headless_modes(self):
         """Test both headless and headed modes."""
-        headless_session = BrowserSession(headless=True)
-        headed_session = BrowserSession(headless=False)
+        headless_session = NBAnnotationToolBrowserSession(headless=True)
+        headed_session = NBAnnotationToolBrowserSession(headless=False)
 
         assert headless_session.headless is True
         assert headed_session.headless is False
@@ -175,14 +176,14 @@ class TestArtifactCapture:
 
     def test_artifacts_dir_none_skips_capture(self):
         """Test that None artifacts_dir skips capture."""
-        session = BrowserSession(artifacts_dir=None)
+        session = NBAnnotationToolBrowserSession(artifacts_dir=None)
         assert session.artifacts_dir is None
         assert session.trace_path is None
 
     def test_artifacts_dir_creates_trace_path(self):
         """Test artifacts_dir creates trace path."""
         artifacts = Path("/tmp/artifacts")
-        session = BrowserSession(artifacts_dir=artifacts)
+        session = NBAnnotationToolBrowserSession(artifacts_dir=artifacts)
         # Note: trace_path is set during launch(), not __init__()
         # So it will be None until launch() is called
         assert session.trace_path is None  # Not yet launched
@@ -193,12 +194,12 @@ class TestEdgeCases:
 
     def test_timeout_zero(self):
         """Test timeout=0 (no timeout)."""
-        session = BrowserSession(timeout=0)
+        session = NBAnnotationToolBrowserSession(timeout=0)
         assert session.timeout == 0
 
     def test_timeout_large(self):
         """Test very large timeout."""
-        session = BrowserSession(timeout=86400)  # 24 hours
+        session = NBAnnotationToolBrowserSession(timeout=86400)  # 24 hours
         assert session.timeout == 86400000
 
     def test_multiple_cleanup_calls(self):
@@ -206,7 +207,7 @@ class TestEdgeCases:
         import asyncio
 
         async def test():
-            session = BrowserSession()
+            session = NBAnnotationToolBrowserSession()
             await session.cleanup()
             await session.cleanup()  # Should not crash
 

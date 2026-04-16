@@ -4,10 +4,10 @@ Locator inspection and discovery for annotation tool UI elements.
 Provides runtime inspection of page DOM to discover and validate selectors.
 Helps diagnose selector mismatches and find alternative selectors when primary fails.
 """
+from playwright.async_api import Page
 
 import json
-from typing import Dict, List, Optional, Any
-from playwright.async_api import Page, Locator
+from typing import Any, Dict, List
 
 
 class LocatorInspector:

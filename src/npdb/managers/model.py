@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class DBManager(ABC):
+class Manager(ABC):
     def __init__(self):
         pass
 

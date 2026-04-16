@@ -20,3 +20,16 @@ If a request would involve Gitea interaction:
 ## Strict Interpretation
 
 If there is any uncertainty about whether a step could contact Gitea, treat it as prohibited and do not execute it.
+
+---
+
+## Critical Terminal Management Rule
+
+**READ AND FOLLOW: [.github/prompts/terminal-management-CRITICAL.md](.github/prompts/terminal-management-CRITICAL.md)**
+
+This is an absolute, non-negotiable rule for all command execution:
+- DO NOT launch multiple commands in the same terminal while one is running
+- ALWAYS wait for a command to complete OR spawn a new terminal
+- ALWAYS check terminal state before executing ANY command
+
+Violating this rule causes command interference, lost output, and broken workflows. Treat this with the same priority as the Gitea safety rule.

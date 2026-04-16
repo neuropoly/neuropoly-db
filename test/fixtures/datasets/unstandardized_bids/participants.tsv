@@ -1,0 +1,6 @@
+partid	subject_age	gender	group	cognitive_score
+sub-01	25	M	control	98
+sub-02	30	F	patient	75
+sub-03	28	M	patient	82
+sub-04	35	F	control	95
+sub-05	22	M	control	88

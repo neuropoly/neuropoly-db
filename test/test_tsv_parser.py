@@ -5,7 +5,11 @@ Tests for TSV file parsing utilities.
 import pytest
 import tempfile
 from pathlib import Path
-from npdb.managers.tsv_parser import parse_tsv_columns, get_unique_values
+
+from npdb.utils import (
+    get_unique_values,
+    parse_tsv_columns
+)
 
 
 @pytest.fixture

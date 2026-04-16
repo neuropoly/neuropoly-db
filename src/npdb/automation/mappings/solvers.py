@@ -8,33 +8,6 @@ Neurobagel standardized variables.
 import json
 from pathlib import Path
 from typing import Dict, Optional, Any
-from pydantic import BaseModel, Field
-
-
-class ColumnMapping(BaseModel):
-    """Mapping metadata for a dataset column."""
-    variable: str = Field(...,
-                          description="Neurobagel standardized variable (e.g., 'nb:Age')")
-    confidence: float = Field(..., ge=0.0, le=1.0,
-                              description="Confidence score [0, 1]")
-    variable_type: str = Field(
-        ..., description="Variable type: Identifier|Continuous|Categorical|Collection")
-    format: Optional[str] = Field(
-        default=None, description="For continuous: format type (e.g., 'nb:FromFloat')")
-    levels: Optional[Dict[str, Dict[str, str]]] = Field(
-        default=None, description="For categorical: value→term mappings")
-    aliases: Optional[list[str]] = Field(
-        default=None, description="Alternative column header names")
-    source: Optional[str] = Field(
-        default=None, description="Mapping source: static|deterministic|ai|manual")
-    rationale: Optional[str] = Field(
-        default=None, description="Explanation of mapping decision")
-
-
-class MappingsRegistry(BaseModel):
-    """Registry of static phenotype mappings."""
-    mappings: Dict[str, Dict[str, Any]
-                   ] = Field(..., description="Column→variable mappings")
 
 
 def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -48,7 +21,7 @@ def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]
         Dictionary of mappings with context and column definitions.
     """
     if resource_path is None:
-        resource_path = Path(__file__).parent.parent / \
+        resource_path = Path(__file__).parent.parent.parent / \
             "resources" / "phenotype_mappings.json"
 
     if not resource_path.exists():
@@ -91,7 +64,7 @@ def merge_mappings(
     return merged
 
 
-def load_user_mappings(path: Path) -> Dict[str, Any]:
+def load_user_mappings(path: str | Path) -> Dict[str, Any]:
     """
     Load user-supplied phenotype mappings from JSON file.
 

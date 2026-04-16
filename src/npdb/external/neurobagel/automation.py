@@ -9,11 +9,12 @@ Includes manual retry logic for transient failures and artifact capture on error
 import asyncio
 import time
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
-from playwright.async_api import async_playwright, Browser, Page, BrowserContext
+from typing import Optional
+
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 
-class BrowserSession:
+class NBAnnotationToolBrowserSession:
     """
     Manages Playwright browser lifecycle for Neurobagel annotation tool.
 
@@ -214,7 +215,7 @@ class BrowserSession:
             Diagnostic report with page structure and tested selectors
         """
         try:
-            from npdb.managers.locator_inspector import diagnose_upload_selector
+            from npdb.automation.playwright.locator import diagnose_upload_selector
             return await diagnose_upload_selector(self.page)
         except Exception as e:
             return f"Could not generate diagnosis: {e}"

@@ -1,11 +1,9 @@
 {
   "name": "NeuroPoly DB",
-  "dockerComposeFile": "docker-compose.yml",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
   "service": "workspace",
   "workspaceFolder": "/workspaces/neuropoly-db",
 
-  // Run as the non-root vscode user (uid 1000) — matches the image default.
-  // postCreate.sh does a sudo chown to claim the venv-data volume on first use.
   "remoteUser": "vscode",
 
   "initializeCommand": "bash .devcontainer/initialize.sh",
@@ -13,17 +11,17 @@
 
   "features": {
     "ghcr.io/devcontainers-extra/features/uv:1": { },
-    "ghcr.io/devcontainers-extra/features/wireguard-apt-get:1": { }
+    "ghcr.io/devcontainers-extra/features/wireguard-apt-get:1": { },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": { }
   },
 
-  // Expose inherited Neurobagel services in the VS Code workspace.
   "forwardPorts": [
-    "gateway:80",
+    "proxy:80",
     "graph:7200"
   ],
   "portsAttributes": {
-    "gateway:80": {
-      "label": "Neurobagel Gateway (UI + APIs)",
+    "proxy:80": {
+      "label": "Neurobagel (UI + APIs)",
       "onAutoForward": "openBrowserOnce",
       "protocol": "http"
     },
@@ -32,18 +30,10 @@
     }
   },
 
-  // Internal service endpoints for notebooks and workspace tooling.
   "remoteEnv": {
     "NB_API_URL": "http://api:8000",
     "NB_GRAPH_URL": "http://graph:7200",
-    "NB_FAPI_URL": "http://federation:8000",
-    "NB_QUERY_TOOL_URL": "http://query_federation:5173",
-    "NB_API_QUERY_URL": "/fapi",
-    "NB_API_URL_PUBLIC": "/napi",
-    "NB_GRAPH_URL_PUBLIC": "",
-    "NB_FAPI_URL_PUBLIC": "/fapi",
-    "NB_QUERY_TOOL_URL_PUBLIC": "/",
-    "NB_GATEWAY_URL_PUBLIC": "/"
+    "NB_FAPI_URL": "http://federation:8000"
   },
 
   "customizations": {
@@ -60,16 +50,12 @@
         "terminal.integrated.defaultProfile.linux": "bash"
       },
       "extensions": [
-        // Python
         "ms-python.python",
         "ms-python.vscode-pylance",
-        // Jupyter
         "ms-toolsai.jupyter",
         "ms-toolsai.jupyter-keymap",
         "ms-toolsai.jupyter-renderers",
-        // Docker
         "ms-azuretools.vscode-docker",
-        // Markdown
         "yzhang.markdown-all-in-one",
         "davidanson.vscode-markdownlint"
       ]

@@ -18,11 +18,10 @@ duplicates per Neurobagel specifications:
 This preserves ranking/provenance info and avoids re-running algorithms.
 Reference: https://neurobagel.org/user_guide/data_prep/#multiple-participant-or-session-id-columns
 """
-
 import json
-from pathlib import Path
-from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
 
 
 # Identifier variables that can have alternates per Neurobagel spec

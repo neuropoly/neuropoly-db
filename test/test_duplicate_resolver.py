@@ -10,14 +10,15 @@ are intelligently resolved:
 import json
 import tempfile
 from pathlib import Path
-from npdb.managers.duplicate_resolver import resolve_phenotype_duplicates
+
+from npdb.annotation.duplicates import resolve_phenotype_duplicates
 
 
 def test_duplicate_resolution_with_benchmark_data():
     """
     Test duplicate resolution using flat-format test data.
     Tests resolution of 'participant_id' and 'source_id' both mapping to nb:ParticipantID.
-    
+
     Expected behavior:
     - participant_id: primary, stays as-is
     - source_id: alternate, renamed to alt_participant_id in TSV, removed from JSON
@@ -82,7 +83,8 @@ sub-003	source_003	28	M"""
         print(f"  TSV columns: {original_header}")
         print(f"  Annotations: {list(original_annotations.keys())}")
         for col, mapping in original_annotations.items():
-            print(f"    {col} → {mapping['variable']} (confidence {mapping['confidence']:.2f})")
+            print(
+                f"    {col} → {mapping['variable']} (confidence {mapping['confidence']:.2f})")
 
         # Run duplicate resolver
         resolve_phenotype_duplicates(
@@ -102,44 +104,30 @@ sub-003	source_003	28	M"""
         print(f"  TSV columns: {resolved_header}")
         print(f"  Annotations: {list(resolved_annotations.keys())}")
         for col, mapping in resolved_annotations.items():
-            print(f"    {col} → {mapping['variable']} (confidence {mapping['confidence']:.2f})")
+            print(
+                f"    {col} → {mapping['variable']} (confidence {mapping['confidence']:.2f})")
 
         # Verify results
         print(f"\n→ Verification:")
 
         # Primary participant_id should be kept as-is in both
-        if 'participant_id' in resolved_header and 'participant_id' in resolved_annotations:
-            print("  ✓ Primary participant_id kept in both TSV and JSON")
-        else:
-            print("  ✗ ERROR: Primary participant_id not preserved")
-            return False
+        assert 'participant_id' in resolved_header and 'participant_id' in resolved_annotations, \
+            "Primary participant_id not preserved"
+        print("  ✓ Primary participant_id kept in both TSV and JSON")
 
         # source_id should be renamed to alt_participant_id in TSV
-        if 'alt_participant_id' in resolved_header and 'source_id' not in resolved_header:
-            print("  ✓ Alternate renamed to alt_participant_id in TSV")
-        else:
-            print("  ✗ ERROR: Alternate not renamed correctly")
-            print(f"    TSV columns: {resolved_header}")
-            return False
+        assert 'alt_participant_id' in resolved_header and 'source_id' not in resolved_header, \
+            f"Alternate not renamed correctly. TSV columns: {resolved_header}"
+        print("  ✓ Alternate renamed to alt_participant_id in TSV")
 
         # source_id should NOT be in JSON (unannotated)
-        if 'source_id' not in resolved_annotations:
-            print("  ✓ Alternate source_id removed from JSON annotations")
-        else:
-            print("  ✗ ERROR: Alternate still in JSON annotations")
-            return False
+        assert 'source_id' not in resolved_annotations, \
+            "Alternate still in JSON annotations"
+        print("  ✓ Alternate source_id removed from JSON annotations")
 
         # Non-duplicate columns should still exist
-        if all(col in resolved_header for col in ['age', 'sex']):
-            print("  ✓ Non-duplicate columns preserved")
-        else:
-            print("  ✗ ERROR: Non-duplicate columns not preserved")
-            return False
+        assert all(col in resolved_header for col in ['age', 'sex']), \
+            "Non-duplicate columns not preserved"
+        print("  ✓ Non-duplicate columns preserved")
 
         print("\n✓ Test PASSED: Duplicate resolution works correctly!")
-        return True
-
-
-if __name__ == "__main__":
-    success = test_duplicate_resolution_with_benchmark_data()
-    exit(0 if success else 1)

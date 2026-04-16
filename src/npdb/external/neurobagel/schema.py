@@ -21,14 +21,11 @@ Bagel expects the following structure:
 
 This module converts our intermediate format to this schema.
 """
-
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
-# Mapping from Neurobagel variable IRIs to Term representations
-# NOTE: These should be abbreviated IRIs (e.g., "nb:ParticipantID"), not full URLs
-# Bagel CLI expects abbreviated IRIs and handles URL expansion internally
+
 VARIABLE_TERMS = {
     "nb:ParticipantID": {
         "TermURL": "nb:ParticipantID",
@@ -51,7 +48,6 @@ VARIABLE_TERMS = {
         "Label": "Diagnosis"
     },
 }
-
 # Mapping from format IRIs to Term representations (abbreviated)
 FORMAT_TERMS = {
     "nb:FromFloat": {
@@ -59,7 +55,6 @@ FORMAT_TERMS = {
         "Label": "Floating point number"
     },
 }
-
 # URL prefixes for expanding abbreviated IRIs
 URL_PREFIXES = {
     "snomed": "http://purl.bioontology.org/ontology/SNOMEDCT/",
@@ -68,19 +63,22 @@ URL_PREFIXES = {
 }
 
 
+# Mapping from Neurobagel variable IRIs to Term representations
+# NOTE: These should be abbreviated IRIs (e.g., "nb:ParticipantID"), not full URLs
+# Bagel CLI expects abbreviated IRIs and handles URL expansion internally
 def expand_iri(iri: str) -> str:
     """
     Expand abbreviated IRI (e.g. 'snomed:123') to full URL.
-    
+
     Args:
         iri: IRI string, possibly abbreviated with prefix (e.g. 'snomed:248153007')
-        
+
     Returns:
         Full URL or original string if not abbreviated
     """
     if not iri or ":" not in iri or iri.startswith("http"):
         return iri
-        
+
     prefix, code = iri.split(":", 1)
     if prefix in URL_PREFIXES:
         return URL_PREFIXES[prefix] + code
@@ -111,7 +109,8 @@ def convert_to_bagel_schema(
         # Get the variable term
         term = VARIABLE_TERMS.get(variable)
         if not term:
-            print(f"⚠ Warning: No term mapping for {variable}, skipping {column_name}")
+            print(
+                f"⚠ Warning: No term mapping for {variable}, skipping {column_name}")
             continue
 
         # Initialize the column entry
@@ -157,7 +156,8 @@ def convert_to_bagel_schema(
         # Add MissingValues for non-Identifier types (Identifier doesn't allow additionalProperties)
         # Include common missing value markers found in the data
         if variable_type != "Identifier":
-            bagel_dict[column_name]["Annotations"]["MissingValues"] = ["n/a", "N/A", "NA", ""]
+            bagel_dict[column_name]["Annotations"]["MissingValues"] = [
+                "n/a", "N/A", "NA", ""]
 
         # Add type-specific fields
         if variable_type == "Categorical" and levels:
@@ -165,7 +165,8 @@ def convert_to_bagel_schema(
             # Keep abbreviated IRIs (e.g., snomed:123), don't expand to full URLs
             normalized_levels = {}
             for level_key, level_value in levels.items():
-                term_url = level_value.get("TermURL") or level_value.get("termURL", "")
+                term_url = level_value.get(
+                    "TermURL") or level_value.get("termURL", "")
                 #  Don't expand URLs - keep abbreviated IRIs for Bagel validation
                 normalized_levels[level_key] = {
                     "TermURL": term_url,
@@ -202,7 +203,8 @@ def save_as_bagel_schema(
     if verbose:
         print(f"\n→ Converting to Bagel schema...")
 
-    bagel_dict = convert_to_bagel_schema(parsed_annotations, phenotype_mappings)
+    bagel_dict = convert_to_bagel_schema(
+        parsed_annotations, phenotype_mappings)
 
     with open(output_path, 'w') as f:
         json.dump(bagel_dict, f, indent=2)

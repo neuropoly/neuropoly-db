@@ -51,24 +51,33 @@ fi
 echo ""
 echo "==> Installing Playwright system dependencies and browsers..."
 
-# Install system packages required by Playwright
-sudo apt-get update -qq > /dev/null 2>&1 || true
-sudo apt-get install -qq -y \
-    libgconf-2-4 \
-    libnss3 \
-    libxss1 \
-    libappindicator1 \
-    libindicator7 \
-    xdg-utils \
-    fonts-liberation \
-    libasound2 \
-    > /dev/null 2>&1 || true
+# Sync project with annotation-automation extra
+uv sync --active --quiet --extra annotation-automation
 
-# Install Playwright browsers (uses pre-cached layers if available)
-python -m playwright install --with-deps chromium > /dev/null 2>&1 || {
+# Run playwright installation tool from chromium browser package
+uv run playwright install chromium --with-deps > /dev/null 2>&1 || {
     echo "   WARNING: Playwright browser installation had issues (may still work)"
 }
 echo "   ✓ Playwright system dependencies and browsers ready"
+
+# # Install system packages required by Playwright
+# sudo apt-get update -qq > /dev/null 2>&1 || true
+# sudo apt-get install -qq -y \
+#     libgconf-2-4 \
+#     libnss3 \
+#     libxss1 \
+#     libappindicator1 \
+#     libindicator7 \
+#     xdg-utils \
+#     fonts-liberation \
+#     libasound2 \
+#     > /dev/null 2>&1 || true
+
+# # Install Playwright browsers (uses pre-cached layers if available)
+# python -m playwright install --with-deps chromium > /dev/null 2>&1 || {
+#     echo "   WARNING: Playwright browser installation had issues (may still work)"
+# }
+# echo "   ✓ Playwright system dependencies and browsers ready"
 
 # ── 4. Jupyter kernel ─────────────────────────────────────────────────────
 # Always re-register (fast, <1s). Uses --sys-prefix so the kernel spec lives

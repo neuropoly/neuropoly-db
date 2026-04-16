@@ -8,8 +8,8 @@ import pytest
 from pathlib import Path
 import json
 import tempfile
-from npdb.managers.mapping_resolver import MappingResolver, ResolvedMapping
-from npdb.managers.phenotype_mappings import load_static_mappings
+
+from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
 
 
 class TestMappingResolver:

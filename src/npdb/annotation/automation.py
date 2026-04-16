@@ -4,10 +4,9 @@ Annotation tool step management and navigation.
 Detects current step in Neurobagel annotation workflow and routes to handlers.
 Steps: upload → column annotation → value annotation → export.
 """
-
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
-from dataclasses import dataclass
 
 
 class AnnotationStep(Enum):

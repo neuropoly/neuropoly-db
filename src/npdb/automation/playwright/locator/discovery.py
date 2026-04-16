@@ -5,9 +5,9 @@ Provides utilities to find, validate, and manage Playwright selectors.
 Handles fallbacks when primary selectors fail.
 """
 
-from typing import Dict, List, Optional, Union
+
 from dataclasses import dataclass
-from playwright.async_api import Page
+from typing import Dict, List, Optional
 
 
 @dataclass

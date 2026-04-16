@@ -11,8 +11,9 @@ import tempfile
 import json
 from unittest.mock import AsyncMock, patch
 
-from npdb.managers.annotation_automation import AnnotationManager, AnnotationConfig
-from npdb.managers.mapping_resolver import MappingResolver
+from npdb.annotation import AnnotationConfig
+from npdb.automation.mappings.resolvers import MappingResolver
+from npdb.managers.neurobagel import NeurobagelAnnotator
 
 
 @pytest.fixture
@@ -41,7 +42,7 @@ class TestAnnotationManagerE2E:
     def test_manager_initialization_manual_mode(self, synthetic_tsv: Path, output_dir: Path):
         """Test AnnotationManager initializes correctly for manual mode."""
         config = AnnotationConfig(mode="manual", headless=False)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
         assert manager.config.mode == "manual"
         assert manager.config.headless is False
@@ -51,7 +52,7 @@ class TestAnnotationManagerE2E:
     def test_manager_initialization_auto_mode(self, synthetic_tsv: Path, output_dir: Path):
         """Test AnnotationManager initializes correctly for auto mode."""
         config = AnnotationConfig(mode="auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
         assert manager.config.mode == "auto"
         assert manager.config.headless is True
@@ -60,7 +61,7 @@ class TestAnnotationManagerE2E:
     def test_manager_initialization_full_auto_mode(self, synthetic_tsv: Path, output_dir: Path):
         """Test AnnotationManager initializes correctly for full-auto mode."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
         assert manager.config.mode == "full-auto"
         assert manager.config.headless is True
@@ -114,7 +115,7 @@ class TestAnnotationManagerE2E:
                 mode="assist",
                 phenotype_dictionary=dict_path
             )
-            manager = AnnotationManager(config)
+            manager = NeurobagelAnnotator(config)
 
             # Verify resolver was initialized with user dict
             assert manager.resolver is not None
@@ -130,7 +131,7 @@ class TestAnnotationManagerE2E:
     async def test_file_not_found_error(self, output_dir: Path):
         """Test error handling for missing TSV file."""
         config = AnnotationConfig(mode="auto")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
         with pytest.raises(FileNotFoundError):
             await manager.execute(
@@ -145,7 +146,7 @@ class TestProvenance:
     def test_provenance_record_creation(self, synthetic_tsv: Path, output_dir: Path):
         """Test provenance object is created and tracked."""
         config = AnnotationConfig(mode="auto")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
         # Verify provenance was initialized
         assert manager.provenance is not None
@@ -175,10 +176,10 @@ class TestModeSpecificBehavior:
         auto_config = AnnotationConfig(mode="auto")
         full_auto_config = AnnotationConfig(mode="full-auto")
 
-        manual_manager = AnnotationManager(manual_config)
-        assist_manager = AnnotationManager(assist_config)
-        auto_manager = AnnotationManager(auto_config)
-        full_auto_manager = AnnotationManager(full_auto_config)
+        manual_manager = NeurobagelAnnotator(manual_config)
+        assist_manager = NeurobagelAnnotator(assist_config)
+        auto_manager = NeurobagelAnnotator(auto_config)
+        full_auto_manager = NeurobagelAnnotator(full_auto_config)
 
         # Verify all managers were initialized correctly
         assert manual_manager.config.mode == "manual"
@@ -216,10 +217,10 @@ class TestSmokeE2E:
             headless=True,
             artifacts_dir=output_dir
         )
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        # Mock BrowserSession context manager
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        # Mock NBAnnotationToolBrowserSession context manager
+        with patch('npdb.managers.neurobagel.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -258,9 +259,9 @@ class TestSmokeE2E:
             mode="full-auto",
             headless=True
         )
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.managers.neurobagel.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -310,9 +311,9 @@ class TestSmokeE2E:
             mode="auto",
             headless=True
         )
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.managers.neurobagel.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -355,11 +356,12 @@ class TestSmokeE2E:
         """
         config = AnnotationConfig(
             mode="assist",
-            headless=False
+            headless=False,
+            timeout=1,
         )
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.managers.neurobagel.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -386,9 +388,9 @@ class TestSmokeE2E:
         original_content = synthetic_tsv.read_text()
 
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.managers.neurobagel.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None

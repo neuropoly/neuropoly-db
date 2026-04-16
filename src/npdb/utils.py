@@ -1,9 +1,3 @@
-"""
-TSV file parsing utilities for annotation automation.
-
-Provides functions to extract column names and metadata from participants.tsv files.
-"""
-
 from pathlib import Path
 from typing import List, Set
 

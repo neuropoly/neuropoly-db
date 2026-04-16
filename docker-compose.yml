@@ -1,0 +1,36 @@
+# =============================================================================
+# NeuroPoly DB — Root Compose
+# Layers: root .env → recipes compose → root service overrides
+# =============================================================================
+
+include:
+  - ./neurobagel-recipes/docker-compose.yml
+
+services:
+  # Override federation volumes: root-level mount for local_nb_nodes.json
+  # (recipes compose tries to mount from recipes/ which doesn't have the file)
+  federation:
+    volumes: !override
+      - ./local_nb_nodes.json:/usr/src/local_nb_nodes.json:ro
+
+  # Seed datasets from workspace directory at devcontainer build time
+  init_data:
+    volumes: !override
+      - ./seed-datasets:/input_data:ro
+      - neurobagel_data:/data
+
+  # Don't publish query_federation directly; the proxy serves it.
+  query_federation:
+    ports: !override []
+
+  # Dev reverse proxy — single port for both query UI and federation API.
+  # This lets VS Code SSH forward a single port to reach everything.
+  proxy:
+    image: nginx:alpine
+    ports:
+      - "${NB_PROXY_PORT_HOST:-9000}:80"
+    volumes:
+      - ./config/nginx/dev-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - federation
+      - query_federation

@@ -1,9 +1,9 @@
 import pytest
 from datetime import datetime
-from npdb.managers.provenance import (
+
+from npdb.annotation.provenance import (
     ProvenanceReport,
     ColumnProvenance,
-    ConfidenceDistribution,
     add_column_provenance,
     add_warning,
     save_provenance,

@@ -1,193 +1,124 @@
-# NEUROPOLY DATABASE MANAGEMENT
+# NEUROPOLY DATABASE EXPLORATION AND STANDARDIZATION TOOLS
 
-Everything you need to manage databases at the NeuroPoly lab ! Well, not really ... but at least you can get a bird's eye view of everything
-available to you, then ask for access to it when needed. This repository doesn't let you **download** or **upload** data inside the databases,
-but it gives you a complete view of the **metadata contained in those databases**, and optionally also provides **links to the data** for users
-already authenticated with it.
+This repository hosts a collection of tools to interact with **metadata contained in the several NEUROPOLY databases**.
 
-## Databases
+> _Main Goal_
+> Provide an exploration tool into every database, agnostic to the data structure (standard) and management software (e.g. DataLad, Git, etc.) used to store the data.
 
-The databases available for preview through this service are:
+Components of the project :
 
-- **NeuroPoly BIDS Database**
+- **[Database exploration](#database-exploration)**: Complete and structured deployment of a local [NeuroBagel](https://github.com/neurobagel) node.
+- **[Metadata standardization](#metadata-standardization)**: A set of command line tools (under `npdb`) to convert from common standards (e.g. BIDS) to the structure expected by _NeuroBagel_.
+- **[Database ingestion](#database-ingestion)**: A set of command line tools (under `npdb`) to ingest data into a local _NeuroBagel_ node (currently supports `Neurogitea` indexed databases only).
 
-  The full set of BIDS datasets available at the NeuroPoly lab is **indexed in a Neurobagel node**. It is globaly
-  accessible for perusing, but provides download links - usable by authenticated users only - to the **git-annexed
-  storage endpoint**. Basically, you get a full view of `data.neuro.polymtl.ca`, **but you can't access it directly**.
+## Database exploration
 
-## Installation
+> [!WARNING]
+> To deploy a **production-ready NeuroBagel node**, refer to the [NeuroBagel documentation](https://neurobagel.org/user_guide/production_deployment) instead of the instructions below.
 
-### NeuroPoly DB
+Database exploration is done through a _NeuroBagel Node_. The following describe how to deploy it locally **for development purposes**.
 
-To get the base **NeuroPoly DB** management stack up and running, you only need to install `uv`, **we handle everything else** :
+### Requirements
+
+- [Docker](https://docs.docker.com/get-docker/) with [Docker Compose](https://docs.docker.com/compose/install/).
+
+### Installation
+
+> [!IMPORTANT]
+> If **you are the only user of the NeuroBagel node**, we recommend using [VSCode](https://code.visualstudio.com/), with the [Remote Containers extension](https://code.visualstudio.com/docs/remote/containers) installed, and deploy the node using the [precrafted development container](./.devcontainer/devcontainer.json) in this repository.
+
+With **Docker** installed, open a terminal and naviguate to the root of the repository. Run :
 
 ```bash
-curl -L https://astral.sh/uv/install.sh | sh
+docker compose up -d
+```
+
+> [!TIP]
+> If you have services or software running on your machine, **some of the ports used by NeuroBagel might be in use**. If the deployment fails, check the logs (`docker compose logs`) for occupied ports and change them in the `.env` file located at the root of the repository.
+
+Once the deployment has completed, the NeuroBagel node should be accessible at [http://localhost:3000](http://localhost:3000) (or the port set for `NB_QUERY_PORT_HOST` in the `.env` file).
+
+## NeuroPoly-DB CLI
+
+### Requirements
+
+- [Python 3.10+](https://www.python.org/downloads/)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+### Installation
+
+```bash
 uv venv .venv
 uv sync --activate
 ```
 
 > [!WARNING]
-> The above command **might fail if some virtual environment has already been configured in the provided directory (`.venv`)**. If you experience
-> issues, simply **delete the content** under the virtual environment's directory and **re-run the command**.
+> The above command _might fail if some virtual environment has already been configured in the provided directory (.venv)_. If you experience issues, simply **delete the content** under the virtual environment's directory and **re-run the command**.
 
-### Neurobagel
+### Metadata standardization
 
-**You need access to a Neurobagel node**. If deploying in production, or for external use outside the **NeuroPoly database use-case**, deploy
-your own node, using the [Neurobagel documentation](https://neurobagel.org/user_guide/getting_started/). **Else, we recommend you use the
-`devcontainer` provided in this repository**, which is pre-configured to setup a fully capable Neurobagel node for development purposes, tied
-to your environment, with UIs directly accessible in your browser. To use the `devcontainer`, simply open this repository in a compatible code editor (like VSCode), and open the `devcontainer` when prompted. It will automatically install all dependencies, and start the Neurobagel node for you. There, all neurobagel services are accessible on a common `gateway` under **localhost**. Inspect the **VSCode forwarded ports** to find the right port to access the Neurobagel UI.
+#### BIDS `participants.tsv` standardization
 
-## Annotation Automation
+The `npdb standarize bids` will :
 
-The `npdb` CLI supports **automated phenotype annotation** for BIDS datasets using browser automation (Playwright) and optional AI suggestions (Ollama). This accelerates the process of converting raw phenotypic tabular data into Neurobagel-compatible JSON-LD format.
+- Standardize the header fields of provided `participants.tsv` file(s), following a given standard (the NeuroBagel standard by default).
+- Add missing fields with empty values, following the same standard.
+- Generate or update a `participants.json` file with associated standardized metadata fields descriptions.
 
-### Overview
-
-Annotation works in 4 modes:
-
-| Mode | User Input | AI | Browser | Use Case |
-|------|---|---|---|---|
-| **manual** | Full control | — | ✓ Headed | Interactive annotation with full flexibility |
-| **assist** | Final review | Suggestions | ✓ Headed → Headless | Prefilled forms with user confirmation |
-| **auto** | None (scripted) | ✓ High confidence (0.7+) | ✓ Headless | Fully automated, stable, bounded AI |
-| **full-auto** | None (autonomous) | ✓ Lenient (0.5+) | ✓ Headless | Experimental, requires output review |
-
-### Quick Start
-
-#### Assist Mode (Recommended for Testing)
-```bash
-# Prerequisite: Activate environment
-source .venv/bin/activate
-
-# Run assist mode with UI feedback
-npdb gitea2bagel my_dataset /output \
-  --mode assist \
-  --headed  # See browser automation in action
-```
-
-**What happens**:
-1. Browser opens to Neurobagel annotation tool
-2. Your `participants.tsv` is auto-uploaded
-3. Columns are prefilled with AI suggestions
-4. You review and finalize in the UI
-5. `phenotypes.tsv`, `phenotypes_annotations.json`, and `phenotypes_provenance.json` are saved to `/output`
-
-#### Auto Mode (Production)
-```bash
-# Fully scripted automation (no browser window)
-npdb gitea2bagel my_dataset /output/bids \
-  --mode auto \
-  --headless \
-  --timeout 600  # 10 min for slow networks
-```
-
-**Output files**:
-- `phenotypes.tsv` — Annotated participants data
-- `phenotypes_annotations.json` — Column → Neurobagel variable mappings
-- `phenotypes_provenance.json` — Audit trail (confidence scores, rationale, warnings)
-
-### AI Integration
-
-#### Optional: Use Ollama for Enhanced Suggestions
-
-If you have [Ollama](https://ollama.ai) installed locally, enable AI-powered column mapping:
+##### Common usage
 
 ```bash
-# Start Ollama (if not already running)
-ollama serve  # In another terminal
-
-# Use full-auto mode with AI
-npm gitea2bagel my_dataset /output \
-  --mode full-auto \
-  --ai-provider ollama \
-  --ai-model neural-chat  # or your preferred model
+npdb standardize bids <bids_root_directory> \
+   # (Optional) if not given, the script outputs in the input directory structure
+   --output <output_directory> \
+   # (Optional) standardization mode, default to 'manual'
+   --mode <manual|assist|auto|full-auto>
 ```
 
-### Annotation Workflow
+> [!IMPORTANT]
+> The assisted and automated modes (`assist`, `auto` and `full-auto`) require additional dependencies to be installed. Run :
+>
+> ```bash
+> uv sync --active --quiet --extra annotation-automation
+> uv run playwright install --with-deps chromium
+> ```
 
-The annotation automation follows these steps automatically:
+> [!WARNING]
+> The automated modes (`auto` and `full-auto`) use **state-of-the-art language models** to replace human intervention in all parts of the standardization process. **There is no guarantee that the generated output will be correct. Always check the generated output for potential errors**.
 
-1. **Navigate to annotation tool** – Opens annotate.neurobagel.org
-2. **Click "Get Started"** – Proceeds from landing page to upload form
-3. **Upload participants.tsv** – Auto-discovers TSV file input (auto-retry with fallbacks if needed)
-4. **Upload phenotype dictionary (optional)** – If `--phenotype-dict` provided, uploads JSON dictionary
-5. **Resolve columns** – Matches column headers to Neurobagel phenotypes (static dict + fuzzy matching)
-6. **Fill forms** – Auto-populates form fields based on mode and confidence thresholds
-7. **Export results** – Downloads annotation results and saves to output directory
-8. **Save provenance** – Tracks decisions, confidence scores, and warnings
+### Database ingestion
 
-Each step includes retry logic (3 attempts with exponential backoff) and diagnostic output on failure.
+#### Neurogitea indexed databases
 
-**Optional phenotype dictionary**: Provide pre-populated mappings to improve annotation suggestions:
+1. Copy the `template.env` file to a new `.env` file at the root of the repository :
 
-```bash
-npdb gitea2bagel my_dataset /output \
-  --mode assist \
-  --phenotype-dict my_dict.json  # Optional pre-populated mappings
-```
+   ```bash
+   cp template.env .env
+   ```
 
-**AI confidence thresholds**:
-- `auto` mode: AI mappings with ≥ 0.7 confidence
-- `full-auto` mode: AI mappings with ≥ 0.5 confidence (lenient, review required)
+2. Edit the `.env` file to set your access credentials to the **Neurogitea database** you want to ingest from :
 
-### Troubleshooting
+   - `NP_GITEA_APP_USER` : username to access Neurogitea.
+   - `NP_GITEA_APP_TOKEN` : access token associated with the above username.
+   - `NP_GITEA_APP_URL` : URL to the Neurogitea instance hosting the database.
 
-Common issues and solutions are documented in [`docs/PLAYWRIGHT_TROUBLESHOOTING.md`](docs/PLAYWRIGHT_TROUBLESHOOTING.md). Quick reference:
+3. Run the **dataset ingestion command** :
 
-| Issue | Solution |
-|-------|---|
-| Timeout waiting for file upload | Increase `--timeout 600` for slow networks |
-| Selector not found (browser UI changed) | Check `--artifacts-dir` for screenshots |
-| Export file not created | Use manual mode to complete annotation interactively |
-| Artifacts directory permission denied | Run `mkdir -p ./debug && chmod 755 ./debug` |
+   ```bash
+   npdb gitea2bagel <dataset_id> <output_directory>
+   ```
 
-### Architecture
+   where :
 
-- **Browser Session** (`src/npdb/managers/browser_session.py`): Playwright lifecycle, retries, artifact capture
-- **Annotation Orchestration** (`src/npdb/managers/annotation_automation.py`): Mode routing, confidence filtering, provenance tracking
-- **Mapping Resolution** (`src/npdb/managers/mapping_resolver.py`): Static dictionary + fuzzy matching
-- **Provenance** (`src/npdb/managers/provenance.py`): Audit trail and decision tracking
+   - `<dataset_id>` is the identifier of the dataset to ingest, as indexed in Neurogitea.
+   - `<output_directory>` is the path where to output the `JSON-LD` files structured for ingestion by the NeuroBagel node.
 
-### Advanced Usage
+   > [!IMPORTANT]
+   > The **default NeuroBagel node deployment** will ingest all data located under the `./data` directory at the root of the repository. To select another directory, change the `LOCAL_GRAPH_DATA` variable in the `.env` file.
 
-#### Capture Failure Artifacts for Debugging
-```bash
-npdb gitea2bagel my_dataset /output \
-  --mode assist \
-  --artifacts-dir ./debug \
-  --timeout 300
-# On failure, check ./debug/ for screenshots and Playwright traces
-```
+4. Restart (or launch) your NeuroBagel node :
 
-#### Use Custom Phenotype Dictionary
-```bash
-npdb gitea2bagel my_dataset /output \
-  --mode auto \
-  --phenotype-dict my_dictionary.json  # Pre-populated mappings
-```
-
-#### Batch Processing Multiple Datasets
-```bash
-for dataset in dataset_1 dataset_2 dataset_3; do
-  npdb gitea2bagel "$dataset" "./output_$dataset" \
-    --mode auto \
-    --headless
-done
-```
-
-### System Requirements
-
-- Python 3.12+
-- `uv` package manager
-- For automation: Playwright system libraries (auto-installed in devcontainer)
-- For AI: Ollama running locally (optional)
-
-**Playwright dependencies** are auto-installed via `uv sync --all-extras`. If running outside devcontainer, install:
-```bash
-# Install system packages (Debian/Ubuntu)
-sudo apt-get install -y libgconf-2-4 libnss3 libxss1
-
-# Install browser binaries
-python -m playwright install chromium
-```
+    ```bash
+    docker compose down
+    docker compose up -d
+    ```

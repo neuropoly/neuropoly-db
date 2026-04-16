@@ -5,8 +5,12 @@ Tests exact matching, fuzzy matching, confidence scoring, and ColumnMatcher.
 """
 
 import pytest
-from npdb.managers.fuzzy_matcher import FuzzyMatcher, ColumnMatcher
-from npdb.managers.phenotype_mappings import load_static_mappings
+
+from npdb.annotation.matching import (
+    ColumnMatcher,
+    PhenotypeMatcher
+)
+from npdb.automation.mappings.solvers import load_static_mappings
 
 
 class TestFuzzyMatcher:
@@ -15,17 +19,17 @@ class TestFuzzyMatcher:
     def test_normalize_header(self):
         """Test header normalization."""
         # Lowercase
-        assert FuzzyMatcher.normalize_header("AGE") == "age"
+        assert PhenotypeMatcher.normalize_header("AGE") == "age"
         # Underscore to space
-        assert FuzzyMatcher.normalize_header(
+        assert PhenotypeMatcher.normalize_header(
             "participant_id") == "participant id"
         # Dash to space
-        assert FuzzyMatcher.normalize_header("age-years") == "age years"
+        assert PhenotypeMatcher.normalize_header("age-years") == "age years"
         # Combined
-        assert FuzzyMatcher.normalize_header(
+        assert PhenotypeMatcher.normalize_header(
             "  Age_in_Years  ") == "age in years"
         # Multiple spaces collapsed
-        assert FuzzyMatcher.normalize_header(
+        assert PhenotypeMatcher.normalize_header(
             "age  in  years") == "age in years"
 
     def test_exact_match_basic(self):
@@ -33,24 +37,24 @@ class TestFuzzyMatcher:
         candidates = ["age", "sex", "participant_id"]
 
         # Exact match
-        result = FuzzyMatcher.exact_match("age", candidates)
+        result = PhenotypeMatcher.exact_match("age", candidates)
         assert result == ("age", 1.0)
 
         # Case-insensitive
-        result = FuzzyMatcher.exact_match("AGE", candidates)
+        result = PhenotypeMatcher.exact_match("AGE", candidates)
         assert result == ("age", 1.0)
 
         # Underscore/dash normalization
-        result = FuzzyMatcher.exact_match("participant_id", candidates)
+        result = PhenotypeMatcher.exact_match("participant_id", candidates)
         assert result == ("participant_id", 1.0)
 
-        result = FuzzyMatcher.exact_match("participant-id", candidates)
+        result = PhenotypeMatcher.exact_match("participant-id", candidates)
         assert result == ("participant_id", 1.0)
 
     def test_exact_match_no_match(self):
         """Test exact matching returns None when no match."""
         candidates = ["age", "sex"]
-        result = FuzzyMatcher.exact_match("age_years", candidates)
+        result = PhenotypeMatcher.exact_match("age_years", candidates)
         assert result is None
 
     def test_fuzzy_match_high_confidence(self):
@@ -58,7 +62,7 @@ class TestFuzzyMatcher:
         candidates = ["age", "sex", "diagnosis"]
 
         # "age_at_baseline" should match "age"
-        result = FuzzyMatcher.fuzzy_match(
+        result = PhenotypeMatcher.fuzzy_match(
             "age_at_baseline", candidates, score_cutoff=75)
         assert result is not None
         matched, confidence = result
@@ -71,7 +75,7 @@ class TestFuzzyMatcher:
 
         # "partID" may not match well enough on score_cutoff=60 with token_set_ratio
         # Adjust cutoff lower for this weak match test
-        result = FuzzyMatcher.fuzzy_match(
+        result = PhenotypeMatcher.fuzzy_match(
             "partID", candidates, score_cutoff=40)
         assert result is not None
         matched, confidence = result
@@ -80,7 +84,7 @@ class TestFuzzyMatcher:
     def test_fuzzy_match_no_match(self):
         """Test fuzzy matching returns None below cutoff."""
         candidates = ["age", "sex"]
-        result = FuzzyMatcher.fuzzy_match(
+        result = PhenotypeMatcher.fuzzy_match(
             "completely_unrelated_column", candidates, score_cutoff=75)
         assert result is None
 
@@ -89,12 +93,12 @@ class TestFuzzyMatcher:
         candidates = ["age"]
 
         # At cutoff (75), confidence should be ~0.75
-        result_at_cutoff = FuzzyMatcher.fuzzy_match(
+        result_at_cutoff = PhenotypeMatcher.fuzzy_match(
             "age", candidates, score_cutoff=75)
         assert result_at_cutoff and result_at_cutoff[1] >= 0.75
 
         # At 100 (exact), confidence should be ~0.9 (capped)
-        result_at_100 = FuzzyMatcher.fuzzy_match(
+        result_at_100 = PhenotypeMatcher.fuzzy_match(
             "age", candidates, score_cutoff=0)
         assert result_at_100 and result_at_100[1] <= 0.9
 
@@ -103,7 +107,7 @@ class TestFuzzyMatcher:
         candidates = ["age", "age_at_baseline"]
 
         # "age" should match exactly
-        result = FuzzyMatcher.match_header("age", candidates)
+        result = PhenotypeMatcher.match_header("age", candidates)
         assert result == ("age", 1.0, "exact")
 
     def test_match_header_fuzzy_fallback(self):
@@ -111,7 +115,7 @@ class TestFuzzyMatcher:
         candidates = ["age", "sex"]
 
         # "age_years" should fuzzy match to "age"
-        result = FuzzyMatcher.match_header("age_years", candidates)
+        result = PhenotypeMatcher.match_header("age_years", candidates)
         assert result is not None
         matched, confidence, source = result
         assert matched == "age"
@@ -121,7 +125,7 @@ class TestFuzzyMatcher:
     def test_match_header_no_match(self):
         """Test no match returns None."""
         candidates = ["age", "sex"]
-        result = FuzzyMatcher.match_header(
+        result = PhenotypeMatcher.match_header(
             "unrelated", candidates, fuzzy_threshold=0.75)
         assert result is None
 
@@ -130,13 +134,13 @@ class TestFuzzyMatcher:
         candidates = ["age"]
 
         # Use high fuzzy threshold to filter matches
-        result_strict = FuzzyMatcher.match_header(
+        result_strict = PhenotypeMatcher.match_header(
             "age_years", candidates, fuzzy_threshold=0.95)
         # Should still match since "age" is similar
         assert result_strict is None or result_strict[2] == "exact"
 
         # Use low threshold to allow more matches
-        result_lenient = FuzzyMatcher.match_header(
+        result_lenient = PhenotypeMatcher.match_header(
             "age_years", candidates, fuzzy_threshold=0.5)
         assert result_lenient is not None
 
@@ -257,13 +261,13 @@ class TestConfidenceScaling:
     def test_exact_match_confidence_1_0(self):
         """Exact matches should have confidence 1.0."""
         candidates = ["age"]
-        result = FuzzyMatcher.match_header("age", candidates)
+        result = PhenotypeMatcher.match_header("age", candidates)
         assert result[1] == 1.0
 
     def test_fuzzy_match_confidence_range(self):
         """Fuzzy matches should be in [0.75, 0.9) range."""
         candidates = ["age"]
-        result = FuzzyMatcher.fuzzy_match(
+        result = PhenotypeMatcher.fuzzy_match(
             "ageXXX", candidates, score_cutoff=50)
         assert result is not None
         assert 0.75 <= result[1] < 0.9
@@ -271,7 +275,8 @@ class TestConfidenceScaling:
     def test_no_match_returns_none(self):
         """No match should return None, not 0 confidence."""
         candidates = ["age", "sex"]
-        result = FuzzyMatcher.match_header("completely_unrelated", candidates)
+        result = PhenotypeMatcher.match_header(
+            "completely_unrelated", candidates)
         assert result is None
 
 
@@ -280,23 +285,23 @@ class TestEdgeCases:
 
     def test_empty_candidates(self):
         """Test with empty candidate list."""
-        result = FuzzyMatcher.match_header("age", [])
+        result = PhenotypeMatcher.match_header("age", [])
         assert result is None
 
     def test_empty_header(self):
         """Test with empty header."""
         candidates = ["age"]
-        result = FuzzyMatcher.normalize_header("")
+        result = PhenotypeMatcher.normalize_header("")
         assert result == ""
 
     def test_special_characters_in_header(self):
         """Test headers with special characters."""
         # Should normalize to basic form
-        result = FuzzyMatcher.normalize_header("age@home#2")
+        result = PhenotypeMatcher.normalize_header("age@home#2")
         assert "age" in result
 
     def test_whitespace_handling(self):
         """Test various whitespace patterns."""
-        assert FuzzyMatcher.normalize_header("  age  ") == "age"
-        assert FuzzyMatcher.normalize_header("age   years") == "age years"
-        assert FuzzyMatcher.normalize_header("\tage\n") == "age"
+        assert PhenotypeMatcher.normalize_header("  age  ") == "age"
+        assert PhenotypeMatcher.normalize_header("age   years") == "age years"
+        assert PhenotypeMatcher.normalize_header("\tage\n") == "age"

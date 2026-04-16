@@ -9,10 +9,10 @@ Chains three layers of authority:
 Resolver returns per-column mapping with source and confidence tracking.
 """
 
-from typing import Dict, Optional, Any, List, Tuple
+from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
-from npdb.managers.phenotype_mappings import load_static_mappings, load_user_mappings, merge_mappings
-from npdb.managers.fuzzy_matcher import ColumnMatcher
+from npdb.automation.mappings.solvers import load_static_mappings, load_user_mappings, merge_mappings
+from npdb.annotation.matching import ColumnMatcher
 
 
 @dataclass

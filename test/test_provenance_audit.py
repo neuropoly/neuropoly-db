@@ -10,8 +10,10 @@ from pathlib import Path
 import tempfile
 import json
 from datetime import datetime
-from npdb.managers.annotation_automation import AnnotationManager, AnnotationConfig
 from unittest.mock import AsyncMock, patch
+
+from npdb.annotation import AnnotationConfig
+from npdb.managers.neurobagel import NeurobagelAnnotator
 
 
 @pytest.fixture
@@ -50,9 +52,9 @@ class TestProvenanceStructure:
     async def test_provenance_has_required_top_level_fields(self, synthetic_tsv: Path, output_dir: Path):
         """Verify provenance has all required top-level fields."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -80,10 +82,10 @@ class TestProvenanceStructure:
             output_subdir = output_dir / mode
             output_subdir.mkdir(exist_ok=True)
 
-            config = AnnotationConfig(mode=mode, headless=True)
-            manager = AnnotationManager(config)
+            config = AnnotationConfig(mode=mode, headless=True, timeout=1)
+            manager = NeurobagelAnnotator(config)
 
-            with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+            with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
                 mock_session = AsyncMock()
                 mock_browser_class.return_value.__aenter__.return_value = mock_session
                 mock_browser_class.return_value.__aexit__.return_value = None
@@ -100,9 +102,9 @@ class TestProvenanceStructure:
     async def test_provenance_timestamp_valid(self, synthetic_tsv: Path, output_dir: Path):
         """Verify provenance timestamp is valid ISO format."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -135,9 +137,9 @@ class TestProvenanceStructure:
             subdir.mkdir()
 
             config = AnnotationConfig(mode="full-auto", headless=True)
-            manager = AnnotationManager(config)
+            manager = NeurobagelAnnotator(config)
 
-            with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+            with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
                 mock_session = AsyncMock()
                 mock_browser_class.return_value.__aenter__.return_value = mock_session
                 mock_browser_class.return_value.__aexit__.return_value = None
@@ -161,9 +163,9 @@ class TestProvenanceCompleteness:
     async def test_per_column_tracking_present(self, synthetic_tsv: Path, output_dir: Path):
         """Verify per_column tracking is present for all columns."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -191,9 +193,9 @@ class TestProvenanceCompleteness:
     async def test_provenance_column_mapping_structure(self, synthetic_tsv: Path, output_dir: Path):
         """Verify per-column mapping structure is valid."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -226,9 +228,9 @@ class TestProvenanceCompleteness:
     async def test_provenance_confidence_values_valid(self, synthetic_tsv: Path, output_dir: Path):
         """Verify all confidence values are between 0 and 1."""
         config = AnnotationConfig(mode="auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -258,9 +260,9 @@ class TestProvenanceWarnings:
     async def test_full_auto_mode_emits_warning(self, synthetic_tsv: Path, output_dir: Path):
         """Verify full-auto mode includes warning in provenance."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -284,10 +286,10 @@ class TestProvenanceWarnings:
     @pytest.mark.asyncio
     async def test_assist_mode_no_experimental_warning(self, synthetic_tsv: Path, output_dir: Path):
         """Verify assist mode doesn't have experimental warning."""
-        config = AnnotationConfig(mode="assist", headless=True)
-        manager = AnnotationManager(config)
+        config = AnnotationConfig(mode="assist", headless=True, timeout=1)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -314,9 +316,9 @@ class TestProvenanceSummary:
     async def test_mapping_source_counts_exist(self, synthetic_tsv: Path, output_dir: Path):
         """Verify provenance includes mapping source counts."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
@@ -347,9 +349,9 @@ class TestProvenanceSummary:
     async def test_confidence_distribution_valid(self, synthetic_tsv: Path, output_dir: Path):
         """Verify provenance includes valid confidence distribution."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
 
-        with patch('npdb.managers.annotation_automation.BrowserSession') as mock_browser_class:
+        with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
             mock_session = AsyncMock()
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None

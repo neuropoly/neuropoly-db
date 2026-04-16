@@ -4,9 +4,11 @@ Unit tests for annotation_steps module.
 Tests step detection, navigation, and UI pattern selectors.
 """
 
-import pytest
-from npdb.managers.annotation_steps import (
-    AnnotationStep, StepInfo, StepNavigator, AnnotationUIPatterns
+from npdb.annotation.automation import (
+    AnnotationStep,
+    AnnotationUIPatterns,
+    StepInfo,
+    StepNavigator
 )
 
 

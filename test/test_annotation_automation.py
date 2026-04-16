@@ -1,5 +1,7 @@
 import pytest
-from npdb.managers import AnnotationConfig, AnnotationManager
+
+from npdb.annotation import AnnotationConfig
+from npdb.managers.neurobagel import NeurobagelAnnotator
 
 
 class TestAnnotationConfig:
@@ -35,7 +37,7 @@ class TestAnnotationManager:
     def test_manager_init_manual_mode(self):
         """Test manager initializes in manual mode."""
         config = AnnotationConfig(mode="manual")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
         assert manager.config.mode == "manual"
 
     def test_manager_rejects_ai_in_manual_mode(self):
@@ -45,22 +47,22 @@ class TestAnnotationManager:
             ai_provider="ollama"
         )
         with pytest.raises(ValueError):
-            AnnotationManager(config)
+            NeurobagelAnnotator(config)
 
     def test_manager_init_assist_mode(self):
         """Test manager initializes in assist mode."""
         config = AnnotationConfig(mode="assist")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
         assert manager.config.mode == "assist"
 
     def test_manager_init_auto_mode(self):
         """Test manager initializes in auto mode."""
         config = AnnotationConfig(mode="auto")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
         assert manager.config.mode == "auto"
 
     def test_manager_init_full_auto_mode(self):
         """Test manager initializes in full-auto mode."""
         config = AnnotationConfig(mode="full-auto")
-        manager = AnnotationManager(config)
+        manager = NeurobagelAnnotator(config)
         assert manager.config.mode == "full-auto"

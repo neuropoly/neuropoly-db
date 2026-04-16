@@ -9,9 +9,9 @@ if [[ -n "${NEUROPOLY_TERMINAL_HEADER_SHOWN:-}" ]]; then
 fi
 export NEUROPOLY_TERMINAL_HEADER_SHOWN=1
 
-PUBLIC_GATEWAY_URL="(open gateway:80 from VS Code Ports)"
+PUBLIC_PROXY_URL="(open proxy:80 from VS Code Ports)"
 if [[ -n "${VSCODE_PROXY_URI:-}" ]]; then
-  PUBLIC_GATEWAY_URL="${VSCODE_PROXY_URI//\{\{port\}\}/80}"
+  PUBLIC_PROXY_URL="${VSCODE_PROXY_URI//\{\{port\}\}/80}"
 fi
 
 cat <<EOF
@@ -19,21 +19,19 @@ cat <<EOF
 ======================================================================
  NeuroPoly Devcontainer - Neurobagel Endpoints
 ======================================================================
- Browser entrypoint (recommended):
-   ${PUBLIC_GATEWAY_URL}
-   ${PUBLIC_GATEWAY_URL}/fapi
-   ${PUBLIC_GATEWAY_URL}/napi
+ Browser entrypoint (via VS Code port forwarding):
+   ${PUBLIC_PROXY_URL}
 
  Internal service DNS (inside containers only):
-   http://gateway
    http://api:8000
    http://federation:8000
    http://query_federation:5173
    http://graph:7200
 
  Notes:
- - Use VS Code Ports for gateway:80 in tunnel scenarios.
- - Do not rely on fixed localhost ports in layered remote setups.
+ - The proxy routes API paths (/nodes, /query, /diagnoses, etc.)
+   to the federation API; everything else serves the query UI.
+ - Use VS Code Ports panel to forward proxy:80 and graph:7200.
 ======================================================================
 
 EOF

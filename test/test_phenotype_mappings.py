@@ -1,6 +1,6 @@
 import pytest
-from pathlib import Path
-from npdb.managers import (
+
+from npdb.automation.mappings.solvers import (
     load_static_mappings,
     load_user_mappings,
     merge_mappings,
