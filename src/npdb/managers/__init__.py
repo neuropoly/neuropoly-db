@@ -6,6 +6,7 @@ import tempfile
 
 from npdb.managers.neurogitea import OrganizationMixin
 from npdb.managers.neurobagel import BagelMixin, NeurobagelManager
+from npdb.managers.bids import BIDSStandardizer
 from npdb.external.neurogitea.gitea import GiteaManager
 
 
@@ -37,7 +38,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             raise RuntimeError(f"Failed to clone repository: {e}\n{stack}")
 
     def extend_description(self, dataset: str, local_clone: str):
-        # repo = next(iter([d for d in self.datasets if d.name == dataset]))
         desc_path = os.path.join(local_clone, "dataset_description.json")
         with open(desc_path, "r") as f:
             description = json.load(f)

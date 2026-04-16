@@ -47,3 +47,15 @@ class AnnotationConfig(BaseModel):
         default=None,
         description="Optional user-supplied phenotype dictionary JSON"
     )
+    dry_run: bool = Field(
+        default=False,
+        description="Print changes to terminal without writing files"
+    )
+    keep_annotations: bool = Field(
+        default=False,
+        description="Include Neurobagel Annotations block in participants.json output"
+    )
+    header_map: Optional[Path] = Field(
+        default=None,
+        description="JSON file mapping desired output headers to lists of input variants"
+    )

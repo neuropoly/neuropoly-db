@@ -356,7 +356,8 @@ class TestSmokeE2E:
         """
         config = AnnotationConfig(
             mode="assist",
-            headless=False
+            headless=False,
+            timeout=1,
         )
         manager = NeurobagelAnnotator(config)
 

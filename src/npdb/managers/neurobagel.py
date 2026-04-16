@@ -3,9 +3,7 @@ import asyncio
 import json
 import os
 import shutil
-import uuid
 
-from datetime import datetime, timezone
 from pathlib import Path
 from typer.testing import CliRunner
 from bagel.cli import bagel
@@ -13,9 +11,11 @@ from bagel.cli import bagel
 from npdb.annotation import AnnotationConfig
 from npdb.annotation.duplicates import resolve_phenotype_duplicates
 from npdb.annotation.provenance import ProvenanceReport, add_column_provenance
+from npdb.annotation.standardize import apply_header_map, load_header_map
 from npdb.automation.mappings.resolvers import MappingResolver
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
 from npdb.external.neurobagel.schema import convert_to_bagel_schema
+from npdb.managers.annotation import AnnotationManager
 from npdb.managers.model import Manager
 from npdb.utils import parse_tsv_columns
 
@@ -84,7 +84,7 @@ class NeurobagelManager(Manager):
         return os.listdir(self.db.root)
 
 
-class NeurobagelAnnotator:
+class NeurobagelAnnotator(AnnotationManager):
     """
     Orchestrates phenotype annotation automation across 4 modes.
 
@@ -96,40 +96,7 @@ class NeurobagelAnnotator:
     """
 
     def __init__(self, config: AnnotationConfig):
-        """
-        Initialize annotation manager.
-
-        Args:
-            config: AnnotationConfig with mode and settings
-        """
-        self.config = config
-        self._validate_config()
-
-        # Initialize resolver
-        self.resolver = MappingResolver(
-            user_dictionary_path=config.phenotype_dictionary
-        )
-
-        # Initialize provenance
-        self.provenance = ProvenanceReport(
-            run_id=str(uuid.uuid4()),
-            mode=config.mode,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            dataset_name="",
-            mapping_source_counts={},
-            per_column={},
-            warnings=[]
-        )
-
-    def _validate_config(self) -> None:
-        """Validate configuration for consistency."""
-        # full-auto requires explicit understanding
-        if self.config.mode == "full-auto":
-            pass  # In full implementation, could require confirmation
-
-        # AI options only valid if mode uses AI
-        if self.config.mode == "manual" and self.config.ai_provider:
-            raise ValueError("AI provider not used in manual mode")
+        super().__init__(config)
 
     async def _save_outputs(
         self,
@@ -211,6 +178,16 @@ class NeurobagelAnnotator:
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Apply user-supplied header translation map before any annotation mode
+        if self.config.header_map:
+            hmap = load_header_map(self.config.header_map)
+            pre_renames = apply_header_map(participants_tsv_path, hmap)
+            if pre_renames:
+                print(
+                    f"✓ Header map applied: renamed {len(pre_renames)} columns")
+                for old, new in pre_renames.items():
+                    print(f"  {old} → {new}")
+
         if self.config.mode == "manual":
             return await self._run_manual(participants_tsv_path, output_dir)
         elif self.config.mode == "assist":
@@ -244,6 +221,8 @@ class NeurobagelAnnotator:
                 print(f"✓ Upload participants.tsv: {participants_tsv_path}")
 
                 # Wait for completion signal (long timeout, user-driven)
+                # TODO: Replace sleep with file-system monitoring or browser
+                # event detection to detect when user exports data.
                 await asyncio.sleep(self.config.timeout)
 
                 # Assume outputs are downloaded to default location
@@ -338,7 +317,9 @@ class NeurobagelAnnotator:
                 # If upload succeeded, wait for user review in browser
                 if not browser_upload_failed:
                     print(f"✓ Assist mode: User reviews and finalizes in browser")
-                    await asyncio.sleep(30)  # Brief wait for demo
+                    # TODO: Replace sleep with download event detection or
+                    # file polling instead of a static timeout.
+                    await asyncio.sleep(self.config.timeout)
 
                 # Build annotations dictionary from resolved mappings
                 annotations_dict = {}

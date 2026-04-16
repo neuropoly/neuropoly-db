@@ -9,10 +9,13 @@ from typing import Optional
 
 from npdb.managers import (
     DataNeuroPolyMTL,
-    BagelNeuroPolyMTL
+    BagelNeuroPolyMTL,
+    BIDSStandardizer,
 )
 from npdb.managers.neurobagel import NeurobagelAnnotator
 from npdb.annotation import AnnotationConfig
+from npdb.annotation.standardize import load_header_map, validate_header_map_keys
+from npdb.automation.mappings.solvers import load_static_mappings
 
 
 OPTION_GROUP_NAMES = {
@@ -118,6 +121,13 @@ def gitea2bagel(
         help="AI model name (e.g., 'neural-chat').",
         rich_help_panel=OPTION_GROUP_NAMES["ai"],
     ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
     help_: bool = help_option(),
 ):
     """
@@ -159,22 +169,37 @@ def gitea2bagel(
                 "Error: --ai-provider required with --ai-model.", err=True)
             raise typer.Exit(code=1)
 
-        progress.add_task("Initializing Gitea manager...", total=None)
+        # Validate header map keys against phenotype_mappings
+        if header_map:
+            try:
+                hmap = load_header_map(header_map)
+                static = load_static_mappings()
+                valid_keys = set(static.get("mappings", {}).keys())
+                validate_header_map_keys(hmap, valid_keys)
+            except (ValueError, FileNotFoundError) as e:
+                typer.echo(f"Error: {e}", err=True)
+                raise typer.Exit(code=1)
+
+        task = progress.add_task("Initializing Gitea manager...", total=None)
         gitea_manager = DataNeuroPolyMTL(
             os.environ.get("NP_GITEA_APP_URL"),
             os.environ.get("NP_GITEA_APP_USER"),
             os.environ.get("NP_GITEA_APP_TOKEN"),
             ssl_verify=verify_ssl
         )
+        progress.remove_task(task)
 
-        progress.add_task(
+        task = progress.add_task(
             "Surface cloning dataset repository from Gitea...", total=None)
         with tempfile.TemporaryDirectory() as local_clone:
             gitea_manager.clone_repository(dataset, local_clone, light=True)
+            progress.remove_task(task)
 
-            progress.add_task("Extending dataset description...", total=None)
+            task = progress.add_task(
+                "Extending dataset description...", total=None)
             dataset_description = gitea_manager.extend_description(
                 dataset, local_clone)
+            progress.remove_task(task)
 
             # Annotation step: use selected mode
             participants_tsv = os.path.join(local_clone, "participants.tsv")
@@ -217,7 +242,7 @@ def gitea2bagel(
                         f"Error: Cannot create/access artifacts directory '{artifacts_dir}': {e}", err=True)
                     raise typer.Exit(code=1)
 
-            progress.add_task(
+            task = progress.add_task(
                 f"Running annotation ({mode} mode)...", total=None)
 
             try:
@@ -228,7 +253,8 @@ def gitea2bagel(
                     artifacts_dir=artifacts_dir,
                     ai_provider=ai_provider,
                     ai_model=ai_model,
-                    phenotype_dictionary=phenotype_dict
+                    phenotype_dictionary=phenotype_dict,
+                    header_map=header_map,
                 )
 
                 annotation_manager = NeurobagelAnnotator(annotation_config)
@@ -253,8 +279,9 @@ def gitea2bagel(
                 typer.echo("Falling back to manual annotation.", err=True)
                 typer.prompt(
                     "Press Enter once you have saved the phenotypes files to continue...")
+            progress.remove_task(task)
 
-            progress.add_task("Converting to JSON-LD...", total=None)
+            task = progress.add_task("Converting to JSON-LD...", total=None)
             bagel_manager = BagelNeuroPolyMTL(output.absolute().as_posix())
 
             bagel_manager.convert_bids(
@@ -265,7 +292,157 @@ def gitea2bagel(
                     output, "phenotypes_annotations.json"),
                 dataset_description=dataset_description
             )
+            progress.remove_task(task)
 
             typer.echo(
                 f"✅ Conversion complete! Output saved to: {output}"
             )
+
+
+# ── standardize subgroup ──────────────────────────────────────────
+
+standardize = typer.Typer(
+    help="Standardization tools for BIDS datasets.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+npdb.add_typer(standardize, name="standardize")
+
+
+@standardize.command("bids")
+def standardize_bids(
+    bids_dir: Path = typer.Argument(
+        ...,
+        help="Path to BIDS dataset root (must contain participants.tsv).",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+    ),
+    mode: str = typer.Option(
+        "manual",
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Print changes to terminal without writing files.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    keep_annotations: bool = typer.Option(
+        False,
+        "--keep-annotations",
+        help="Include Neurobagel Annotations block in participants.json.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    help_: bool = help_option(),
+):
+    """
+    [bold]Standardize BIDS dataset participants.tsv and participants.json[/bold]
+
+    Renames column headers to canonical BIDS names, adds missing standard
+    columns, and generates a BIDS-compliant participants.json sidecar.
+
+    Edits the dataset in-place. Use [cyan]--dry-run[/cyan] to preview changes
+    without writing files.
+    """
+    # Validate mode
+    if mode not in ["manual", "assist", "auto", "full-auto"]:
+        typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
+        raise typer.Exit(code=1)
+
+    if mode == "manual" and (ai_provider or ai_model):
+        typer.echo("Warning: AI options ignored in manual mode.", err=True)
+
+    if ai_provider and not ai_model:
+        typer.echo("Error: --ai-model required with --ai-provider.", err=True)
+        raise typer.Exit(code=1)
+    if ai_model and not ai_provider:
+        typer.echo("Error: --ai-provider required with --ai-model.", err=True)
+        raise typer.Exit(code=1)
+
+    # Validate BIDS root
+    participants_tsv = bids_dir / "participants.tsv"
+    if not participants_tsv.exists():
+        typer.echo(
+            f"Error: participants.tsv not found in {bids_dir}.", err=True
+        )
+        raise typer.Exit(code=1)
+
+    if dry_run:
+        typer.echo("Dry-run mode: no files will be modified.\n")
+
+    try:
+        config = AnnotationConfig(
+            mode=mode,
+            headless=headless,
+            timeout=timeout,
+            artifacts_dir=artifacts_dir,
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+            phenotype_dictionary=phenotype_dict,
+            dry_run=dry_run,
+            keep_annotations=keep_annotations,
+            header_map=header_map,
+        )
+
+        standardizer = BIDSStandardizer(config)
+        success = asyncio.run(standardizer.execute(input_path=bids_dir))
+
+        if success:
+            if dry_run:
+                typer.echo("\nDry-run complete. No files were modified.")
+            else:
+                typer.echo(
+                    f"\n✅ BIDS standardization complete: {bids_dir}"
+                )
+        else:
+            typer.echo("⚠️  Standardization completed with warnings.", err=True)
+            raise typer.Exit(code=1)
+
+    except Exception as e:
+        typer.echo(f"Error during BIDS standardization: {e}", err=True)
+        raise typer.Exit(code=1)

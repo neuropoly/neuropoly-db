@@ -82,7 +82,7 @@ class TestProvenanceStructure:
             output_subdir = output_dir / mode
             output_subdir.mkdir(exist_ok=True)
 
-            config = AnnotationConfig(mode=mode, headless=True)
+            config = AnnotationConfig(mode=mode, headless=True, timeout=1)
             manager = NeurobagelAnnotator(config)
 
             with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:
@@ -286,7 +286,7 @@ class TestProvenanceWarnings:
     @pytest.mark.asyncio
     async def test_assist_mode_no_experimental_warning(self, synthetic_tsv: Path, output_dir: Path):
         """Verify assist mode doesn't have experimental warning."""
-        config = AnnotationConfig(mode="assist", headless=True)
+        config = AnnotationConfig(mode="assist", headless=True, timeout=1)
         manager = NeurobagelAnnotator(config)
 
         with patch('npdb.external.neurobagel.automation.NBAnnotationToolBrowserSession') as mock_browser_class:

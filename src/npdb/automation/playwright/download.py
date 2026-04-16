@@ -5,6 +5,7 @@ Detects, waits for, and manages file downloads from browser.
 Supports headless and headed modes with different download behaviors.
 """
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -228,7 +229,6 @@ class ExpectedFileValidator:
             return False
 
         try:
-            import json
             with open(file_path, "r") as f:
                 data = json.load(f)
 
@@ -257,7 +257,6 @@ class ExpectedFileValidator:
             return False
 
         try:
-            import json
             with open(file_path, "r") as f:
                 data = json.load(f)
 
@@ -282,7 +281,6 @@ class ExpectedFileValidator:
         Returns:
             Dict of filename -> exists (bool).
         """
-        from typing import Dict
 
         expected_files = {
             ExpectedFileValidator.PHENOTYPES_JSON: output_dir / ExpectedFileValidator.PHENOTYPES_JSON,

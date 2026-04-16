@@ -6,7 +6,7 @@ auditability and retrospection, especially important for full-auto mode.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Literal
 from uuid import uuid4
@@ -44,7 +44,8 @@ class ProvenanceReport(BaseModel):
     """Complete provenance report for an annotation run."""
     run_id: str = Field(default_factory=lambda: str(uuid4()))
     mode: Literal["manual", "assist", "auto", "full-auto"]
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc))
     dataset_name: Optional[str] = Field(default=None)
 
     # Mapping source summary
@@ -82,6 +83,9 @@ def compute_confidence_distribution(
     """
     Compute confidence distribution from per-column mappings.
 
+    Manual mappings are excluded because they carry no meaningful
+    confidence score (they are human-verified by definition).
+
     Args:
         per_column: Mapping of column names to provenance records
 
@@ -101,6 +105,8 @@ def compute_confidence_distribution(
             dist.medium.append(conf)
         elif conf >= 0.5:
             dist.low.append(conf)
+        else:
+            dist.unresolved += 1
 
     return dist
 

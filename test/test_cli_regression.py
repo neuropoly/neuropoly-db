@@ -98,6 +98,46 @@ class TestCLINoRegressions:
         # Should fail due to missing required arguments (exit code 2 = usage error)
         assert result.exit_code == 2
 
+
+class TestStandardizeSubcommand:
+    """Tests for the standardize subgroup and bids command."""
+
+    def test_cli_has_standardize_subcommand(self):
+        """Test that standardize subcommand is listed in help."""
+        result = runner.invoke(npdb, ["--help"])
+        assert result.exit_code == 0
+        assert "standardize" in result.stdout
+
+    def test_standardize_help(self):
+        """Test that 'npdb standardize --help' works."""
+        result = runner.invoke(npdb, ["standardize", "--help"])
+        assert result.exit_code == 0
+        assert "bids" in result.stdout
+
+    def test_standardize_bids_help(self):
+        """Test that 'npdb standardize bids --help' works."""
+        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        assert result.exit_code == 0
+        assert "BIDS_DIR" in result.stdout or "bids" in result.stdout.lower()
+
+    def test_standardize_bids_dry_run_flag(self):
+        """Test that --dry-run flag is available."""
+        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        assert result.exit_code == 0
+        assert "--dry-run" in result.stdout
+
+    def test_standardize_bids_keep_annotations_flag(self):
+        """Test that --keep-annotations flag is available."""
+        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        assert result.exit_code == 0
+        assert "--keep-annotations" in result.stdout
+
+    def test_standardize_bids_missing_dir(self):
+        """Test error when BIDS dir doesn't exist."""
+        result = runner.invoke(
+            npdb, ["standardize", "bids", "/nonexistent/path"])
+        assert result.exit_code != 0
+
     def test_gitea2bagel_annotation_modes_accepted(self):
         """Test that valid annotation modes are accepted."""
         result = runner.invoke(npdb, ["gitea2bagel", "--help"])
