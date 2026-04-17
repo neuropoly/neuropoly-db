@@ -47,6 +47,7 @@ In the root directory, run :
 
 ```bash
 docker compose restart init_data
+sleep 20
 docker compose restart graph api federation query_federation
 ```
 
