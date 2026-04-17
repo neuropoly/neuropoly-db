@@ -33,6 +33,15 @@ npdb gitea2bagel my-dataset --output ./my_output
 cp ./my_output/whole-spine.jsonld /seed-datasets/
 ```
 
+## Hot-Reloading
+
+In the root directory, run :
+
+```bash
+docker compose restart init_data
+docker compose restart graph api federation query_federation
+```
+
 ## Rebuild Devcontainer
 
 After adding JSON-LD files, rebuild the devcontainer to process them:
