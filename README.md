@@ -38,6 +38,18 @@ docker compose up -d
 
 Once the deployment has completed, the NeuroBagel node should be accessible at [http://localhost:3000](http://localhost:3000) (or the port set for `NB_QUERY_PORT_HOST` in the `.env` file).
 
+> [!IMPORTANT]
+> The **default NeuroBagel node deployment** will ingest all data located under the `./seed-datasets` directory at the root of the repository. To select another directory, change the `LOCAL_GRAPH_DATA` variable in the `.env` file.
+
+### Hot-Reloading Neurobagel with new datasets
+
+In the root directory, run :
+
+```bash
+docker compose restart init_data
+docker compose restart graph api federation query_federation
+```
+
 ## NeuroPoly-DB CLI
 
 ### Requirements
@@ -125,13 +137,3 @@ will standardize any of the input variants (`age`, `age_years` or `years_old`) t
 
    - `<dataset_id>` is the identifier of the dataset to ingest, as indexed in Neurogitea.
    - `<output_directory>` is the path where to output the `JSON-LD` files structured for ingestion by the NeuroBagel node.
-
-   > [!IMPORTANT]
-   > The **default NeuroBagel node deployment** will ingest all data located under the `./data` directory at the root of the repository. To select another directory, change the `LOCAL_GRAPH_DATA` variable in the `.env` file.
-
-4. Restart (or launch) your NeuroBagel node :
-
-    ```bash
-    docker compose down
-    docker compose up -d
-    ```
