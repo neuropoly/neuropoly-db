@@ -9,8 +9,6 @@ provenance logic from AnnotationManager.
 import json
 from pathlib import Path
 
-from npdb.annotation import AnnotationConfig
-from npdb.annotation.duplicates import resolve_phenotype_duplicates
 from npdb.annotation.provenance import save_provenance
 from npdb.annotation.standardize import (
     add_missing_standard_columns,
