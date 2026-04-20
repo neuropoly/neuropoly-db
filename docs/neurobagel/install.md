@@ -73,5 +73,5 @@
 
    > [!IMPORTANT]
    > You might not see the same datasets as **in the screenshot above**. The **default NeuroBagel node deployment** ingests all data located under the `./seed-datasets` directory at the root of the repository :
-   > - Place additional datasets there before deploying the node, or use [hot-reloading if the node is already deployed](./management.md#hot-reloading).
+   > - Place additional datasets there before deploying the node, or use [hot-reloading if the node is already deployed](./manage.md#hot-reloading).
    > - Select another directory by changing the `LOCAL_GRAPH_DATA` variable in the `.env` file, then deploy (or re-deploy) the node.

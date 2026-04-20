@@ -15,7 +15,7 @@ Components of the project :
 
 ### [NeuroBagel node installation](./docs/neurobagel/install.md)
 
-### [NeuroBagel node management](./docs/neurobagel/management.md)
+### [NeuroBagel node management](./docs/neurobagel/manage.md)
 
 > [!IMPORTANT]
 > If **you are the only user of the NeuroBagel node**, we recommend using [VSCode](https://code.visualstudio.com/), with the [Remote Containers extension](https://code.visualstudio.com/docs/remote/containers) installed, and deploy the node using the [precrafted development container](./.devcontainer/devcontainer.json) in this repository.
