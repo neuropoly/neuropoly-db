@@ -9,6 +9,9 @@
   - **Linux** : We recommend the [Docker Engine installation](https://docs.docker.com/engine/install/ubuntu/) in favor of [Docker Desktop](https://docs.docker.com/desktop/setup/install/linux/) for enhanced stability and performances. **Ensure you can [use docker as non-root user](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)**.
   - **Windows** and **MacOS** : Install [Docker Desktop](https://docs.docker.com/get-started/get-docker/).
 
+    > [!CAUTION]
+    > **MacOS** should not require users **to use `sudo` with Docker commands**. If you encounter this issue, prefixing all docker commands below with `sudo` should be safe in the current context. However, **it is recommended you reinstall Docker Desktop from scratch to prevent any security issues**. If the problem persists, get in touch with the Docker Team on the [official forums](https://forums.docker.com).
+
 ## Installation
 
 1. Clone the [neuropoly-db repository](https://github.com/neuropoly/neuropoly-db) locally :
@@ -29,10 +32,10 @@
    git submodule update --init --recursive
    ```
 
-4. Copy the `environment template` file to `.env` :
+4. Copy the `template.env` environment template to `.env` :
 
    ```bash
-   cp .env.template .env
+   cp template.env .env
    ```
 
    > [!IMPORTANT]
