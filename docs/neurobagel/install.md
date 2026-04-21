@@ -5,12 +5,28 @@
 
 ## Prerequisites
 
-- Install **Docker** (with _Docker Compose_).
-  - **Linux** : We recommend the [Docker Engine installation](https://docs.docker.com/engine/install/ubuntu/) in favor of [Docker Desktop](https://docs.docker.com/desktop/setup/install/linux/) for enhanced stability and performances. **Ensure you can [use docker as non-root user](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)**.
-  - **Windows** and **MacOS** : Install [Docker Desktop](https://docs.docker.com/get-started/get-docker/).
+### On Linux
 
-    > [!CAUTION]
-    > **MacOS** should not require users **to use `sudo` with Docker commands**. If you encounter this issue, prefixing all docker commands below with `sudo` should be safe in the current context. However, **it is recommended you reinstall Docker Desktop from scratch to prevent any security issues**. If the problem persists, get in touch with the Docker Team on the [official forums](https://forums.docker.com).
+|                    |               |
+|--------------------|---------------|
+| **Docker engine**  | &geq; v29.1.4 |
+| **Docker Compose** | &geq; v5.0.0  |
+
+Follow these [installation steps](https://docs.docker.com/engine/install/ubuntu/). **Ensure you can [use docker as non-root user](https://docs.docker.com/engine/install/linux-postinstall/#manage-docker-as-a-non-root-user)**.
+
+> [!WARNING]
+> Docker desktop is available on Linux. However, performances and stability are better with the Docker engine. If you choose to use Docker Desktop, ensure you have the latest version installed.
+
+### On Windows and MacOS
+
+|                    |               |
+|--------------------|---------------|
+| **Docker Desktop** | &geq; v4.56.0 |
+
+Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get-docker/)**.
+
+> [!CAUTION]
+> **MacOS** and **Windows** should not require users **to use `sudo` with Docker commands**. If you encounter this issue, prefixing all docker commands below with `sudo` should be safe in the current context. However, **it is recommended you reinstall Docker Desktop from scratch to prevent any security issues**. If the problem persists, get in touch with the Docker Team on the [official forums](https://forums.docker.com).
 
 ## Installation
 
