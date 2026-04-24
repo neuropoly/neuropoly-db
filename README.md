@@ -53,8 +53,8 @@ docker compose restart graph api federation query_federation
 
 ## NeuroPoly-DB CLI
 
-### [NPDB CLI installation](./docs/npdb-cli/install.md)
+### [NPDB CLI installation](./docs/npdb/install.md)
 
-### [Database ingestion](./docs/npdb-cli/ingestion.md)
+### [Database ingestion](./docs/npdb/ingestion.md)
 
-### [Metadata standardization](./docs/npdb-cli/standardization.md)
+### [Metadata standardization](./docs/npdb/standardization.md)
