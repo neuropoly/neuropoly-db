@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import tempfile
+from pathlib import Path
 
 from npdb.managers.neurogitea import OrganizationMixin
 from npdb.managers.neurobagel import BagelMixin, NeurobagelManager
@@ -74,6 +75,55 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         #             description["AccessEmail"] = owners[0].email
 
         return description
+
+    def download_subjects(
+        self,
+        subjects: list[tuple[str, str, str]],
+        output_dir: Path,
+        use_annex: bool = False,
+    ) -> list[tuple[bool, str, str]]:
+        """
+        Download subject directories using authenticated sparse git clone.
+
+        Multiple subjects that share the same repository are grouped together
+        so that the repository is cloned exactly once, with all required sparse
+        paths set in a single ``git sparse-checkout set`` call.  This avoids
+        the "destination already exists" error and dramatically reduces network
+        traffic for queries that return many subjects from one dataset.
+
+        Args:
+            subjects: Triples of ``(repo_url, sparse_path, dataset_name)``.
+            output_dir: Base output directory.  Each dataset lands in
+                        ``output_dir / dataset_name``.
+            use_annex: When ``True``, run ``git annex get`` after each clone.
+
+        Returns:
+            List of ``(success, label, message)`` for each unique repository.
+        """
+        # Group sparse paths by (repo_url, dataset_name) so each repo is
+        # cloned exactly once, regardless of how many subjects it contains.
+        groups: dict[tuple[str, str], list[str]] = {}
+        for repo_url, sparse_path, dataset_name in subjects:
+            key = (repo_url, dataset_name)
+            groups.setdefault(key, [])
+            if sparse_path not in groups[key]:
+                groups[key].append(sparse_path)
+
+        results: list[tuple[bool, str, str]] = []
+
+        for (repo_url, dataset_name), sparse_paths in groups.items():
+            dest = output_dir / dataset_name
+            label = f"{dataset_name} [{', '.join(sparse_paths)}]"
+
+            try:
+                self.clone_sparse(repo_url, sparse_paths, dest)
+                if use_annex:
+                    self.annex_get(dest, sparse_paths)
+                results.append((True, label, "OK"))
+            except RuntimeError as e:
+                results.append((False, label, str(e)))
+
+        return results
 
 
 class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
