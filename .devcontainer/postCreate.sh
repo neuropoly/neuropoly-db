@@ -133,6 +133,20 @@ else
     echo "==> No Wireguard config found at $WG_CONFIG — skipping wg-quick setup."
 fi
 
+# ── 6. git-annex ───────────────────────────────────────────────────────────────
+
+echo ""
+echo "==> Checking git-annex availability..."
+if ! command -v git-annex > /dev/null 2>&1; then
+    sudo apt-get update -qq > /dev/null 2>&1 || true
+    sudo apt-get install -qq -y git-annex > /dev/null 2>&1 || {
+        echo "   WARNING: git-annex installation had issues (may still work)"
+    }
+    echo "   ✓ git-annex installed"
+else
+    echo "   ✓ git-annex already available"
+fi
+
 # ── 6. Summary ────────────────────────────────────────────────────────────
 echo ""
 echo "──────────────────────────────────────────────────────────"

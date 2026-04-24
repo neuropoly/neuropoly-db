@@ -2,10 +2,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 import asyncio
+import csv
 import tempfile
 import typer
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from typing import Optional
+import httpx
 
 from npdb.managers import (
     DataNeuroPolyMTL,
@@ -60,6 +63,8 @@ npdb = typer.Typer(
 def main():
     """NeuroPoly Database annotation automation and conversion toolkit."""
     return
+
+# ── gitea2bagel command ──────────────────────────────────────────────
 
 
 @npdb.command()
@@ -298,8 +303,216 @@ def gitea2bagel(
                 f"✅ Conversion complete! Output saved to: {output}"
             )
 
+# ── download command ──────────────────────────────────────────────
+
+
+def _read_download_tsv(tsv_path: Path) -> list[dict]:
+    """Parse a query-results TSV into a list of row dicts."""
+    with open(tsv_path, newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        if reader.fieldnames is None:
+            raise ValueError("TSV file is empty or has no header row")
+        rows = list(reader)
+    if not rows:
+        raise ValueError("TSV file contains no data rows")
+    return rows
+
+
+def _fetch_url(url: str, dest: Path, timeout: int = 300) -> tuple[bool, str]:
+    """Download *url* to *dest* using httpx (streaming)."""
+    try:
+        with httpx.stream("GET", url, follow_redirects=True, timeout=timeout) as r:
+            r.raise_for_status()
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest, "wb") as fh:
+                for chunk in r.iter_bytes():
+                    fh.write(chunk)
+        return True, f"Downloaded: {dest.name}"
+    except Exception as exc:
+        return False, str(exc)
+
+
+@npdb.command("download")
+def download(
+    query_results: Path = typer.Argument(
+        ...,
+        help="Path to query results TSV file with AccessLink column.",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+    ),
+    git: bool = typer.Option(
+        False,
+        "--git",
+        help="Download using git (for datasets indexed on git).",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    git_annex: bool = typer.Option(
+        False,
+        "--git-annex",
+        help="Use git-annex for downloading files (for large datasets indexed on git).",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    output_dir: Path = typer.Option(
+        Path.cwd(),
+        "--output-dir",
+        "-o",
+        help="Directory to save downloaded files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    max_workers: int = typer.Option(
+        4,
+        "--max-workers",
+        help="Maximum parallel downloads (URL mode only).",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    verify_ssl: bool = typer.Option(
+        True,
+        help="Verify SSL certificates when connecting to Gitea (git mode only).",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    help_: bool = help_option(),
+):
+    """
+    [bold]Download imaging data from query results TSV[/bold]
+
+    This command reads a TSV file containing query results and downloads the
+    associated imaging data using one of three modes:
+
+    • [cyan]URL mode (default):[/cyan] Reads the [bold]AccessLink[/bold] column and downloads
+      each URL in parallel using HTTP.
+    • [cyan]Git mode[/cyan] ([bold]--git[/bold]): Performs an authenticated shallow sparse-checkout
+      clone from the [bold]RepositoryURL[/bold] column, limiting the working tree to the
+      [bold]ImagingSessionPath[/bold] for each row.  Requires [bold]NP_GITEA_APP_URL[/bold],
+      [bold]NP_GITEA_APP_USER[/bold] and [bold]NP_GITEA_APP_TOKEN[/bold] environment variables.
+    • [cyan]Git-annex mode[/cyan] ([bold]--git[/bold] [bold]--git-annex[/bold]): Same as git mode, but
+      also runs [bold]git annex get[/bold] after cloning to fetch file content from
+      annex pointers.
+    """
+    if git_annex and not git:
+        typer.echo(
+            "Error: --git-annex requires --git.", err=True)
+        raise typer.Exit(code=1)
+
+    # Parse TSV
+    try:
+        rows = _read_download_tsv(query_results)
+    except (OSError, ValueError) as exc:
+        typer.echo(f"Error reading TSV: {exc}", err=True)
+        raise typer.Exit(code=1)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Mode 1: direct URL downloads ──────────────────────────────
+    if not git:
+        seen_urls: set[str] = set()
+        jobs: list[tuple[str, Path, str, str]] = []
+        for row in rows:
+            url = (row.get("AccessLink") or "").strip()
+            if not url or not url.startswith(("http://", "https://")):
+                continue
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            dataset = (row.get("DatasetName") or "unknown").strip()
+            subject = (row.get("SubjectID") or "unknown").strip()
+            # Derive filename from the URL's last path segment
+            filename = os.path.basename(url.split("?")[0]) or f"{subject}.bin"
+            dest = output_dir / dataset / subject / filename
+            jobs.append((url, dest, dataset, subject))
+
+        if not jobs:
+            typer.echo(
+                "Warning: No valid AccessLink URLs found in TSV.", err=True)
+            return
+
+        typer.echo(
+            f"Downloading {len(jobs)} file(s) ({max_workers} workers)...")
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_fetch_url, url, dest): (dataset, subject)
+                for url, dest, dataset, subject in jobs
+            }
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                transient=True,
+            ) as progress:
+                task = progress.add_task("Downloading...", total=len(futures))
+                for future in as_completed(futures):
+                    ok, msg = future.result()
+                    dataset, subject = futures[future]
+                    typer.echo(
+                        f"{'✓' if ok else '✗'} {dataset}/{subject}: {msg}")
+                    progress.advance(task)
+
+        typer.echo("✅ Download complete!")
+        return
+
+    # ── Mode 2 / 3: git (+ optional git-annex) ────────────────────
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+
+    gitea_url = os.environ.get("NP_GITEA_APP_URL")
+    gitea_user = os.environ.get("NP_GITEA_APP_USER")
+    gitea_token = os.environ.get("NP_GITEA_APP_TOKEN")
+
+    if not all([gitea_url, gitea_user, gitea_token]):
+        typer.echo(
+            "Error: NP_GITEA_APP_URL, NP_GITEA_APP_USER and NP_GITEA_APP_TOKEN "
+            "must be set for git mode.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    gitea_manager = DataNeuroPolyMTL(
+        gitea_url, gitea_user, gitea_token, ssl_verify=verify_ssl
+    )
+
+    # Build subject list from TSV (ImagingSession rows only)
+    subjects: list[tuple[str, str, str]] = []
+    for row in rows:
+        repo_url = (row.get("RepositoryURL") or "").strip()
+        imaging_path = (row.get("ImagingSessionPath") or "").strip()
+        dataset = (row.get("DatasetName") or "unknown").strip()
+        if not repo_url or not imaging_path:
+            continue
+        subjects.append((repo_url, imaging_path, dataset))
+
+    if not subjects:
+        typer.echo(
+            "Warning: No rows with both RepositoryURL and ImagingSessionPath found.",
+            err=True,
+        )
+        return
+
+    mode_label = "git + git-annex" if git_annex else "git sparse-checkout"
+    unique_repos = len({(r, d) for r, _, d in subjects})
+    typer.echo(
+        f"Downloading via {mode_label} ({len(subjects)} paths across {unique_repos} repo(s))..."
+    )
+
+    results = gitea_manager.download_subjects(
+        subjects, output_dir, use_annex=git_annex)
+
+    for ok, label, msg in results:
+        typer.echo(f"{'✓' if ok else '✗'} {label}: {msg}")
+
+    failed = sum(1 for ok, _, _ in results if not ok)
+    if failed:
+        typer.echo(f"⚠️  {failed} download(s) failed.", err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo("✅ Git download complete!")
+
 
 # ── standardize subgroup ──────────────────────────────────────────
+
 
 standardize = typer.Typer(
     help="Standardization tools for BIDS datasets.",
