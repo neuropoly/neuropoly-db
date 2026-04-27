@@ -21,6 +21,9 @@ dependencies = [
   "typer>=0.24.1",
   "rich>=14.3.3",
   "httpx>=0.25.0",
+  "pydantic>=2.0",
+  "rapidfuzz>=3.0",
+  "tenacity>=8.0",
 ]
 
 [project.optional-dependencies]
@@ -36,9 +39,6 @@ test = [
 
 annotation-automation = [
   "playwright>=1.40",
-  "rapidfuzz>=3.0",
-  "pydantic>=2.0",
-  "tenacity>=8.0",
 ]
 
 [project.scripts]

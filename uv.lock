@@ -1285,9 +1285,12 @@ dependencies = [
     { name = "pandas" },
     { name = "py-gitea" },
     { name = "pybids" },
+    { name = "pydantic" },
     { name = "pydicom" },
     { name = "python-dotenv" },
+    { name = "rapidfuzz" },
     { name = "rich" },
+    { name = "tenacity" },
     { name = "tqdm" },
     { name = "typer" },
 ]
@@ -1295,9 +1298,6 @@ dependencies = [
 [package.optional-dependencies]
 annotation-automation = [
     { name = "playwright" },
-    { name = "pydantic" },
-    { name = "rapidfuzz" },
-    { name = "tenacity" },
 ]
 dev = [
     { name = "pytest" },
@@ -1319,16 +1319,16 @@ requires-dist = [
     { name = "playwright", marker = "extra == 'annotation-automation'", specifier = ">=1.40" },
     { name = "py-gitea", specifier = "==0.2.10" },
     { name = "pybids", specifier = ">=0.16" },
-    { name = "pydantic", marker = "extra == 'annotation-automation'", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.0" },
     { name = "pydicom", specifier = ">=2.4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "rapidfuzz", marker = "extra == 'annotation-automation'", specifier = ">=3.0" },
+    { name = "rapidfuzz", specifier = ">=3.0" },
     { name = "rich", specifier = ">=14.3.3" },
-    { name = "tenacity", marker = "extra == 'annotation-automation'", specifier = ">=8.0" },
+    { name = "tenacity", specifier = ">=8.0" },
     { name = "tqdm" },
     { name = "typer", specifier = ">=0.24.1" },
 ]
