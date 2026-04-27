@@ -6,9 +6,9 @@ import csv
 import tempfile
 import typer
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from rich.progress import BarColumn
 from rich.live import Live
 from rich.panel import Panel
-from rich.text import Text, BarColumn
 from typing import Optional
 import httpx
 
