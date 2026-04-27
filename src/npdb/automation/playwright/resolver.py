@@ -228,6 +228,7 @@ class FormFillerActions:
     async def download_export_file(
         browser_session,
         expected_filename: str = "phenotypes_annotations.json",
+        dataset_name: str = "",
         timeout: int = 30000
     ) -> None:
         """
@@ -240,7 +241,8 @@ class FormFillerActions:
 
         Args:
             browser_session: BrowserSession instance with page and download support.
-            expected_filename: Expected filename for validation (e.g., 'phenotypes_annotations.json').
+            expected_filename: Expected filename for validation. Defaults to 'phenotypes_annotations.json'.
+            dataset_name: If provided, expected filename becomes '{dataset_name}_phenotypes_annotations.json'.
             timeout: Timeout in milliseconds for download completion.
 
         Raises:

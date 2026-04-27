@@ -6,7 +6,9 @@ import csv
 import tempfile
 import typer
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import BarColumn
+from rich.live import Live
+from rich.panel import Panel
 from typing import Optional
 import httpx
 
@@ -16,6 +18,9 @@ from npdb.managers import (
     BIDSStandardizer,
 )
 from npdb.managers.neurobagel import NeurobagelAnnotator
+from npdb.external.neurobagel.errors import BagelCLIError, classify_bagel_error
+from npdb.ledger.ledger import RunLedger, success_entry_from_report, minimal_success_entry, failure_entry
+from npdb.ui.display import CommandDisplay, capture_stdout
 from npdb.annotation import AnnotationConfig
 from npdb.annotation.standardize import load_header_map, validate_header_map_keys
 from npdb.automation.mappings.solvers import load_static_mappings
@@ -133,6 +138,20 @@ def gitea2bagel(
         exists=True,
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
+    ledger: Optional[Path] = typer.Option(
+        None,
+        "--ledger",
+        help="Path to run ledger JSON (default: <output>/run_ledger.json).",
+        rich_help_panel=OPTION_GROUP_NAMES["output"],
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Directory for persistent git clones. Reuses existing clones via fetch.",
+        file_okay=False,
+        dir_okay=True,
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
     help_: bool = help_option(),
 ):
     """
@@ -144,34 +163,35 @@ def gitea2bagel(
     • [cyan]auto[/cyan]: Fully automated with ML-based suggestions
     • [cyan]full-auto[/cyan]: Experimental unattended mode (requires review!)
     """
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        transient=True,
-    ) as progress:
+    # Resolve ledger path
+    ledger_path = ledger if ledger is not None else output / "run_ledger.json"
+    run_ledger = RunLedger(ledger_path)
+
+    display = CommandDisplay()
+    with Live(display, refresh_per_second=4, transient=False) as live:
         try:
             load_dotenv(os.path.join(
                 os.path.dirname(__file__), "..", "..", ".env"))
         except Exception as e:
-            typer.echo(f"Error loading .env file: {e}")
+            live.console.print(f"Error loading .env file: {e}")
 
         # Validate annotation options
         if mode not in ["manual", "assist", "auto", "full-auto"]:
-            typer.echo(
-                f"Error: Invalid mode '{mode}'.", err=True)
+            live.console.print(f"[red]Error: Invalid mode '{mode}'.[/red]")
             raise typer.Exit(code=1)
 
         if mode == "manual" and (ai_provider or ai_model):
-            typer.echo("Warning: AI options ignored in manual mode.", err=True)
+            live.console.print(
+                "[yellow]Warning: AI options ignored in manual mode.[/yellow]")
 
         if ai_provider and not ai_model:
-            typer.echo(
-                "Error: --ai-model required with --ai-provider.", err=True)
+            live.console.print(
+                "[red]Error: --ai-model required with --ai-provider.[/red]")
             raise typer.Exit(code=1)
 
         if ai_model and not ai_provider:
-            typer.echo(
-                "Error: --ai-provider required with --ai-model.", err=True)
+            live.console.print(
+                "[red]Error: --ai-provider required with --ai-model.[/red]")
             raise typer.Exit(code=1)
 
         # Validate header map keys against phenotype_mappings
@@ -182,74 +202,76 @@ def gitea2bagel(
                 valid_keys = set(static.get("mappings", {}).keys())
                 validate_header_map_keys(hmap, valid_keys)
             except (ValueError, FileNotFoundError) as e:
-                typer.echo(f"Error: {e}", err=True)
+                live.console.print(f"[red]Error: {e}[/red]")
                 raise typer.Exit(code=1)
 
-        task = progress.add_task("Initializing Gitea manager...", total=None)
+        display.start_step("Initializing Gitea manager")
         gitea_manager = DataNeuroPolyMTL(
             os.environ.get("NP_GITEA_APP_URL"),
             os.environ.get("NP_GITEA_APP_USER"),
             os.environ.get("NP_GITEA_APP_TOKEN"),
             ssl_verify=verify_ssl
         )
-        progress.remove_task(task)
+        display.complete_step()
 
-        task = progress.add_task(
-            "Surface cloning dataset repository from Gitea...", total=None)
+        display.start_step("Cloning dataset repository from Gitea")
         with tempfile.TemporaryDirectory() as local_clone:
-            gitea_manager.clone_repository(dataset, local_clone, light=True)
-            progress.remove_task(task)
+            gitea_manager.clone_repository(
+                dataset,
+                local_clone,
+                light=True,
+                cache_dir=str(cache_dir) if cache_dir else None,
+                output_callback=display.append_output,
+            )
+            display.complete_step()
 
-            task = progress.add_task(
-                "Extending dataset description...", total=None)
+            display.start_step("Extending dataset description")
             dataset_description = gitea_manager.extend_description(
                 dataset, local_clone)
-            progress.remove_task(task)
+            display.complete_step()
 
             # Annotation step: use selected mode
             participants_tsv = os.path.join(local_clone, "participants.tsv")
 
             if not os.path.exists(participants_tsv):
-                typer.echo(
-                    f"Error: participants.tsv not found in dataset.", err=True)
+                live.console.print(
+                    "[red]Error: participants.tsv not found in dataset.[/red]")
                 raise typer.Exit(code=1)
 
             # Emit warning for full-auto mode
             if mode == "full-auto":
-                typer.echo(
-                    "\n⚠️  WARNING: EXPERIMENTAL/UNSTABLE MODE\n"
+                live.console.print(
+                    "[yellow]\n⚠️  WARNING: EXPERIMENTAL/UNSTABLE MODE\n"
                     "Full-auto annotation uses AI and browser automation without validation.\n"
-                    "Review phenotypes_provenance.json before using annotations.\n",
-                    err=True
+                    "Review run_ledger.json before using annotations.\n[/yellow]"
                 )
 
             # Pre-validate output and artifacts directories
             try:
                 output.mkdir(parents=True, exist_ok=True)
                 if not output.is_dir() or not os.access(output, os.W_OK):
-                    typer.echo(
-                        f"Error: Output directory '{output}' is not writable.", err=True)
+                    live.console.print(
+                        f"[red]Error: Output directory '{output}' is not writable.[/red]")
                     raise typer.Exit(code=1)
             except OSError as e:
-                typer.echo(
-                    f"Error: Cannot create/access output directory '{output}': {e}", err=True)
+                live.console.print(
+                    f"[red]Error: Cannot create/access output directory '{output}': {e}[/red]")
                 raise typer.Exit(code=1)
 
             if artifacts_dir:
                 try:
                     artifacts_dir.mkdir(parents=True, exist_ok=True)
                     if not artifacts_dir.is_dir() or not os.access(artifacts_dir, os.W_OK):
-                        typer.echo(
-                            f"Error: Artifacts directory '{artifacts_dir}' is not writable.", err=True)
+                        live.console.print(
+                            f"[red]Error: Artifacts directory '{artifacts_dir}' is not writable.[/red]")
                         raise typer.Exit(code=1)
                 except OSError as e:
-                    typer.echo(
-                        f"Error: Cannot create/access artifacts directory '{artifacts_dir}': {e}", err=True)
+                    live.console.print(
+                        f"[red]Error: Cannot create/access artifacts directory '{artifacts_dir}': {e}[/red]")
                     raise typer.Exit(code=1)
 
-            task = progress.add_task(
-                f"Running annotation ({mode} mode)...", total=None)
-
+            display.start_step(f"Running annotation ({mode} mode)")
+            annotation_report = None
             try:
                 annotation_config = AnnotationConfig(
                     mode=mode,
@@ -264,44 +286,104 @@ def gitea2bagel(
 
                 annotation_manager = NeurobagelAnnotator(annotation_config)
 
-                # Execute annotation automation based on mode
-                success = asyncio.run(annotation_manager.execute(
-                    participants_tsv_path=Path(participants_tsv),
-                    output_dir=output
-                ))
+                # Execute annotation automation based on mode.
+                # capture_stdout feeds print() lines from automation code into
+                # the step box instead of letting them escape the Live display.
+                with capture_stdout(display.append_output):
+                    success, annotation_report = asyncio.run(annotation_manager.execute(
+                        participants_tsv_path=Path(participants_tsv),
+                        output_dir=output,
+                        dataset_name=dataset,
+                    ))
 
                 if not success:
-                    typer.echo(
-                        f"⚠️  Annotation mode '{mode}' execution failed.",
-                        err=True
+                    display.fail_step()
+                    live.console.print(
+                        f"[yellow]⚠️  Annotation mode '{mode}' execution failed.[/yellow]"
                     )
                     if mode == "manual":
                         typer.prompt(
                             "Press Enter once you have saved the phenotypes files to continue...")
+                else:
+                    display.complete_step()
 
             except Exception as e:
-                typer.echo(f"Error during annotation: {e}", err=True)
-                typer.echo("Falling back to manual annotation.", err=True)
+                display.fail_step()
+                live.console.print(f"[red]Error during annotation: {e}[/red]")
+                live.console.print(
+                    "[yellow]Falling back to manual annotation.[/yellow]")
                 typer.prompt(
                     "Press Enter once you have saved the phenotypes files to continue...")
-            progress.remove_task(task)
 
-            task = progress.add_task("Converting to JSON-LD...", total=None)
+            display.start_step("Converting to JSON-LD")
             bagel_manager = BagelNeuroPolyMTL(output.absolute().as_posix())
 
-            bagel_manager.convert_bids(
-                dataset=dataset,
-                bids_dir=local_clone,
-                phenotypes_tsv=os.path.join(output, "phenotypes.tsv"),
-                phenotypes_annotations=os.path.join(
-                    output, "phenotypes_annotations.json"),
-                dataset_description=dataset_description
-            )
-            progress.remove_task(task)
+            try:
+                bagel_manager.convert_bids(
+                    dataset=dataset,
+                    bids_dir=local_clone,
+                    phenotypes_tsv=os.path.join(
+                        output, f"{dataset}_phenotypes.tsv"),
+                    phenotypes_annotations=os.path.join(
+                        output, f"{dataset}_phenotypes_annotations.json"),
+                    dataset_description=dataset_description
+                )
+                display.complete_step()
 
-            typer.echo(
-                f"✅ Conversion complete! Output saved to: {output}"
-            )
+                # Ledger: success entry
+                if annotation_report is not None:
+                    run_ledger.append(success_entry_from_report(
+                        dataset=dataset,
+                        process="gitea2bagel",
+                        report=annotation_report,
+                    ))
+                else:
+                    run_ledger.append(minimal_success_entry(
+                        dataset=dataset,
+                        process="gitea2bagel",
+                        mode=mode,
+                    ))
+
+                live.console.print(
+                    f"[green]✅ Conversion complete! Output saved to: {output}[/green]"
+                )
+
+            except BagelCLIError as err:
+                display.fail_step()
+
+                # Re-render clean Bagel output
+                live.console.print(err.rich_output)
+
+                # Classify and show actionable guidance
+                classified = classify_bagel_error(err.plain_output)
+                if classified:
+                    for match in classified:
+                        steps_text = "\n".join(
+                            f"  {i + 1}. {s}"
+                            for i, s in enumerate(match["fix_steps"])
+                        )
+                        live.console.print(Panel(
+                            f"{match['description']}\n\n[bold]Steps to fix:[/bold]\n{steps_text}",
+                            title=f"[red]{match['problem']}[/red]",
+                            border_style="red",
+                        ))
+                else:
+                    live.console.print(Panel(
+                        "Bagel failed with an unrecognised error.\n"
+                        "Review the output above for details.",
+                        title="[red]Bagel CLI Error[/red]",
+                        border_style="red",
+                    ))
+
+                # Ledger: failure entry
+                run_ledger.append(failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    err=err,
+                    classified=classified,
+                ))
+
+                raise typer.Exit(code=1)
 
 # ── download command ──────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ from npdb.annotation.provenance import ProvenanceReport, add_column_provenance
 from npdb.annotation.standardize import apply_header_map, load_header_map
 from npdb.automation.mappings.resolvers import MappingResolver
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
+from npdb.external.neurobagel.errors import BagelCLIError
 from npdb.external.neurobagel.schema import convert_to_bagel_schema
 from npdb.managers.annotation import AnnotationManager
 from npdb.managers.model import Manager
@@ -69,10 +70,47 @@ class BagelMixin:
         )
 
     def _run_bagel_cli(self, *args):
-        result = self.cli.invoke(bagel, args)
+        import io
+        import logging
+        from rich.console import Console
+        from rich.logging import RichHandler
+        from bagel.logger import logger as bagel_logger
+
+        # Redirect bagel's RichHandler to a buffer so its log lines don't
+        # escape the Live display and cause repeated re-renders.
+        buf = io.StringIO()
+        cap_console = Console(file=buf, highlight=False,
+                              width=200, no_color=True)
+        cap_handler = RichHandler(
+            console=cap_console,
+            omit_repeated_times=False,
+            show_path=False,
+            markup=True,
+        )
+        cap_handler.setFormatter(
+            logging.Formatter("%(message)s", datefmt="[%Y-%m-%d %X]")
+        )
+        cap_handler.setLevel(logging.DEBUG)
+
+        saved_handlers = bagel_logger.handlers[:]
+        saved_propagate = bagel_logger.propagate
+        bagel_logger.handlers = [cap_handler]
+        bagel_logger.propagate = False
+        try:
+            result = self.cli.invoke(bagel, args)
+        finally:
+            bagel_logger.handlers = saved_handlers
+            bagel_logger.propagate = saved_propagate
+
         if result.exit_code != 0:
-            raise RuntimeError(
-                f"Bagel CLI failed with exit code {result.exit_code} and output: {result.output}")
+            command = "bagel " + " ".join(str(a) for a in args)
+            logs = buf.getvalue().strip()
+            combined = "\n".join(filter(None, [result.output, logs]))
+            raise BagelCLIError.from_result(
+                command=command,
+                exit_code=result.exit_code,
+                output=combined,
+            )
 
 
 class NeurobagelManager(Manager):
@@ -102,7 +140,8 @@ class NeurobagelAnnotator(AnnotationManager):
         self,
         participants_tsv_path: Path,
         output_dir: Path,
-        annotations_dict: dict
+        annotations_dict: dict,
+        dataset_name: str = "",
     ) -> None:
         """
         Save phenotypes.tsv and phenotypes_annotations.json to output directory.
@@ -118,13 +157,15 @@ class NeurobagelAnnotator(AnnotationManager):
             output_dir: Output directory where files should be saved
             annotations_dict: Mapping annotations as dictionary (flat format)
         """
-        # Copy participants.tsv as phenotypes.tsv
-        phenotypes_tsv_path = output_dir / "phenotypes.tsv"
+        # Copy participants.tsv as {dataset}_phenotypes.tsv
+        prefix = f"{dataset_name}_" if dataset_name else ""
+        phenotypes_tsv_path = output_dir / f"{prefix}phenotypes.tsv"
         shutil.copy2(participants_tsv_path, phenotypes_tsv_path)
         print(f"✓ Saved phenotypes.tsv: {phenotypes_tsv_path}")
 
         # Step 1: Save flat-format annotations to JSON
-        phenotypes_annotations_path = output_dir / "phenotypes_annotations.json"
+        phenotypes_annotations_path = output_dir / \
+            f"{prefix}phenotypes_annotations.json"
         with open(phenotypes_annotations_path, 'w') as f:
             json.dump(annotations_dict, f, indent=2)
         print(
@@ -161,16 +202,19 @@ class NeurobagelAnnotator(AnnotationManager):
         self,
         participants_tsv_path: Path,
         output_dir: Path,
-    ) -> bool:
+        dataset_name: str = "",
+    ) -> tuple[bool, "ProvenanceReport | None"]:
         """
         Execute annotation automation according to configured mode.
 
         Args:
             participants_tsv_path: Path to participants.tsv file
             output_dir: Output directory for phenotypes files
+            dataset_name: Dataset name used to prefix output filenames
 
         Returns:
-            True if successful, False on failure
+            Tuple of (success, report_or_none).  *report* is None for manual
+            mode or when the run failed without generating provenance data.
         """
         if not participants_tsv_path.exists():
             raise FileNotFoundError(
@@ -189,17 +233,19 @@ class NeurobagelAnnotator(AnnotationManager):
                     print(f"  {old} → {new}")
 
         if self.config.mode == "manual":
-            return await self._run_manual(participants_tsv_path, output_dir)
+            return await self._run_manual(participants_tsv_path, output_dir, dataset_name)
         elif self.config.mode == "assist":
-            return await self._run_assist(participants_tsv_path, output_dir)
+            return await self._run_assist(participants_tsv_path, output_dir, dataset_name)
         elif self.config.mode == "auto":
-            return await self._run_auto(participants_tsv_path, output_dir)
+            return await self._run_auto(participants_tsv_path, output_dir, dataset_name)
         elif self.config.mode == "full-auto":
-            return await self._run_full_auto(participants_tsv_path, output_dir)
+            return await self._run_full_auto(participants_tsv_path, output_dir, dataset_name)
 
-        return False
+        return False, None
 
-    async def _run_manual(self, participants_tsv_path: Path, output_dir: Path) -> bool:
+    async def _run_manual(
+        self, participants_tsv_path: Path, output_dir: Path, dataset_name: str = ""
+    ) -> tuple[bool, None]:
         """
         Execute manual mode: open browser and wait for user.
 
@@ -227,13 +273,15 @@ class NeurobagelAnnotator(AnnotationManager):
 
                 # Assume outputs are downloaded to default location
                 # In full implementation, would detect actual file completion
-                return True
+                return True, None
 
         except Exception as e:
             print(f"✗ Manual mode error: {e}")
-            return False
+            return False, None
 
-    async def _run_assist(self, participants_tsv_path: Path, output_dir: Path) -> bool:
+    async def _run_assist(
+        self, participants_tsv_path: Path, output_dir: Path, dataset_name: str = ""
+    ) -> tuple[bool, "ProvenanceReport | None"]:
         """
         Execute assist mode: automated prefill + AI suggestions + user finalization.
 
@@ -332,18 +380,13 @@ class NeurobagelAnnotator(AnnotationManager):
                             "rationale": mapping.rationale
                         }
 
-                # Step 3: Save outputs and provenance
+                # Step 3: Save outputs
                 await self._save_outputs(
                     participants_tsv_path,
                     output_dir,
-                    annotations_dict
+                    annotations_dict,
+                    dataset_name=dataset_name,
                 )
-
-                # Step 4: Save provenance
-                from npdb.annotation.provenance import save_provenance
-                provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(self.provenance, provenance_path)
-                print(f"✓ Saved provenance: {provenance_path}")
 
                 if browser_upload_failed:
                     print(
@@ -351,7 +394,7 @@ class NeurobagelAnnotator(AnnotationManager):
                     self.provenance.warnings.append(
                         "Browser upload failed; outputs from offline resolution")
 
-                return True
+                return True, self.provenance
 
         except Exception as e:
             print(f"✗ Assist mode error: {e}")
@@ -379,22 +422,22 @@ class NeurobagelAnnotator(AnnotationManager):
                     await self._save_outputs(
                         participants_tsv_path,
                         output_dir,
-                        annotations_dict
+                        annotations_dict,
+                        dataset_name=dataset_name,
                     )
                     self.provenance.warnings.append(
                         f"Partial failure: {str(e)}; saved offline resolution")
-                    from npdb.annotation.provenance import save_provenance
-                    provenance_path = output_dir / "phenotypes_provenance.json"
-                    save_provenance(self.provenance, provenance_path)
                     print(f"✓ Emergency save completed")
-                    return False  # Return False to indicate partial failure
+                    return False, self.provenance
 
             except Exception as emergency_e:
                 print(f"✗ Emergency save also failed: {emergency_e}")
 
-            return False
+            return False, None
 
-    async def _run_auto(self, participants_tsv_path: Path, output_dir: Path) -> bool:
+    async def _run_auto(
+        self, participants_tsv_path: Path, output_dir: Path, dataset_name: str = ""
+    ) -> tuple[bool, "ProvenanceReport | None"]:
         """
         Execute auto mode: full scripted automation with bounded AI.
 
@@ -497,16 +540,13 @@ class NeurobagelAnnotator(AnnotationManager):
                 await self._save_outputs(
                     participants_tsv_path,
                     output_dir,
-                    annotations_dict
+                    annotations_dict,
+                    dataset_name=dataset_name,
                 )
 
-                # Save provenance
-                from npdb.annotation.provenance import save_provenance
-                provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(self.provenance, provenance_path)
                 print(f"✓ Auto mode completed successfully")
 
-                return True
+                return True, self.provenance
 
         except Exception as e:
             print(
@@ -516,13 +556,14 @@ class NeurobagelAnnotator(AnnotationManager):
                 print(f"✗ Check artifacts in: {self.config.artifacts_dir}")
             self.provenance.warnings.append(
                 f"Auto mode failed at step '{current_step}': {str(e)}")
-            return False
+            return False, None
 
     async def _run_full_auto(
         self,
         participants_tsv_path: Path,
-        output_dir: Path
-    ) -> bool:
+        output_dir: Path,
+        dataset_name: str = "",
+    ) -> tuple[bool, "ProvenanceReport | None"]:
         """
         Execute full-auto mode: fully autonomous (experimental/unstable).
 
@@ -618,18 +659,13 @@ class NeurobagelAnnotator(AnnotationManager):
                 await self._save_outputs(
                     participants_tsv_path,
                     output_dir,
-                    annotations_dict
+                    annotations_dict,
+                    dataset_name=dataset_name,
                 )
 
-                # Save detailed provenance
-                from npdb.annotation.provenance import save_provenance
-                provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(self.provenance, provenance_path)
-
                 print("✓ Full-auto mode: Completed")
-                print(f"✓ Provenance saved (review at: {provenance_path})")
 
-                return True
+                return True, self.provenance
 
         except Exception as e:
             print(
@@ -639,4 +675,4 @@ class NeurobagelAnnotator(AnnotationManager):
                 print(f"✗ Check artifacts in: {self.config.artifacts_dir}")
             self.provenance.warnings.append(
                 f"Full-auto mode failed at step '{current_step}': {str(e)}")
-            return False
+            return False, None

@@ -4,6 +4,8 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Callable, Optional
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from npdb.managers.neurogitea import OrganizationMixin
 from npdb.managers.neurobagel import BagelMixin, NeurobagelManager
@@ -18,24 +20,76 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         OrganizationMixin.__init__(
             self, organization="datasets", client=self.client)
 
-    def clone_repository(self, dataset: str, local_path: str, light: bool = False):
+    def clone_repository(
+        self,
+        dataset: str,
+        local_path: str,
+        light: bool = False,
+        cache_dir: Optional[str] = None,
+        output_callback: Optional[Callable[[str], None]] = None,
+    ):
         repo = next(iter([d for d in self.datasets if d.name == dataset]))
         clone_url = f"{repo.gitea.url}/{self.organization.name}/{repo.name}.git"
 
-        command = ["git"] + self.git_http_config() + ["clone"]
-
-        if light:
-            command.extend(["--depth", "1", "--filter=blob:none"])
-
-        command.extend([clone_url, local_path])
-
-        # Disable prompts so token/header handling is deterministic in CLI usage.
         env = os.environ.copy()
         env["GIT_TERMINAL_PROMPT"] = "0"
+
+        # Cache-dir mode: reuse an existing clone via fetch, or do a fresh clone.
+        if cache_dir:
+            cached = os.path.join(cache_dir, dataset)
+            if os.path.isdir(os.path.join(cached, ".git")):
+                command = ["git", "-C", cached, "fetch", "--depth=1"]
+                self._run_git(command, env, output_callback)
+                # Symlink / copy into local_path so the rest of the pipeline
+                # continues to point at the expected directory.
+                if not os.path.exists(local_path):
+                    import shutil
+                    shutil.copytree(cached, local_path, symlinks=True)
+                return
+            target = cached
+        else:
+            target = local_path
+
+        command = ["git"] + self.git_http_config() + ["clone"]
+        if light:
+            command.extend(["--depth", "1", "--filter=blob:none"])
+        command.extend([clone_url, target])
+
+        self._run_git(command, env, output_callback)
+
+        # When using cache_dir and the clone target differs from local_path,
+        # copy into local_path so callers see the expected path.
+        if cache_dir and target != local_path and not os.path.exists(local_path):
+            import shutil
+            shutil.copytree(target, local_path, symlinks=True)
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True)
+    def _run_git(
+        self,
+        command: list,
+        env: dict,
+        output_callback: Optional[Callable[[str], None]] = None,
+    ):
         try:
-            subprocess.run(command, check=True, env=env, capture_output=True)
+            if output_callback is None:
+                subprocess.run(command, check=True,
+                               env=env, capture_output=True)
+                return
+            # Stream output to callback via Popen
+            proc = subprocess.Popen(
+                command,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            for line in proc.stdout:
+                output_callback(line.rstrip())
+            proc.wait()
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, command)
         except subprocess.CalledProcessError as e:
-            stack = f"Command: {' '.join(command)}\nStdout: {e.stdout.decode()}\nStderr: {e.stderr.decode()}"
+            stack = f"Command: {' '.join(str(c) for c in command)}"
             raise RuntimeError(f"Failed to clone repository: {e}\n{stack}")
 
     def extend_description(self, dataset: str, local_clone: str):
