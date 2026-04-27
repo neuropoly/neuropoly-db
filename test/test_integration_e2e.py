@@ -226,13 +226,13 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aexit__.return_value = None
 
             # Run execute
-            result = await manager.execute(
+            success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
             # Verify execution succeeded
-            assert result is True
+            assert success is True
 
             # Verify BrowserSession was initialized with correct config
             mock_browser_class.assert_called_once()
@@ -266,36 +266,20 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            result = await manager.execute(
+            success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-            assert result is True
+            assert success is True
+            assert report is not None
 
-            # Verify provenance file was created
-            provenance_path = output_dir / "phenotypes_provenance.json"
-            assert provenance_path.exists(
-            ), f"Provenance file not found at {provenance_path}"
-
-            # Load and validate provenance structure
-            with open(provenance_path) as f:
-                provenance_data = json.load(f)
-
-            # Verify required fields
-            assert "mode" in provenance_data
-            assert provenance_data["mode"] == "full-auto"
-            assert "run_id" in provenance_data
-            assert "timestamp" in provenance_data
-            assert "per_column" in provenance_data
-
-            # Verify columns were mapped
-            assert len(provenance_data["per_column"]) > 0
-
-            # Verify warning was added
-            assert "warnings" in provenance_data
-            assert any(
-                "FULL-AUTO MODE" in w for w in provenance_data["warnings"])
+            # Verify provenance report structure
+            assert report.mode == "full-auto"
+            assert report.run_id
+            assert report.timestamp
+            assert len(report.per_column) > 0
+            assert any("FULL-AUTO MODE" in w for w in report.warnings)
 
     @pytest.mark.asyncio
     async def test_auto_mode_smoke_with_confidence_filtering(self, synthetic_tsv: Path, output_dir: Path):
@@ -318,31 +302,22 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            result = await manager.execute(
+            success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-            assert result is True
+            assert success is True
+            assert report is not None
 
-            # Verify provenance was created
-            provenance_path = output_dir / "phenotypes_provenance.json"
-            assert provenance_path.exists()
-
-            with open(provenance_path) as f:
-                provenance_data = json.load(f)
-
-            # Verify mode
-            assert provenance_data["mode"] == "auto"
+            # Verify mode in returned report
+            assert report.mode == "auto"
 
             # Verify per-column mappings include confidence data
-            for col_name, col_data in provenance_data.get("per_column", {}).items():
-                if "mappings" in col_data:
-                    for mapping in col_data["mappings"]:
-                        assert "confidence" in mapping
-                        # Auto mode should have some confidence annotation
-                        assert mapping.get("source") in [
-                            "static", "deterministic"]
+            for col_name, col_prov in report.per_column.items():
+                assert col_prov.confidence >= 0.0
+                assert col_prov.source in [
+                    "static", "deterministic", "ai", "manual"]
 
     @pytest.mark.asyncio
     async def test_assist_mode_smoke_no_browser_wait(self, synthetic_tsv: Path, output_dir: Path):
@@ -366,12 +341,12 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            result = await manager.execute(
+            success, _report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-            assert result is True
+            assert success is True
             assert mock_session.navigate_to.called
 
     @pytest.mark.asyncio
@@ -403,9 +378,6 @@ class TestSmokeE2E:
         # Verify TSV was not modified
         assert synthetic_tsv.read_text() == original_content
 
-        # Verify output directory structure
+        # Verify output directory has phenotypes outputs (no leaked temp files)
         output_files = list(output_dir.glob("*"))
-        # Should have provenance file
-        provenance_files = [
-            f for f in output_files if f.name == "phenotypes_provenance.json"]
-        assert len(provenance_files) == 1
+        assert len(output_files) >= 1

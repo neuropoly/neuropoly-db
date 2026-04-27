@@ -1,8 +1,11 @@
 """
 Provenance audit and completeness tests.
 
-These tests verify that provenance sidecars are generated correctly, contain
+These tests verify that provenance reports are generated correctly, contain
 all required information, and are ready for audit/compliance review.
+
+Provenance is now returned from execute() as the second element of the
+(success, report) tuple rather than written to phenotypes_provenance.json.
 """
 
 import pytest
@@ -36,17 +39,7 @@ def output_dir() -> Path:
 
 
 class TestProvenanceStructure:
-    """Tests for provenance JSON structure."""
-
-    @staticmethod
-    def load_provenance_file(output_dir: Path) -> dict:
-        """Helper to load provenance JSON from output directory."""
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        if not provenance_path.exists():
-            raise FileNotFoundError(
-                f"Provenance file not found at {provenance_path}")
-        with open(provenance_path) as f:
-            return json.load(f)
+    """Tests for provenance report structure."""
 
     @pytest.mark.asyncio
     async def test_provenance_has_required_top_level_fields(self, synthetic_tsv: Path, output_dir: Path):
@@ -59,12 +52,13 @@ class TestProvenanceStructure:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance = self.load_provenance_file(output_dir)
+        assert report is not None
+        provenance = report.model_dump(mode="json")
 
         # Required top-level fields (from ProvenanceReport model)
         required_fields = ["mode", "run_id", "timestamp", "per_column",
@@ -90,17 +84,17 @@ class TestProvenanceStructure:
                 mock_browser_class.return_value.__aenter__.return_value = mock_session
                 mock_browser_class.return_value.__aexit__.return_value = None
 
-                await manager.execute(
+                _success, report = await manager.execute(
                     participants_tsv_path=synthetic_tsv,
                     output_dir=output_subdir
                 )
 
-            provenance = self.load_provenance_file(output_subdir)
-            assert provenance["mode"] == mode, f"Mode mismatch: expected {mode}, got {provenance['mode']}"
+            assert report is not None
+            assert report.mode == mode, f"Mode mismatch: expected {mode}, got {report.mode}"
 
     @pytest.mark.asyncio
     async def test_provenance_timestamp_valid(self, synthetic_tsv: Path, output_dir: Path):
-        """Verify provenance timestamp is valid ISO format."""
+        """Verify provenance timestamp is valid."""
         config = AnnotationConfig(mode="full-auto", headless=True)
         manager = NeurobagelAnnotator(config)
 
@@ -109,23 +103,16 @@ class TestProvenanceStructure:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance = self.load_provenance_file(output_dir)
-
-        # Timestamp should be ISO format
-        try:
-            ts = datetime.fromisoformat(
-                provenance["timestamp"].replace("Z", "+00:00"))
-            # Verify it's reasonably recent (within last 5 minutes)
-            now = datetime.now(ts.tzinfo)
-            assert (now - ts).total_seconds() < 300
-        except (ValueError, TypeError) as e:
-            pytest.fail(
-                f"Invalid timestamp format: {provenance['timestamp']}: {e}")
+        assert report is not None
+        ts = report.timestamp
+        # Verify it's reasonably recent (within last 5 minutes)
+        now = datetime.now(ts.tzinfo)
+        assert (now - ts).total_seconds() < 300
 
     @pytest.mark.asyncio
     async def test_provenance_run_id_unique(self, synthetic_tsv: Path, output_dir: Path):
@@ -144,13 +131,13 @@ class TestProvenanceStructure:
                 mock_browser_class.return_value.__aenter__.return_value = mock_session
                 mock_browser_class.return_value.__aexit__.return_value = None
 
-                await manager.execute(
+                _success, report = await manager.execute(
                     participants_tsv_path=synthetic_tsv,
                     output_dir=subdir
                 )
 
-            provenance = self.load_provenance_file(subdir)
-            run_ids.append(provenance["run_id"])
+            assert report is not None
+            run_ids.append(report.run_id)
 
         # All run_ids should be unique
         assert len(run_ids) == len(set(run_ids)), "Run IDs are not unique"
@@ -170,22 +157,14 @@ class TestProvenanceCompleteness:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Should have per_column tracking
-        assert "per_column" in provenance
-        assert isinstance(provenance["per_column"], dict)
-
-        # Should have at least some columns tracked
-        # (May be empty if all were unresolved, but structure should exist)
-        tracked_columns = list(provenance["per_column"].keys())
+        assert report is not None
+        # Should have per_column tracking dict
+        assert isinstance(report.per_column, dict)
         # From synthetic TSV: participant_id, age, sex, diagnosis, cognitive_score
         # At least some should be tracked
 
@@ -200,29 +179,16 @@ class TestProvenanceCompleteness:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Check each tracked column has valid structure
-        for col_name, col_data in provenance.get("per_column", {}).items():
-            # Column should have at least some tracking info
-            assert isinstance(col_data, dict)
-
-            # If mappings exist, verify structure
-            if "mappings" in col_data:
-                assert isinstance(col_data["mappings"], list)
-                for mapping in col_data["mappings"]:
-                    assert "source" in mapping
-                    assert "confidence" in mapping
-                    # Source should be valid
-                    assert mapping["source"] in [
-                        "static", "deterministic", "ai"]
+        assert report is not None
+        valid_sources = {"static", "deterministic", "ai", "manual"}
+        for col_name, col_prov in report.per_column.items():
+            assert col_prov.source in valid_sources
+            assert 0.0 <= col_prov.confidence <= 1.0
 
     @pytest.mark.asyncio
     async def test_provenance_confidence_values_valid(self, synthetic_tsv: Path, output_dir: Path):
@@ -235,22 +201,16 @@ class TestProvenanceCompleteness:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Check all confidence values
-        for col_name, col_data in provenance.get("per_column", {}).items():
-            if "mappings" in col_data:
-                for mapping in col_data["mappings"]:
-                    confidence = mapping.get("confidence")
-                    if confidence is not None:
-                        assert 0 <= confidence <= 1, f"Invalid confidence {confidence} for {col_name}"
+        assert report is not None
+        for col_name, col_prov in report.per_column.items():
+            assert 0.0 <= col_prov.confidence <= 1.0, (
+                f"Invalid confidence {col_prov.confidence} for {col_name}"
+            )
 
 
 class TestProvenanceWarnings:
@@ -267,20 +227,14 @@ class TestProvenanceWarnings:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Full-auto should have warnings
-        assert "warnings" in provenance
-        assert len(provenance["warnings"]) > 0
-        # Should mention full-auto
-        warning_text = " ".join(provenance["warnings"]).lower()
+        assert report is not None
+        assert len(report.warnings) > 0
+        warning_text = " ".join(report.warnings).lower()
         assert "full-auto" in warning_text or "experimental" in warning_text or "unstable" in warning_text
 
     @pytest.mark.asyncio
@@ -294,19 +248,14 @@ class TestProvenanceWarnings:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Assist mode should not have full-auto warning
-        if "warnings" in provenance:
-            warning_text = " ".join(provenance["warnings"]).lower()
-            assert "full-auto" not in warning_text
+        assert report is not None
+        warning_text = " ".join(report.warnings).lower()
+        assert "full-auto" not in warning_text
 
 
 class TestProvenanceSummary:
@@ -323,24 +272,16 @@ class TestProvenanceSummary:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Should have mapping_source_counts
-        assert "mapping_source_counts" in provenance
-        counts = provenance["mapping_source_counts"]
-
-        # Should be a dict with at least one source type
+        assert report is not None
+        counts = report.mapping_source_counts
         assert isinstance(counts, dict)
         assert len(counts) >= 1
 
-        # All keys should be valid source types
         valid_sources = {"static", "deterministic", "ai", "manual"}
         for source in counts.keys():
             assert source in valid_sources
@@ -356,21 +297,15 @@ class TestProvenanceSummary:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            _success, report = await manager.execute(
                 participants_tsv_path=synthetic_tsv,
                 output_dir=output_dir
             )
 
-        provenance_path = output_dir / "phenotypes_provenance.json"
-        with open(provenance_path) as f:
-            provenance = json.load(f)
-
-        # Should have confidence_distribution
-        assert "confidence_distribution" in provenance
-        dist = provenance["confidence_distribution"]
-
-        # Should have buckets
-        assert isinstance(dist, dict)
-        expected_buckets = ["high", "medium", "low", "unresolved"]
-        for bucket in expected_buckets:
-            assert bucket in dist
+        assert report is not None
+        dist = report.confidence_distribution
+        # Should have all bucket fields
+        assert isinstance(dist.high, list)
+        assert isinstance(dist.medium, list)
+        assert isinstance(dist.low, list)
+        assert isinstance(dist.unresolved, int)
