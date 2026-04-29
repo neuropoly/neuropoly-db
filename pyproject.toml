@@ -43,3 +43,15 @@ annotation-automation = [
 
 [project.scripts]
 npdb = "npdb.cli:npdb"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+pythonpath = ["src"]
+testpaths = ["test"]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.58.0",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]

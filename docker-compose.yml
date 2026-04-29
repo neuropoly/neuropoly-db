@@ -23,6 +23,16 @@ services:
   query_federation:
     ports: !override []
 
+  # Inject custom imaging vocab into the NeuroBagel API at startup.
+  # !override replaces the upstream api.volumes list entirely to avoid
+  # duplicate container mount paths.
+  api:
+    volumes: !override
+      - "./scripts/neuropoly_api_entrypoint.sh:/usr/src/api_entrypoint.sh:ro"
+      - "./scripts/inject_vocab_patch.py:/usr/src/neurobagel/inject_vocab_patch.py:ro"
+      - "./config/neuropoly_imaging_modalities.json:/usr/src/neurobagel/neuropoly_imaging_modalities.json:ro"
+      - "neurobagel_data:/data"
+
   # Dev reverse proxy — single port for both query UI and federation API.
   # This lets VS Code SSH forward a single port to reach everything.
   proxy:

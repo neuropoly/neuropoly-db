@@ -1,0 +1,27 @@
+{
+  "hc": {
+    "TermURL": "ncit:C94342",
+    "Label": "Healthy Control",
+    "aliases": ["hcs", "con", "ctr", "ctrl", "control", "healthy", "healthy control"]
+  },
+  "pd": {
+    "TermURL": "snomed:49049000",
+    "Label": "Parkinson's disease",
+    "aliases": []
+  },
+  "ms": {
+    "TermURL": "snomed:24700007",
+    "Label": "Multiple sclerosis",
+    "aliases": []
+  },
+  "als": {
+    "TermURL": "snomed:86044005",
+    "Label": "Amyotrophic lateral sclerosis",
+    "aliases": []
+  },
+  "sci": {
+    "TermURL": "snomed:90584004",
+    "Label": "Spinal cord injury",
+    "aliases": []
+  }
+}
