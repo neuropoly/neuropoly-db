@@ -1,0 +1,24 @@
+[
+  {
+    "namespace_prefix": "nb",
+    "namespace_url": "http://neurobagel.org/vocab/",
+    "vocabulary_name": "NeuroPoly extended imaging modality terms",
+    "version": "1.0.0",
+    "terms": [
+      {"name": "Bright-field microscopy", "id": "BrightFieldMicroscopy", "abbreviation": "BF"},
+      {"name": "Dark-field microscopy", "id": "DarkFieldMicroscopy", "abbreviation": "DF"},
+      {"name": "Phase-contrast microscopy", "id": "PhaseContrastMicroscopy", "abbreviation": "PC"},
+      {"name": "Differential interference contrast microscopy", "id": "DifferentialInterferenceContrastMicroscopy", "abbreviation": "DIC"},
+      {"name": "Fluorescence microscopy", "id": "FluorescenceMicroscopy", "abbreviation": "FLUO"},
+      {"name": "Confocal microscopy", "id": "ConfocalMicroscopy", "abbreviation": "CONF"},
+      {"name": "Polarised light imaging", "id": "PolarisedLightImaging", "abbreviation": "PLI"},
+      {"name": "Transmission electron microscopy", "id": "TransmissionElectronMicroscopy", "abbreviation": "TEM"},
+      {"name": "Scanning electron microscopy", "id": "ScanningElectronMicroscopy", "abbreviation": "SEM"},
+      {"name": "Micro-computed tomography", "id": "MicroComputedTomography", "abbreviation": "uCT"},
+      {"name": "Optical coherence tomography", "id": "OpticalCoherenceTomography", "abbreviation": "OCT"},
+      {"name": "CARS microscopy", "id": "CoherentAntiStokesRamanSpectroscopyMicroscopy", "abbreviation": "CARS"},
+      {"name": "T2*-weighted image", "id": "T2StarWeighted", "abbreviation": "T2star"},
+      {"name": "Relaxation Along a Moving Inhomogeneity", "id": "RAMIRAWeighted", "abbreviation": "RAMIRA"}
+    ]
+  }
+]
