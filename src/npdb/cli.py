@@ -6,7 +6,7 @@ import csv
 import tempfile
 import typer
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from rich.progress import BarColumn
+from rich.progress import BarColumn, Progress, TextColumn, DownloadColumn, SpinnerColumn
 from rich.live import Live
 from rich.panel import Panel
 from typing import Optional
@@ -16,10 +16,22 @@ from npdb.managers import (
     DataNeuroPolyMTL,
     BagelNeuroPolyMTL,
     BIDSStandardizer,
+    PreflightError,
 )
 from npdb.managers.neurobagel import NeurobagelAnnotator
 from npdb.external.neurobagel.errors import BagelCLIError, classify_bagel_error
-from npdb.ledger.ledger import RunLedger, success_entry_from_report, minimal_success_entry, failure_entry
+from npdb.ledger.ledger import (
+    RunLedger,
+    success_entry_from_report,
+    minimal_success_entry,
+    failure_entry,
+    generic_failure_entry,
+    PROBLEM_GIT_CLONE_FAILURE,
+    PROBLEM_MISSING_PARTICIPANTS_TSV,
+    PROBLEM_DESCRIPTION_EXTENSION_FAILURE,
+    PROBLEM_PREFLIGHT_FAILURE,
+    PROBLEM_ANNOTATION_FAILURE,
+)
 from npdb.ui.display import CommandDisplay, capture_stdout
 from npdb.annotation import AnnotationConfig
 from npdb.annotation.standardize import load_header_map, validate_header_map_keys
@@ -152,6 +164,34 @@ def gitea2bagel(
         dir_okay=True,
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--no-extend-modalities",
+        help=(
+            "When set, automatically map unsupported BIDS imaging suffixes to "
+            "Neurobagel Image IRIs (using built-in heuristics or an LLM) and "
+            "retry the conversion rather than failing immediately."
+        ),
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    fallback_description: bool = typer.Option(
+        True,
+        "--fallback-description/--no-fallback-description",
+        help=(
+            "When dataset_description.json is missing, write a minimal BIDS-compliant "
+            "fallback (Name + BIDSVersion 1.7.0) and retry rather than aborting."
+        ),
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    validate_schema: bool = typer.Option(
+        True,
+        "--validate-schema/--no-validate-schema",
+        help=(
+            "Validate phenotypes_annotations.json against the Neurobagel data dictionary "
+            "schema before calling 'bagel pheno'. Raises an actionable error on failure."
+        ),
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
     help_: bool = help_option(),
 ):
     """
@@ -216,18 +256,134 @@ def gitea2bagel(
 
         display.start_step("Cloning dataset repository from Gitea")
         with tempfile.TemporaryDirectory() as local_clone:
-            gitea_manager.clone_repository(
-                dataset,
-                local_clone,
-                light=True,
-                cache_dir=str(cache_dir) if cache_dir else None,
-                output_callback=display.append_output,
-            )
+            try:
+                gitea_manager.clone_repository(
+                    dataset,
+                    local_clone,
+                    light=True,
+                    cache_dir=str(cache_dir) if cache_dir else None,
+                    output_callback=display.append_output,
+                )
+            except RuntimeError as clone_err:
+                display.fail_step()
+                live.console.print(
+                    f"[red]Error cloning repository: {clone_err}[/red]")
+                run_ledger.append(generic_failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    problem_name=PROBLEM_GIT_CLONE_FAILURE,
+                    problem_description=str(clone_err),
+                    fix_steps=[
+                        {
+                            "action": "Verify Gitea credentials and network connectivity",
+                            "detail": "Check that NP_GITEA_APP_URL, NP_GITEA_APP_USER and "
+                                      "NP_GITEA_APP_TOKEN are set correctly in your .env file "
+                                      "and that the Gitea server is reachable.",
+                            "auto_fixable": False,
+                        },
+                        {
+                            "action": "Confirm the dataset name is correct",
+                            "detail": f"Attempted to clone: {dataset}. "
+                                      "Verify it is listed under the 'datasets' organisation on Gitea.",
+                            "auto_fixable": False,
+                        },
+                    ],
+                    raw_snippet=str(clone_err)[:500],
+                ))
+                raise typer.Exit(code=1)
             display.complete_step()
 
             display.start_step("Extending dataset description")
-            dataset_description = gitea_manager.extend_description(
-                dataset, local_clone)
+            try:
+                dataset_description = gitea_manager.extend_description(
+                    dataset, local_clone)
+            except FileNotFoundError as desc_err:
+                if fallback_description:
+                    _desc_fallback = {"Name": dataset, "BIDSVersion": "1.7.0"}
+                    _desc_file = os.path.join(
+                        local_clone, "dataset_description.json")
+                    import json as _json
+                    with open(_desc_file, "w", encoding="utf-8") as _fh:
+                        _json.dump(_desc_fallback, _fh, indent=2)
+                    live.console.print(
+                        "[yellow]dataset_description.json not found; "
+                        "wrote minimal fallback (Name + BIDSVersion 1.7.0) and retrying.[/yellow]"
+                    )
+                    try:
+                        dataset_description = gitea_manager.extend_description(
+                            dataset, local_clone)
+                    except Exception as retry_err:
+                        display.fail_step()
+                        live.console.print(
+                            f"[red]Error extending dataset description after fallback: {retry_err}[/red]")
+                        run_ledger.append(generic_failure_entry(
+                            dataset=dataset,
+                            process="gitea2bagel",
+                            problem_name=PROBLEM_DESCRIPTION_EXTENSION_FAILURE,
+                            problem_description=str(retry_err),
+                            fix_steps=[
+                                {
+                                    "action": "Check dataset_description.json exists and is valid JSON",
+                                    "detail": "The file must be present at the repository root. "
+                                              "Validate it with: uv run python -m json.tool dataset_description.json",
+                                    "auto_fixable": False,
+                                },
+                            ],
+                            raw_snippet=str(retry_err)[:500],
+                        ))
+                        raise typer.Exit(code=1)
+                else:
+                    display.fail_step()
+                    live.console.print(
+                        f"[red]Error extending dataset description: {desc_err}[/red]")
+                    run_ledger.append(generic_failure_entry(
+                        dataset=dataset,
+                        process="gitea2bagel",
+                        problem_name=PROBLEM_DESCRIPTION_EXTENSION_FAILURE,
+                        problem_description=str(desc_err),
+                        fix_steps=[
+                            {
+                                "action": "Check dataset_description.json exists and is valid JSON",
+                                "detail": "The file must be present at the repository root. "
+                                          "Validate it with: uv run python -m json.tool dataset_description.json",
+                                "auto_fixable": False,
+                            },
+                            {
+                                "action": "Enable the minimal-description fallback",
+                                "detail": "Re-run without --no-fallback-description so npdb writes a "
+                                          "minimal BIDS-compliant dataset_description.json automatically.",
+                                "auto_fixable": True,
+                            },
+                        ],
+                        raw_snippet=str(desc_err)[:500],
+                    ))
+                    raise typer.Exit(code=1)
+            except Exception as desc_err:
+                display.fail_step()
+                live.console.print(
+                    f"[red]Error extending dataset description: {desc_err}[/red]")
+                run_ledger.append(generic_failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    problem_name=PROBLEM_DESCRIPTION_EXTENSION_FAILURE,
+                    problem_description=str(desc_err),
+                    fix_steps=[
+                        {
+                            "action": "Check dataset_description.json exists and is valid JSON",
+                            "detail": "The file must be present at the repository root. "
+                                      "Validate it with: uv run python -m json.tool dataset_description.json",
+                            "auto_fixable": False,
+                        },
+                        {
+                            "action": "Verify BIDS dataset structure",
+                            "detail": "The cloned directory must follow the BIDS layout. "
+                                      "dataset_description.json is required at the root level per the BIDS spec.",
+                            "auto_fixable": False,
+                        },
+                    ],
+                    raw_snippet=str(desc_err)[:500],
+                ))
+                raise typer.Exit(code=1)
             display.complete_step()
 
             # Annotation step: use selected mode
@@ -236,6 +392,28 @@ def gitea2bagel(
             if not os.path.exists(participants_tsv):
                 live.console.print(
                     "[red]Error: participants.tsv not found in dataset.[/red]")
+                run_ledger.append(generic_failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    problem_name=PROBLEM_MISSING_PARTICIPANTS_TSV,
+                    problem_description="participants.tsv was not found in the cloned dataset.",
+                    fix_steps=[
+                        {
+                            "action": "Verify the dataset is a valid BIDS dataset",
+                            "detail": "A BIDS dataset must contain participants.tsv at its root. "
+                                      "If the file is missing the dataset may be incomplete or "
+                                      "not structured to the BIDS specification.",
+                            "auto_fixable": False,
+                        },
+                        {
+                            "action": "Create a minimal participants.tsv",
+                            "detail": "At minimum the file needs a 'participant_id' column. "
+                                      "You can generate one from sub-* directories with:\n"
+                                      "  ls -d sub-* | sed 's/^//' > participants.tsv",
+                            "auto_fixable": False,
+                        },
+                    ],
+                ))
                 raise typer.Exit(code=1)
 
             # Emit warning for full-auto mode
@@ -312,11 +490,33 @@ def gitea2bagel(
                 live.console.print(f"[red]Error during annotation: {e}[/red]")
                 live.console.print(
                     "[yellow]Falling back to manual annotation.[/yellow]")
+                run_ledger.append(generic_failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    problem_name=PROBLEM_ANNOTATION_FAILURE,
+                    problem_description=str(e),
+                    fix_steps=[
+                        {
+                            "action": "Review the annotation tool output",
+                            "detail": "Check the step output displayed above for browser automation "
+                                      "errors, timeouts, or unexpected UI states.",
+                            "auto_fixable": False,
+                        },
+                        {
+                            "action": "Re-run in manual mode",
+                            "detail": "Use --mode manual to skip automation and annotate the "
+                                      "phenotypes interactively via the Neurobagel annotation tool.",
+                            "auto_fixable": False,
+                        },
+                    ],
+                    raw_snippet=str(e)[:500],
+                ))
                 typer.prompt(
                     "Press Enter once you have saved the phenotypes files to continue...")
 
             display.start_step("Converting to JSON-LD")
             bagel_manager = BagelNeuroPolyMTL(output.absolute().as_posix())
+            run_warnings: dict = {}
 
             try:
                 bagel_manager.convert_bids(
@@ -326,9 +526,18 @@ def gitea2bagel(
                         output, f"{dataset}_phenotypes.tsv"),
                     phenotypes_annotations=os.path.join(
                         output, f"{dataset}_phenotypes_annotations.json"),
-                    dataset_description=dataset_description
+                    dataset_description=dataset_description,
+                    warnings_out=run_warnings,
+                    extend_modalities=extend_modalities,
+                    validate_schema=validate_schema,
                 )
                 display.complete_step()
+
+                preproc_warn = run_warnings.get("preprocessing_warnings") or []
+                subj_warn = run_warnings.get(
+                    "subject_alignment_warnings") or []
+                vocab_ext_pending = run_warnings.get(
+                    "vocab_extension_pending") or []
 
                 # Ledger: success entry
                 if annotation_report is not None:
@@ -336,17 +545,40 @@ def gitea2bagel(
                         dataset=dataset,
                         process="gitea2bagel",
                         report=annotation_report,
+                        preprocessing_warnings=preproc_warn or None,
+                        subject_alignment_warnings=subj_warn or None,
+                        vocab_extension_pending=vocab_ext_pending or None,
                     ))
                 else:
                     run_ledger.append(minimal_success_entry(
                         dataset=dataset,
                         process="gitea2bagel",
                         mode=mode,
+                        preprocessing_warnings=preproc_warn or None,
+                        subject_alignment_warnings=subj_warn or None,
+                        vocab_extension_pending=vocab_ext_pending or None,
                     ))
 
                 live.console.print(
                     f"[green]✅ Conversion complete! Output saved to: {output}[/green]"
                 )
+
+            except PreflightError as pf_err:
+                display.fail_step()
+                live.console.print(
+                    f"[red]Pre-flight check failed: {pf_err.description}[/red]"
+                )
+                preproc_warn = run_warnings.get("preprocessing_warnings") or []
+                run_ledger.append(generic_failure_entry(
+                    dataset=dataset,
+                    process="gitea2bagel",
+                    problem_name=PROBLEM_PREFLIGHT_FAILURE,
+                    problem_description=pf_err.description,
+                    fix_steps=pf_err.fix_steps,
+                    raw_snippet=pf_err.raw_snippet,
+                    preprocessing_warnings=preproc_warn or None,
+                ))
+                raise typer.Exit(code=1)
 
             except BagelCLIError as err:
                 display.fail_step()
@@ -358,10 +590,21 @@ def gitea2bagel(
                 classified = classify_bagel_error(err.plain_output)
                 if classified:
                     for match in classified:
-                        steps_text = "\n".join(
-                            f"  {i + 1}. {s}"
-                            for i, s in enumerate(match["fix_steps"])
-                        )
+                        step_lines = []
+                        for i, s in enumerate(match["fix_steps"]):
+                            if isinstance(s, dict):
+                                action = s.get("action", "")
+                                detail = s.get("detail", "")
+                                auto = " [green](auto-fixable)[/green]" if s.get(
+                                    "auto_fixable") else ""
+                                step_lines.append(f"  {i + 1}. {action}{auto}")
+                                if detail:
+                                    for line in detail.splitlines():
+                                        step_lines.append(
+                                            f"     [dim]{line}[/dim]")
+                            else:
+                                step_lines.append(f"  {i + 1}. {s}")
+                        steps_text = "\n".join(step_lines)
                         live.console.print(Panel(
                             f"{match['description']}\n\n[bold]Steps to fix:[/bold]\n{steps_text}",
                             title=f"[red]{match['problem']}[/red]",
@@ -375,12 +618,18 @@ def gitea2bagel(
                         border_style="red",
                     ))
 
+                preproc_warn = run_warnings.get("preprocessing_warnings") or []
+                subj_warn = run_warnings.get(
+                    "subject_alignment_warnings") or []
+
                 # Ledger: failure entry
                 run_ledger.append(failure_entry(
                     dataset=dataset,
                     process="gitea2bagel",
                     err=err,
                     classified=classified,
+                    preprocessing_warnings=preproc_warn or None,
+                    subject_alignment_warnings=subj_warn or None,
                 ))
 
                 raise typer.Exit(code=1)

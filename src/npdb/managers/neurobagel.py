@@ -105,7 +105,15 @@ class BagelMixin:
         if result.exit_code != 0:
             command = "bagel " + " ".join(str(a) for a in args)
             logs = buf.getvalue().strip()
-            combined = "\n".join(filter(None, [result.output, logs]))
+            exception_text = ""
+            if result.exception is not None:
+                import traceback as _tb
+                exception_text = "".join(_tb.format_exception(
+                    type(result.exception),
+                    result.exception,
+                    result.exception.__traceback__,
+                ))
+            combined = "\n".join(filter(None, [result.output, logs, exception_text]))
             raise BagelCLIError.from_result(
                 command=command,
                 exit_code=result.exit_code,

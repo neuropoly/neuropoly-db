@@ -9,12 +9,22 @@ Replaces the per-run ``phenotypes_provenance.json`` sidecar for
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from npdb.annotation.provenance import ProvenanceReport
 from npdb.external.neurobagel.errors import BagelCLIError
 
 LEDGER_VERSION = "1"
+
+# ---------------------------------------------------------------------------
+# Problem-name constants
+# ---------------------------------------------------------------------------
+
+PROBLEM_GIT_CLONE_FAILURE = "git_clone_failure"
+PROBLEM_MISSING_PARTICIPANTS_TSV = "missing_participants_tsv"
+PROBLEM_DESCRIPTION_EXTENSION_FAILURE = "description_extension_failure"
+PROBLEM_PREFLIGHT_FAILURE = "preflight_failure"
+PROBLEM_ANNOTATION_FAILURE = "annotation_failure"
 
 
 class RunLedger:
@@ -88,9 +98,12 @@ def success_entry_from_report(
     dataset: str,
     process: str,
     report: ProvenanceReport,
+    preprocessing_warnings: Optional[List[str]] = None,
+    subject_alignment_warnings: Optional[List[str]] = None,
+    vocab_extension_pending: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Build a ledger success entry from a :class:`ProvenanceReport`."""
-    return {
+    entry: Dict[str, Any] = {
         "status": "success",
         "process": process,
         "dataset": dataset,
@@ -106,17 +119,38 @@ def success_entry_from_report(
         "ai_provider": report.ai_provider,
         "ai_model": report.ai_model,
     }
+    if preprocessing_warnings:
+        entry["preprocessing_warnings"] = preprocessing_warnings
+    if subject_alignment_warnings:
+        entry["subject_alignment_warnings"] = subject_alignment_warnings
+    if vocab_extension_pending:
+        entry["vocab_extension_pending"] = vocab_extension_pending
+    return entry
 
 
-def minimal_success_entry(dataset: str, process: str, mode: str) -> Dict[str, Any]:
+def minimal_success_entry(
+    dataset: str,
+    process: str,
+    mode: str,
+    preprocessing_warnings: Optional[List[str]] = None,
+    subject_alignment_warnings: Optional[List[str]] = None,
+    vocab_extension_pending: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """Build a minimal success entry (manual mode — no provenance report)."""
-    return {
+    entry: Dict[str, Any] = {
         "status": "success",
         "process": process,
         "dataset": dataset,
         "timestamp": _now_iso(),
         "mode": mode,
     }
+    if preprocessing_warnings:
+        entry["preprocessing_warnings"] = preprocessing_warnings
+    if subject_alignment_warnings:
+        entry["subject_alignment_warnings"] = subject_alignment_warnings
+    if vocab_extension_pending:
+        entry["vocab_extension_pending"] = vocab_extension_pending
+    return entry
 
 
 def failure_entry(
@@ -124,13 +158,21 @@ def failure_entry(
     process: str,
     err: BagelCLIError,
     classified: list,
+    preprocessing_warnings: Optional[List[str]] = None,
+    subject_alignment_warnings: Optional[List[str]] = None,
+    vocab_extension_pending: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Build a ledger failure entry from a :class:`BagelCLIError`."""
     problem_name = classified[0]["problem"] if classified else "Unknown error"
-    problem_description = classified[0]["description"] if classified else str(
-        err)
+    context = classified[0].get("context", {}) if classified else {}
+    base_description = classified[0]["description"] if classified else str(err)
+    if context:
+        context_detail = "; ".join(f"{k}={v}" for k, v in context.items())
+        problem_description = f"{base_description} ({context_detail})"
+    else:
+        problem_description = base_description
     resolution_steps = classified[0]["fix_steps"] if classified else []
-    return {
+    entry: Dict[str, Any] = {
         "status": "failure",
         "process": process,
         "dataset": dataset,
@@ -138,6 +180,54 @@ def failure_entry(
         "bagel_command": err.command,
         "problem_name": problem_name,
         "problem_description": problem_description,
+        "auto_fixable_steps": [s["action"] for s in resolution_steps if s.get("auto_fixable")],
         "resolution_steps": resolution_steps,
         "raw_output_snippet": err.plain_output[:500],
     }
+    if preprocessing_warnings:
+        entry["preprocessing_warnings"] = preprocessing_warnings
+    if subject_alignment_warnings:
+        entry["subject_alignment_warnings"] = subject_alignment_warnings
+    if vocab_extension_pending:
+        entry["vocab_extension_pending"] = vocab_extension_pending
+    return entry
+
+
+def generic_failure_entry(
+    dataset: str,
+    process: str,
+    problem_name: str,
+    problem_description: str,
+    fix_steps: Optional[List] = None,
+    raw_snippet: str = "",
+    preprocessing_warnings: Optional[List[str]] = None,
+    subject_alignment_warnings: Optional[List[str]] = None,
+    vocab_extension_pending: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Build a ledger failure entry from a plain error (no BagelCLIError)."""
+    steps = fix_steps or []
+    # Normalise plain strings to step dicts for callers that still pass strings
+    normalised = [
+        s if isinstance(s, dict) else {
+            "action": s, "detail": "", "auto_fixable": False}
+        for s in steps
+    ]
+    entry: Dict[str, Any] = {
+        "status": "failure",
+        "process": process,
+        "dataset": dataset,
+        "timestamp": _now_iso(),
+        "bagel_command": None,
+        "problem_name": problem_name,
+        "problem_description": problem_description,
+        "auto_fixable_steps": [s["action"] for s in normalised if s.get("auto_fixable")],
+        "resolution_steps": normalised,
+        "raw_output_snippet": raw_snippet[:500],
+    }
+    if preprocessing_warnings:
+        entry["preprocessing_warnings"] = preprocessing_warnings
+    if subject_alignment_warnings:
+        entry["subject_alignment_warnings"] = subject_alignment_warnings
+    if vocab_extension_pending:
+        entry["vocab_extension_pending"] = vocab_extension_pending
+    return entry
