@@ -11,12 +11,11 @@
 
    ```bash
    uv venv .venv
-   ```
+   ``` 
 
-   > [!WARNING]
    > The above command _might fail if some virtual environment has already been configured in the provided directory (.venv)_. If you experience issues, **delete the content** under the virtual environment's directory and **re-run the command**.
 
-2. Synchronize the virtual environment with the CLI dependencies :
+3. Synchronize the virtual environment with the CLI dependencies :
 
    ```bash
    uv sync --active
