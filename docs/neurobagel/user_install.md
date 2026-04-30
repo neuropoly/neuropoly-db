@@ -51,7 +51,6 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    cp template.env .env
    ```
 
-   > [!IMPORTANT]
    > NeuroBagel services run on multiple ports on `localhost`. If you have services or software running on your machine, **some of the ports used by NeuroBagel might be in use**. Refer to the **table below** for the list of ports used by NeuroBagel and change them in the `.env` file if needed :
    >
    > | Service                     | Port variable        | Default port |
@@ -69,7 +68,6 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
 
    ![Docker Compose up](../assets/docker_compose_up.png)
 
-   > [!WARNING]
    > You can ignore the **warnings** of unset environment variables when running the above command.
 
 6. Verify all containers are up and running :
@@ -84,7 +82,6 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
 
    ![NeuroBagel query tool](../assets/neurobagel_localhost_9000.png)
 
-   > [!IMPORTANT]
    > You might not see the same datasets as **in the screenshot above**. The **default NeuroBagel node deployment** ingests all `jsonld` data located under the `./seed-datasets` directory at the root of the repository :
    > - Place additional datasets there, then deploy the node (or use [hot-reloading if the node is already deployed](./manage.md#hot-reloading)).
    > - Select another directory by changing the `LOCAL_GRAPH_DATA` variable in the `.env` file, then deploy (or re-deploy) the node.
