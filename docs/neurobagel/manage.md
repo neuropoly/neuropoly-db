@@ -17,7 +17,7 @@ To avoid re-deploying the node every time you want to update the datasets, you c
 ```bash
 docker compose restart init_data
 echo "Waiting for init_data to complete..." && sleep 5
-docker compose restart graph api
+docker compose restart graph api query_federation proxy
 echo "Waiting for graph and api services to restart..." && sleep 20
 ```
 
@@ -40,7 +40,7 @@ Edit `config/neuropoly_imaging_modalities.json` and add an entry to the `terms` 
   "version": "1.0.0",
   "terms": [
     ...
-    { "name": "My new modality", "id": "MyNewModality", "abbreviation": "MNM" }
+    { "name": "My new modality", "id": "MyNewModality", "abbreviation": "MNM", "data_type": "Modality's data type" }
   ]
 }
 ```
@@ -50,23 +50,6 @@ Edit `config/neuropoly_imaging_modalities.json` and add an entry to the `terms` 
 | `name` | Human-readable label shown in the query UI. | Any string. |
 | `id` | CamelCase local name of the `nb:` IRI (`nb:<id>`). | Must match `[a-zA-Z][a-zA-Z0-9_]+`. |
 | `abbreviation` | BIDS suffix used in your dataset. | Must be unique across all terms. |
+| `data_type` | The data type associated with the modality. | Any string. |
 
-After saving, restart the API container so it picks up the new label:
-
-```bash
-docker compose restart api
-```
-
-Re-ingest any datasets that use the new suffix with `uv run npdb gitea2bagel --extend-modalities` to write the correct IRI into their JSON-LD files.
-
-### Resolving `vocab_extension_pending` warnings
-
-When `uv run npdb gitea2bagel --extend-modalities` resolves a new `nb:` term via the LLM or generic fallback but **cannot write it** to the vocab file (e.g. a permission error), the run ledger entry will contain:
-
-```json
-"vocab_extension_pending": [
-  "vocab_extension_pending: could not promote 'XMod' → 'nb:XModality' into config/neuropoly_imaging_modalities.json: [Errno 13] Permission denied. Add manually."
-]
-```
-
-The dataset conversion itself succeeded — the IRI is already in the graph. To make the label appear in the query UI, add the missing term by hand following the [schema above](#adding-a-new-term), then restart the API.
+After saving, re-deploy or [hot-reload the node](#hot-reloading) to see the new term show up in the query UI.
