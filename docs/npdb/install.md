@@ -1,5 +1,7 @@
 # NeuroPoly-DB CLI installation
 
+This is about the `npdb` software installation to be able to download the data once being selected from the neurobagel webbrowser.
+
 ## Prerequisites
 
 - Install [Python 3.12+](https://www.python.org/downloads/)
