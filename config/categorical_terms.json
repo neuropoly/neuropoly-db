@@ -1,0 +1,157 @@
+{
+  "als": {
+    "TermURL": "snomed:86044005",
+    "Label": "Amyotrophic lateral sclerosis",
+    "aliases": []
+  },
+  "astrocytoma": {
+    "TermURL": "snomed:1157043006",
+    "Label": "Astrocytoma",
+    "aliases": ["astroglioma", "astrocytic glioma"]
+  },
+  "cis" : {
+    "TermURL": "snomed:445967004",
+    "Label": "Clinically isolated syndrome",
+    "aliases": []
+  },
+  "cm": {
+    "TermURL": "snomed:202664003",
+    "Label": "Cervical Myelopathy",
+    "aliases": ["dcm", "mildcompression/dcm"]
+  },
+  "dnet": {
+    "TermURL": "snomed:87211000119104",
+    "Label": "Dysembryoplastic neuroepithelial tumor",
+    "aliases": []
+  },
+  "ependymoma" : {
+    "TermURL": "snomed:443643007",
+    "Label": "Ependymoma",
+    "aliases": ["ependymom"]
+  },
+  "gmb": {
+    "TermURL": "snomed:393563007",
+    "Label": "Glioblastoma multiforme",
+    "aliases": ["glioblastoma", "glioblastoma multiforme"]
+  },
+  "hc": {
+    "TermURL": "ncit:C94342",
+    "Label": "Healthy Control",
+    "aliases": ["hcs", "con", "ctr", "ctrl", "control", "healthy", "healthy control", "nc", "normal"]
+  },
+  "hemangioblastoma" : {
+    "TermURL": "snomed:81201000",
+    "Label": "Hemangioblastoma",
+    "aliases": ["haemangioblastoma", "hb"]
+  },
+  "hie": {
+    "TermURL": "snomed:703300001",
+    "Label": "Hypoxic-ischemic encephalopathy",
+    "aliases": ["hypoxic ischemic encephalopathy", "premature hie", "hie cerebral oedeme"]
+  },
+  "hnc": {
+    "TermURL": "snomed:255056009",
+    "Label": "Head and neck neoplasm",
+    "aliases": ["head and neck cancer", "head and neck neoplasm"]
+  },
+  "hydrocephalus": {
+    "TermURL": "snomed:53776005",
+    "Label": "Hydrocephalus",
+    "aliases": ["premature hydrocephalus", "vp shunt hydrocephalus", "premature pvl hydrocephalus", "cerebral atrophy hydrocephalus"]
+  },
+  "lbp": {
+    "TermURL": "snomed:279039007",
+    "Label": "Low back pain",
+    "aliases": ["low back pain", "symptomatic back pain"]
+  },
+  "mbl": {
+    "TermURL": "snomed:1156923005",
+    "Label": "Medulloblastoma",
+    "aliases": ["medulloblastoma"] 
+  },
+  "ms": {
+    "TermURL": "snomed:24700007",
+    "Label": "Multiple sclerosis",
+    "aliases": []
+  },
+  "nf1": {
+    "TermURL": "snomed:92824003",
+    "Label": "Neurofibromatosis type 1",
+    "aliases": ["nf 1", "nf-1", "nf type 1", "neurofibromatosis 1"]
+  },
+  "nmo": {
+    "TermURL": "snomed:25044007",
+    "Label": "Neuromyelitis optica",
+    "aliases": []
+  },
+  "pd": {
+    "TermURL": "snomed:49049000",
+    "Label": "Parkinson's disease",
+    "aliases": []
+  },
+  "pgm": {
+    "TermURL": "snomed:188298006",
+    "Label": "Pontine glioma",
+    "aliases": ["pons glioma", "pontine glioma", "brainstem glioma"]
+  },
+  "pnet": {
+    "TermURL": "snomed:39781001",
+    "Label": "Primitive neuroectodermal tumor",
+    "aliases": ["primitive neuroectodermal tumor", "neuroectodermal tumor"]
+  },
+  "ppms": {
+    "TermURL": "snomed:428700003",
+    "Label": "Primary progressive multiple sclerosis",
+    "aliases": ["mspp", "ppms", "ms pp", "pp ms", "ms-pp", "pp-ms"]
+  },
+  "pvl": {
+    "TermURL": "snomed:230769007",
+    "Label": "Periventricular leukomalacia",
+    "aliases": ["premature pvl", "premature cerebellar hemorrhage pvl"]
+  },
+  "pia": {
+    "TermURL": "snomed:763865009",
+    "Label": "Pilocytic astrocytoma",
+    "aliases": ["pilocytic astrocytoma", "pylocytic astrocytoma", "pylocytic astrocytom", "pilocytic astrocytom"]
+  },
+  "ris": {
+    "TermURL": "snomed:16415361000119105",
+    "Label": "Radiologically isolated syndrome",
+    "aliases": ["radiologically isolated syndrome"]
+  },
+  "rrms": {
+    "TermURL": "snomed:426373005",
+    "Label": "Relapsing-remitting multiple sclerosis",
+    "aliases": ["msrr", "ms rr", "rr ms", "ms-rr", "rr-ms"]
+  },
+  "sci": {
+    "TermURL": "snomed:90584004",
+    "Label": "Spinal cord injury",
+    "aliases": []
+  },
+  "snem": {
+    "TermURL": "snomed:29570005",
+    "Label": "Leigh syndrome",
+    "aliases": ["leigh syndrome", "subacute necrotizing encephalomyelopathy"]
+  },
+  "spms": {
+    "TermURL": "snomed:425500002",
+    "Label": "Secondary progressive multiple sclerosis",
+    "aliases": ["mssp", "ms sp", "sp ms", "ms-sp", "sp-ms"]
+  },
+  "sws": {
+    "TermURL": "snomed:19886006",
+    "Label": "Sturge-Weber syndrome",
+    "aliases": ["sturge weber syndrome", "sturge-weber syndrome"]
+  },
+  "syr": {
+    "TermURL": "snomed:111496009",
+    "Label": "Syringomyelia",
+    "aliases": []
+  },
+  "tumor": {
+    "TermURL": "ncit:C3262",
+    "Label": "Tumor",
+    "aliases": ["tumor", "tumour", "neoplasm", "cancer", "malignancy", "malignant neoplasm", "benign neoplasm"]
+  }
+}

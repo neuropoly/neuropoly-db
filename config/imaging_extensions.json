@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "extensions": {
+    "UNIT1": {
+      "iri": "nidm:T1Weighted",
+      "description": "UNiform T1-weighted image produced by the MP2RAGE sequence (BIDS suffix UNIT1).",
+      "source": "static_fallback",
+      "added": "2026-04-27"
+    },
+    "MP2RAGE": {
+      "iri": "nidm:T1Weighted",
+      "description": "Magnetisation-Prepared 2 Rapid Acquisition Gradient Echoes T1-weighted image.",
+      "source": "static_fallback",
+      "added": "2026-04-28"
+    },
+    "PSIR": {
+      "iri": "nb:PSIRImage",
+      "description": "Custom imaging modality with BIDS suffix 'PSIR'.",
+      "source": "generic_fallback",
+      "added": "2026-04-28"
+    },
+    "CT": {
+      "iri": "nb:CTImage",
+      "description": "Custom imaging modality with BIDS suffix 'CT'.",
+      "source": "generic_fallback",
+      "added": "2026-04-28"
+    },
+    "RAMIRA": {
+      "iri": "nb:RAMIRAWeighted",
+      "description": "Relaxation Along a Moving Inhomogeneity (RAMIRA) quantitative MRI image.",
+      "source": "neuropoly_vocab",
+      "added": "2026-04-28"
+    },
+    "WMn": {
+      "iri": "nb:WMnImage",
+      "description": "Custom imaging modality with BIDS suffix 'WMn'.",
+      "source": "generic_fallback",
+      "added": "2026-04-28"
+    }
+  }
+}

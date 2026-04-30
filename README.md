@@ -5,27 +5,34 @@ This repository hosts a collection of tools to interact with **metadata containe
 > _Main Goal_
 > Provide an exploration tool into every database, agnostic to the data structure (standard) and management software (e.g. DataLad, Git, etc.) used to store the data.
 
+## User guide
+
+### [NeuroBagel node installation](./docs/neurobagel/user_install.md)
+
+### [NeuroPoly-DB CLI installation](./docs/npdb/install.md)
+
+### [Query and download datasets](./docs/neurobagel/query.md)
+
+## Developer guide
+
 Components of the project :
 
-- **[Database exploration](#database-exploration-using-neurobagel)**: Complete and structured deployment of a local [NeuroBagel](https://github.com/neurobagel) node.
-- **[Database ingestion](#database-ingestion)**: A set of command line tools (under `npdb`) to ingest data into a local _NeuroBagel_ node (currently supports `Neurogitea` indexed databases only).
-- **[Metadata standardization](#metadata-standardization)**: A set of command line tools (under `npdb standardize`) to manipulate common standards (e.g. BIDS, Bagel).
+- **[Database exploration]** : Complete and structured deployment of a local [NeuroBagel](https://github.com/neurobagel) node, extended with NeuroPoly-specific imaging modality vocabulary.
+- **[Database ingestion]**: A set of command line tools (under `npdb`) to ingest data into a local _NeuroBagel_ node (currently supports `Neurogitea` indexed databases only).
+- **[Metadata standardization]**: A set of command line tools (under `npdb standardize`) to manipulate common standards (e.g. BIDS, Bagel).
 
-## Database exploration using NeuroBagel
+### NeuroBagel
 
-### [NeuroBagel node installation](./docs/neurobagel/install.md)
+#### [NeuroBagel deployment](./docs/neurobagel/install.md)
 
-> [!IMPORTANT]
-> If **you are the only user of the NeuroBagel node**, we recommend using [VSCode](https://code.visualstudio.com/), with the [Remote Containers extension](https://code.visualstudio.com/docs/remote/containers) installed, and deploy the node using the [precrafted development container](./.devcontainer/devcontainer.json) in this repository.
+#### [NeuroBagel extensions](./docs/neurobagel/extensions.md)
 
-### [Querying the NeuroBagel node](./docs/neurobagel/query.md)
+#### [NeuroBagel management](./docs/neurobagel/manage.md)
 
-### [NeuroBagel node management](./docs/neurobagel/manage.md)
+### NeuroPoly-DB CLI
 
-## NeuroPoly-DB CLI
+#### [NPDB CLI installation](./docs/npdb/install.md)
 
-### [NPDB CLI installation](./docs/npdb/install.md)
+#### [Database ingestion](./docs/npdb/ingestion.md)
 
-### [Database ingestion](./docs/npdb/ingestion.md)
-
-### [Metadata standardization](./docs/npdb/standardization.md)
+#### [Metadata standardization](./docs/npdb/standardization.md)

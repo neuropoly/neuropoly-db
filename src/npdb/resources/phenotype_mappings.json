@@ -45,7 +45,7 @@
       "variable": "nb:Diagnosis",
       "confidence": 0.7,
       "variableType": "Categorical",
-      "aliases": ["group", "condition", "disease_status"],
+      "aliases": ["group", "condition", "disease_status", "tumor_type", "pathology", "phenotype", "pathology_M0", "phenotype_M0"],
       "note": "Moderate confidence; requires semantic validation of categorical values"
     }
   }
