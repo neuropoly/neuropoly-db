@@ -19,7 +19,7 @@
 2. Synchronize the virtual environment with the CLI dependencies :
 
    ```bash
-   uv sync --activate
+   uv sync --active
    ```
 
 ### Assisted annotation and standardization
