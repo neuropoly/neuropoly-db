@@ -42,5 +42,5 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 The exported query results contains an `AccessLink` column that, when possible, will be filled with an URL to download the imaging data associated with each session. **For datasets indexed on `git`, this is not possible.** Instead, use the `npdb download` command line tool with the `--git` option (additionally use the `--git-annex` option if necessary) :
 
 ```bash
-npdb download --git --git-annex <query-results.tsv>
+uv run npdb download --git --git-annex <query-results.tsv>
 ```
