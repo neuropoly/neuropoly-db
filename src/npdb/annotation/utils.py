@@ -22,7 +22,7 @@ def parse_tsv_columns(tsv_path: Path) -> List[str]:
         raise FileNotFoundError(f"TSV file not found: {tsv_path}")
 
     try:
-        with open(tsv_path, 'r', encoding='utf-8') as f:
+        with open(tsv_path, "r", encoding="utf-8") as f:
             header_line = f.readline().strip()
     except Exception as e:
         raise ValueError(f"Failed to read TSV file: {e}")
@@ -30,7 +30,7 @@ def parse_tsv_columns(tsv_path: Path) -> List[str]:
     if not header_line:
         raise ValueError(f"TSV file is empty or has no header: {tsv_path}")
 
-    columns = header_line.split('\t')
+    columns = header_line.split("\t")
     if not columns or all(not c for c in columns):
         raise ValueError(f"No valid columns found in TSV file: {tsv_path}")
 
@@ -58,21 +58,22 @@ def get_unique_values(tsv_path: Path, column_name: str) -> Set[str]:
     columns = parse_tsv_columns(tsv_path)
     if column_name not in columns:
         raise ValueError(
-            f"Column '{column_name}' not found in TSV. Available columns: {columns}")
+            f"Column '{column_name}' not found in TSV. Available columns: {columns}"
+        )
 
     column_index = columns.index(column_name)
     unique_values: Set[str] = set()
 
     try:
-        with open(tsv_path, 'r', encoding='utf-8') as f:
+        with open(tsv_path, "r", encoding="utf-8") as f:
             # Skip header
             f.readline()
             # Read data rows
             for line in f:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 if len(parts) > column_index:
                     value = parts[column_index]
-                    if value and value != 'n/a' and value != 'NA' and value != 'N/A':
+                    if value and value != "n/a" and value != "NA" and value != "N/A":
                         unique_values.add(value)
     except Exception as e:
         raise ValueError(f"Failed to parse column values: {e}")

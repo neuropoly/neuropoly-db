@@ -5,7 +5,6 @@ Provides utilities to find, validate, and manage Playwright selectors.
 Handles fallbacks when primary selectors fail.
 """
 
-
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
@@ -13,6 +12,7 @@ from typing import Dict, List, Optional
 @dataclass
 class LocatorInfo:
     """Metadata for a UI element locator."""
+
     name: str
     primary_selector: str
     fallback_selectors: List[str]
@@ -35,9 +35,9 @@ class LocatorRegistry:
         fallback_selectors=[
             "input[type='file']",
             "[data-testid='file-upload-input']",
-            "label:contains('Upload')~input[type='file']"
+            "label:contains('Upload')~input[type='file']",
         ],
-        description="File upload input for participants.tsv"
+        description="File upload input for participants.tsv",
     )
 
     # Column annotation fields
@@ -47,9 +47,9 @@ class LocatorRegistry:
         fallback_selectors=[
             ".column-annotation-card",
             "[role='region']:has(h3)",
-            "div.annotation-column"
+            "div.annotation-column",
         ],
-        description="Container for column annotation form"
+        description="Container for column annotation form",
     )
 
     COLUMN_DESCRIPTION = LocatorInfo(
@@ -57,40 +57,31 @@ class LocatorRegistry:
         primary_selector="textarea[name='description']",
         fallback_selectors=[
             "input[placeholder*='Description']",
-            "[data-testid='column-description']"
+            "[data-testid='column-description']",
         ],
-        description="Column description textarea"
+        description="Column description textarea",
     )
 
     COLUMN_VARIABLE = LocatorInfo(
         name="column_variable",
         primary_selector="select[name='variable']",
-        fallback_selectors=[
-            "[data-testid='variable-select']",
-            "select:nth-of-type(1)"
-        ],
-        description="Standardized variable selection dropdown"
+        fallback_selectors=["[data-testid='variable-select']", "select:nth-of-type(1)"],
+        description="Standardized variable selection dropdown",
     )
 
     COLUMN_TYPE = LocatorInfo(
         name="column_type",
         primary_selector="select[name='variable_type']",
-        fallback_selectors=[
-            "[data-testid='type-select']",
-            "select:nth-of-type(2)"
-        ],
-        description="Variable type selection (Categorical/Continuous)"
+        fallback_selectors=["[data-testid='type-select']", "select:nth-of-type(2)"],
+        description="Variable type selection (Categorical/Continuous)",
     )
 
     # Value annotation fields
     VALUE_ROWS = LocatorInfo(
         name="value_rows",
         primary_selector="[data-testid='value-mapping-row']",
-        fallback_selectors=[
-            ".value-mapping-row",
-            "div:has(input[name='raw_value'])"
-        ],
-        description="Row container for value mapping"
+        fallback_selectors=[".value-mapping-row", "div:has(input[name='raw_value'])"],
+        description="Row container for value mapping",
     )
 
     VALUE_INPUT = LocatorInfo(
@@ -98,19 +89,16 @@ class LocatorRegistry:
         primary_selector="input[name='raw_value']",
         fallback_selectors=[
             "input[placeholder*='Value']",
-            "[data-testid='raw-value-input']"
+            "[data-testid='raw-value-input']",
         ],
-        description="Raw value input field"
+        description="Raw value input field",
     )
 
     VALUE_TERM = LocatorInfo(
         name="value_term",
         primary_selector="select[name='mapped_term']",
-        fallback_selectors=[
-            "[data-testid='term-select']",
-            "select:has(option)"
-        ],
-        description="Mapped term selection"
+        fallback_selectors=["[data-testid='term-select']", "select:has(option)"],
+        description="Mapped term selection",
     )
 
     # Format fields (for continuous)
@@ -119,9 +107,9 @@ class LocatorRegistry:
         primary_selector="select[name='format']",
         fallback_selectors=[
             "[data-testid='format-select']",
-            "select:contains('FromFloat')"
+            "select:contains('FromFloat')",
         ],
-        description="Format selection for continuous variables"
+        description="Format selection for continuous variables",
     )
 
     UNITS_INPUT = LocatorInfo(
@@ -129,9 +117,9 @@ class LocatorRegistry:
         primary_selector="input[name='units']",
         fallback_selectors=[
             "input[placeholder*='Units']",
-            "[data-testid='units-input']"
+            "[data-testid='units-input']",
         ],
-        description="Units input field"
+        description="Units input field",
     )
 
     # Navigation buttons
@@ -141,9 +129,9 @@ class LocatorRegistry:
         fallback_selectors=[
             "button[aria-label='Next']",
             "[data-testid='next-button']",
-            "button:contains('Next Step')"
+            "button:contains('Next Step')",
         ],
-        description="Next button for step navigation"
+        description="Next button for step navigation",
     )
 
     FINISH_BUTTON = LocatorInfo(
@@ -151,9 +139,9 @@ class LocatorRegistry:
         primary_selector="button:has-text('Finish')",
         fallback_selectors=[
             "button[aria-label='Finish']",
-            "[data-testid='finish-button']"
+            "[data-testid='finish-button']",
         ],
-        description="Finish button on last step"
+        description="Finish button on last step",
     )
 
     DOWNLOAD_BUTTON = LocatorInfo(
@@ -162,9 +150,9 @@ class LocatorRegistry:
         fallback_selectors=[
             "button[aria-label='Download']",
             "[data-testid='download-button']",
-            "a:contains('Download')"
+            "a:contains('Download')",
         ],
-        description="Download results button"
+        description="Download results button",
     )
 
     # All known locators
@@ -237,10 +225,7 @@ class LocatorValidator:
             return False
 
     @staticmethod
-    async def find_working_selector(
-        page,
-        locator_info: LocatorInfo
-    ) -> Optional[str]:
+    async def find_working_selector(page, locator_info: LocatorInfo) -> Optional[str]:
         """
         Find first working selector from primary + fallbacks.
 
@@ -251,8 +236,9 @@ class LocatorValidator:
         Returns:
             First working selector string, or None if all fail.
         """
-        selectors_to_try = [locator_info.primary_selector] + \
-            locator_info.fallback_selectors
+        selectors_to_try = [
+            locator_info.primary_selector
+        ] + locator_info.fallback_selectors
 
         for selector in selectors_to_try:
             try:

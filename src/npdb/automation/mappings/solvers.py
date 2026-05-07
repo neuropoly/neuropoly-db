@@ -7,7 +7,7 @@ Neurobagel standardized variables.
 
 import json
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 
 def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]:
@@ -21,12 +21,14 @@ def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]
         Dictionary of mappings with context and column definitions.
     """
     if resource_path is None:
-        resource_path = Path(__file__).parent.parent.parent / \
-            "resources" / "phenotype_mappings.json"
+        resource_path = (
+            Path(__file__).parent.parent.parent
+            / "resources"
+            / "phenotype_mappings.json"
+        )
 
     if not resource_path.exists():
-        raise FileNotFoundError(
-            f"Phenotype mappings file not found: {resource_path}")
+        raise FileNotFoundError(f"Phenotype mappings file not found: {resource_path}")
 
     with open(resource_path, "r") as f:
         data = json.load(f)
@@ -35,8 +37,7 @@ def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]
 
 
 def merge_mappings(
-    builtin: Dict[str, Any],
-    user_mappings: Optional[Dict[str, Any]] = None
+    builtin: Dict[str, Any], user_mappings: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Merge user-supplied mappings with built-in mappings.

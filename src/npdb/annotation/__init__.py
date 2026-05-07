@@ -1,7 +1,15 @@
-
-from pydantic import BaseModel, Field
+from enum import Enum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class AnnotationMode(str, Enum):
+    MANUAL = "manual"
+    ASSIST = "assist"
+    AUTO = "auto"
+    FULL_AUTO = "full-auto"
 
 
 class AnnotationConfig(BaseModel):
@@ -19,47 +27,46 @@ class AnnotationConfig(BaseModel):
     - Slow network: 600s (10 min)
     - Very slow/large files: 1200s (20 min)
     """
-    mode: Literal["manual", "assist", "auto", "full-auto"] = Field(
-        default="manual",
-        description="Execution mode"
-    )
-    headless: bool = Field(
-        default=True,
-        description="Run browser in headless mode"
-    )
+
+    mode: str = Field(default="manual", description="Execution mode")
+
+    @field_validator("mode")
+    @classmethod
+    def _validate_mode(cls, v: str) -> str:
+        valid = {m.value for m in AnnotationMode}
+        if v not in valid:
+            raise ValueError(f"mode must be one of {sorted(valid)}, got {v!r}")
+        return v
+
+    headless: bool = Field(default=True, description="Run browser in headless mode")
     timeout: int = Field(
         default=300,
-        description="Timeout per automation step (seconds). Applies to each operation with retry."
+        description="Timeout per automation step (seconds). Applies to each operation with retry.",
     )
     artifacts_dir: Optional[Path] = Field(
         default=None,
-        description="Directory for screenshots/traces on failure. Auto-created if provided."
+        description="Directory for screenshots/traces on failure. Auto-created if provided.",
     )
     ai_provider: Optional[str] = Field(
-        default=None,
-        description="AI provider (e.g., 'ollama')"
+        default=None, description="AI provider (e.g., 'ollama')"
     )
     ai_model: Optional[str] = Field(
-        default=None,
-        description="AI model name (e.g., 'neural-chat')"
+        default=None, description="AI model name (e.g., 'neural-chat')"
     )
     phenotype_dictionary: Optional[Path] = Field(
-        default=None,
-        description="Optional user-supplied phenotype dictionary JSON"
+        default=None, description="Optional user-supplied phenotype dictionary JSON"
     )
     dry_run: bool = Field(
-        default=False,
-        description="Print changes to terminal without writing files"
+        default=False, description="Print changes to terminal without writing files"
     )
     keep_annotations: bool = Field(
         default=False,
-        description="Include Neurobagel Annotations block in participants.json output"
+        description="Include Neurobagel Annotations block in participants.json output",
     )
     header_map: Optional[Path] = Field(
         default=None,
-        description="JSON file mapping desired output headers to lists of input variants"
+        description="JSON file mapping desired output headers to lists of input variants",
     )
     no_new_columns: bool = Field(
-        default=False,
-        description="Don't add missing standard columns (e.g., age, sex)"
+        default=False, description="Don't add missing standard columns (e.g., age, sex)"
     )

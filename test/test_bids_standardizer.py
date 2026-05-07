@@ -14,8 +14,6 @@ import json
 import shutil
 from pathlib import Path
 
-import pytest
-
 from npdb.annotation import AnnotationConfig
 from npdb.annotation.standardize import (
     BIDS_VALID_SIDECAR_FIELDS,
@@ -25,11 +23,10 @@ from npdb.annotation.standardize import (
     rename_tsv_headers,
     validate_bids_sidecar,
 )
-from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
-from npdb.managers.bids import BIDSStandardizer
+from npdb.automation.mappings.resolvers import MappingResolver
+from npdb.managers.annotation import BIDSStandardizer
 
-FIXTURES_DIR = Path(__file__).parent / "fixtures" / \
-    "datasets" / "unstandardized_bids"
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / "datasets" / "unstandardized_bids"
 
 
 # ── Helpers ────────────────────────────────────────────────────────
@@ -93,8 +90,7 @@ class TestRenameTsvHeaders:
         )
         tsv = bids / "participants.tsv"
         resolver = MappingResolver()
-        resolved = resolver.resolve_columns(
-            ["participant_id", "my_custom_col"])
+        resolved = resolver.resolve_columns(["participant_id", "my_custom_col"])
         rename_map = rename_tsv_headers(tsv, resolved)
         assert "my_custom_col" not in rename_map
         assert "my_custom_col" in _read_tsv_headers(tsv)
@@ -166,15 +162,17 @@ class TestGenerateParticipantsJson:
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "age", "sex"])
         sidecar = generate_participants_json(
-            tsv, resolved, resolver.mappings,
+            tsv,
+            resolved,
+            resolver.mappings,
             keep_annotations=False,
         )
         for col_name, entry in sidecar.items():
             if isinstance(entry, dict):
                 for field in entry:
-                    assert field in BIDS_VALID_SIDECAR_FIELDS, (
-                        f"Non-BIDS field '{field}' in column '{col_name}'"
-                    )
+                    assert (
+                        field in BIDS_VALID_SIDECAR_FIELDS
+                    ), f"Non-BIDS field '{field}' in column '{col_name}'"
 
     def test_strips_annotations_by_default(self, tmp_path):
         """Annotations block is absent when keep_annotations=False."""
@@ -186,7 +184,9 @@ class TestGenerateParticipantsJson:
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "sex"])
         sidecar = generate_participants_json(
-            tsv, resolved, resolver.mappings,
+            tsv,
+            resolved,
+            resolver.mappings,
             keep_annotations=False,
         )
         for entry in sidecar.values():
@@ -203,7 +203,9 @@ class TestGenerateParticipantsJson:
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "sex"])
         sidecar = generate_participants_json(
-            tsv, resolved, resolver.mappings,
+            tsv,
+            resolved,
+            resolver.mappings,
             keep_annotations=True,
         )
         # sex has mapping data → should have Annotations
@@ -218,15 +220,22 @@ class TestGenerateParticipantsJson:
         tsv = bids / "participants.tsv"
         existing = bids / "participants.json"
         existing.write_text(
-            json.dumps({
-                "age": {"Description": "User-written age description", "Units": "months"}
-            }),
+            json.dumps(
+                {
+                    "age": {
+                        "Description": "User-written age description",
+                        "Units": "months",
+                    }
+                }
+            ),
             encoding="utf-8",
         )
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "age"])
         sidecar = generate_participants_json(
-            tsv, resolved, resolver.mappings,
+            tsv,
+            resolved,
+            resolver.mappings,
             existing_json_path=existing,
         )
         # User-written Description should be preserved (not overwritten)
@@ -282,7 +291,9 @@ class TestBidsFormats:
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["sex"])
         sidecar = generate_participants_json(
-            tsv, resolved, resolver.mappings,
+            tsv,
+            resolved,
+            resolver.mappings,
         )
         levels = sidecar.get("sex", {}).get("Levels", {})
         assert "M" in levels
@@ -321,6 +332,7 @@ class TestDryRun:
         standardizer = BIDSStandardizer(config)
 
         import asyncio
+
         result = asyncio.run(standardizer.execute(input_path=bids))
         assert result is True
 
@@ -346,6 +358,7 @@ class TestEndToEnd:
         standardizer = BIDSStandardizer(config)
 
         import asyncio
+
         result = asyncio.run(standardizer.execute(input_path=bids))
         assert result is True
 
@@ -361,9 +374,9 @@ class TestEndToEnd:
         for col_name, entry in sidecar.items():
             if isinstance(entry, dict):
                 for field in entry:
-                    assert field in BIDS_VALID_SIDECAR_FIELDS, (
-                        f"Non-BIDS field '{field}' in column '{col_name}'"
-                    )
+                    assert (
+                        field in BIDS_VALID_SIDECAR_FIELDS
+                    ), f"Non-BIDS field '{field}' in column '{col_name}'"
 
         # Provenance should exist
         prov_path = bids / "participants_provenance.json"

@@ -4,10 +4,11 @@ Locator inspection and discovery for annotation tool UI elements.
 Provides runtime inspection of page DOM to discover and validate selectors.
 Helps diagnose selector mismatches and find alternative selectors when primary fails.
 """
-from playwright.async_api import Page
 
 import json
 from typing import Any, Dict, List
+
+from playwright.async_api import Page
 
 
 class LocatorInspector:
@@ -111,7 +112,9 @@ class LocatorInspector:
 
         return buttons
 
-    async def find_by_text(self, text: str, selector: str = "input, button, label") -> List[Dict[str, Any]]:
+    async def find_by_text(
+        self, text: str, selector: str = "input, button, label"
+    ) -> List[Dict[str, Any]]:
         """
         Find elements by containing text.
 
@@ -166,11 +169,13 @@ class LocatorInspector:
             inputs = await self.page.query_selector_all("input")
             for inp in inputs[:5]:  # Limit to first 5
                 try:
-                    elements["inputs"].append({
-                        "type": await inp.get_attribute("type"),
-                        "name": await inp.get_attribute("name"),
-                        "visible": await inp.is_visible(),
-                    })
+                    elements["inputs"].append(
+                        {
+                            "type": await inp.get_attribute("type"),
+                            "name": await inp.get_attribute("name"),
+                            "visible": await inp.is_visible(),
+                        }
+                    )
                 except:
                     pass
         except:
@@ -181,10 +186,12 @@ class LocatorInspector:
             textareas = await self.page.query_selector_all("textarea")
             for ta in textareas[:5]:
                 try:
-                    elements["textareas"].append({
-                        "name": await ta.get_attribute("name"),
-                        "visible": await ta.is_visible(),
-                    })
+                    elements["textareas"].append(
+                        {
+                            "name": await ta.get_attribute("name"),
+                            "visible": await ta.is_visible(),
+                        }
+                    )
                 except:
                     pass
         except:
@@ -195,10 +202,12 @@ class LocatorInspector:
             selects = await self.page.query_selector_all("select")
             for sel in selects[:5]:
                 try:
-                    elements["selects"].append({
-                        "name": await sel.get_attribute("name"),
-                        "visible": await sel.is_visible(),
-                    })
+                    elements["selects"].append(
+                        {
+                            "name": await sel.get_attribute("name"),
+                            "visible": await sel.is_visible(),
+                        }
+                    )
                 except:
                     pass
         except:
@@ -209,10 +218,12 @@ class LocatorInspector:
             buttons = await self.page.query_selector_all("button")
             for btn in buttons[:5]:
                 try:
-                    elements["buttons"].append({
-                        "text": await btn.inner_text() or "[EMPTY]",
-                        "visible": await btn.is_visible(),
-                    })
+                    elements["buttons"].append(
+                        {
+                            "text": await btn.inner_text() or "[EMPTY]",
+                            "visible": await btn.is_visible(),
+                        }
+                    )
                 except:
                     pass
         except:
@@ -239,7 +250,7 @@ class LocatorInspector:
                     "selector": selector,
                     "found": False,
                     "count": 0,
-                    "message": "No elements found"
+                    "message": "No elements found",
                 }
 
             first = locator.first
@@ -254,11 +265,7 @@ class LocatorInspector:
                 "enabled": enabled,
             }
         except Exception as e:
-            return {
-                "selector": selector,
-                "found": False,
-                "error": str(e)
-            }
+            return {"selector": selector, "found": False, "error": str(e)}
 
     async def print_page_structure(self) -> str:
         """
@@ -341,7 +348,8 @@ async def diagnose_upload_selector(page: Page) -> str:
         report.append(f"\n  {status} {selector}")
         if result.get("found"):
             report.append(
-                f"     Count: {result['count']}, Visible: {result['visible']}, Enabled: {result['enabled']}")
+                f"     Count: {result['count']}, Visible: {result['visible']}, Enabled: {result['enabled']}"
+            )
         else:
             if result.get("error"):
                 report.append(f"     Error: {result['error']}")

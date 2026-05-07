@@ -4,10 +4,11 @@ Unit tests for mapping_resolver module.
 Tests precedence chain (static → fuzzy → unresolved), caching, and summary generation.
 """
 
-import pytest
-from pathlib import Path
 import json
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
 
@@ -49,8 +50,9 @@ class TestMappingResolver:
         assert result.source == "unresolved"
         assert result.confidence == 0.0
         assert result.mapped_variable == ""
-        assert "no" in result.rationale.lower() and ("static" in result.rationale.lower()
-                                                     or "fuzzy" in result.rationale.lower())
+        assert "no" in result.rationale.lower() and (
+            "static" in result.rationale.lower() or "fuzzy" in result.rationale.lower()
+        )
 
     def test_resolve_column_data_preservation(self, resolver):
         """Test that full mapping data is preserved in result."""
@@ -110,9 +112,9 @@ class TestMappingResolver:
                     "age": {
                         "variable": "nb:Custom",
                         "confidence": 0.99,
-                        "variable_type": "Continuous"
+                        "variable_type": "Continuous",
                     }
-                }
+                },
             }
             json.dump(user_dict, f)
             temp_path = f.name
@@ -139,7 +141,7 @@ class TestResolvedMapping:
             confidence=0.95,
             source="static",
             mapping_data={"variable": "nb:Age"},
-            rationale="Test rationale"
+            rationale="Test rationale",
         )
 
         assert mapping.column_name == "age"
@@ -155,7 +157,7 @@ class TestResolvedMapping:
             confidence=0.0,
             source="unresolved",
             mapping_data={},
-            rationale="No match found"
+            rationale="No match found",
         )
 
         assert mapping.mapped_variable == ""
@@ -204,10 +206,10 @@ class TestResolutionSummary:
 
         # Distribution should sum correctly
         total_dist = (
-            summary["confidence_distribution"]["high"] +
-            summary["confidence_distribution"]["medium"] +
-            summary["confidence_distribution"]["low"] +
-            summary["confidence_distribution"]["unresolved"]
+            summary["confidence_distribution"]["high"]
+            + summary["confidence_distribution"]["medium"]
+            + summary["confidence_distribution"]["low"]
+            + summary["confidence_distribution"]["unresolved"]
         )
         assert total_dist == summary["total_columns"]
 
@@ -218,8 +220,12 @@ class TestResolutionSummary:
         summary = resolver.get_resolution_summary(results)
 
         counts = summary["source_counts"]
-        total = counts["static"] + counts["deterministic"] + \
-            counts["ai"] + counts["unresolved"]
+        total = (
+            counts["static"]
+            + counts["deterministic"]
+            + counts["ai"]
+            + counts["unresolved"]
+        )
         assert total == summary["total_columns"]
 
     def test_resolution_summary_unresolved_list(self, resolver):
@@ -228,7 +234,10 @@ class TestResolutionSummary:
         results = resolver.resolve_columns(columns)
         summary = resolver.get_resolution_summary(results)
 
-        assert "unknown_col_1" in summary["unresolved_columns"] or "unknown_col_2" in summary["unresolved_columns"]
+        assert (
+            "unknown_col_1" in summary["unresolved_columns"]
+            or "unknown_col_2" in summary["unresolved_columns"]
+        )
 
 
 class TestPrecedenceOrder:

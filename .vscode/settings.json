@@ -1,0 +1,37 @@
+{
+  // Python interpreter — use the project venv
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+
+  // Jupyter
+  "jupyter.notebookFileRoot": "${workspaceFolder}",
+
+  // Editor — formatting on save (global + notebooks)
+  "editor.formatOnSave": true,
+  "notebook.formatOnSave.enabled": true,
+
+  // Python-specific editor behaviour
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      // Sort imports with isort on every save
+      "source.organizeImports": "explicit"
+    }
+  },
+
+  // Black formatter args (add project-level overrides here if needed)
+  "black-formatter.args": [],
+
+  // isort — use the black-compatible profile so both tools agree
+  "isort.args": ["--profile", "black"],
+
+  // Pylance type-checking acts as the in-editor linter
+  "python.analysis.typeCheckingMode": "basic",
+
+  // Terminal
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "jupyter.kernels.excludePythonEnvironments": [
+    "${workspaceFolder}/.venv/bin/python"
+  ]
+}

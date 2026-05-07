@@ -32,7 +32,7 @@ class NBAnnotationToolBrowserSession:
         self,
         headless: bool = True,
         timeout: int = 300,
-        artifacts_dir: Optional[Path] = None
+        artifacts_dir: Optional[Path] = None,
     ):
         """
         Initialize browser session configuration.
@@ -62,7 +62,8 @@ class NBAnnotationToolBrowserSession:
                 self.artifacts_dir.mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 raise OSError(
-                    f"Failed to create artifacts directory '{self.artifacts_dir}': {e}") from e
+                    f"Failed to create artifacts directory '{self.artifacts_dir}': {e}"
+                ) from e
 
     async def launch(self) -> None:
         """
@@ -73,9 +74,7 @@ class NBAnnotationToolBrowserSession:
         """
         try:
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.headless
-            )
+            self.browser = await self.playwright.chromium.launch(headless=self.headless)
 
             # Configure context with tracing for artifacts
             context_kwargs = {}
@@ -151,8 +150,7 @@ class NBAnnotationToolBrowserSession:
                     # 5s to become visible
                     await button.first.wait_for(timeout=5000)
                     await button.first.click(timeout=5000)
-                    print(
-                        f"✓ Clicked 'Get Started' button with selector: {selector}")
+                    print(f"✓ Clicked 'Get Started' button with selector: {selector}")
                     await asyncio.sleep(1.0)  # Brief wait for page transition
                     return
             except Exception as e:
@@ -189,25 +187,26 @@ class NBAnnotationToolBrowserSession:
 
         for selector in fallback_selectors:
             try:
-                locator = self.page.locator(selector)
-                # Try to find element with short timeout
-                if await locator.count() > 0:
-                    # Check if it's visible/accessible
-                    first = locator.first
-                    try:
-                        await first.wait_for(timeout=1000)  # Quick check
-                        print(f"✓ Auto-discovered file input: {selector}")
-                        return selector
-                    except:
-                        # Found but not visible, may appear later
-                        print(f"◐ Found input hiding at: {selector}")
-                        return selector
+                if self.page:
+                    locator = self.page.locator(selector)
+                    # Try to find element with short timeout
+                    if await locator.count() > 0:
+                        # Check if it's visible/accessible
+                        first = locator.first
+                        try:
+                            await first.wait_for(timeout=1000)  # Quick check
+                            print(f"✓ Auto-discovered file input: {selector}")
+                            return selector
+                        except:
+                            # Found but not visible, may appear later
+                            print(f"◐ Found input hiding at: {selector}")
+                            return selector
             except:
                 continue
 
         return None
 
-    async def _diagnose_upload_issue(self) -> str:
+    async def _diagnose_upload_issue(self) -> str | None:
         """
         Generate diagnostic info when file upload fails.
 
@@ -216,7 +215,9 @@ class NBAnnotationToolBrowserSession:
         """
         try:
             from npdb.automation.playwright.locator import diagnose_upload_selector
-            return await diagnose_upload_selector(self.page)
+
+            if self.page:
+                return await diagnose_upload_selector(self.page)
         except Exception as e:
             return f"Could not generate diagnosis: {e}"
 
@@ -251,17 +252,19 @@ class NBAnnotationToolBrowserSession:
 
         for selector in fallback_selectors:
             try:
-                locator = self.page.locator(selector)
-                if await locator.count() > 0:
-                    print(
-                        f"✓ Found {file_type.upper()} file input: {selector}")
-                    return selector
+                if self.page:
+                    locator = self.page.locator(selector)
+                    if await locator.count() > 0:
+                        print(f"✓ Found {file_type.upper()} file input: {selector}")
+                        return selector
             except:
                 continue
 
         return None
 
-    async def upload_file(self, file_path: Path, file_type: str = "tsv", selector: Optional[str] = None) -> None:
+    async def upload_file(
+        self, file_path: Path, file_type: str = "tsv", selector: Optional[str] = None
+    ) -> None:
         """
         Upload a file (TSV data or JSON dictionary) with type-aware selector discovery.
 
@@ -297,8 +300,7 @@ class NBAnnotationToolBrowserSession:
             elif suffix == ".json":
                 file_type = "json"
             else:
-                raise ValueError(
-                    f"Unknown file type: {suffix}. Expected .tsv or .json")
+                raise ValueError(f"Unknown file type: {suffix}. Expected .tsv or .json")
 
         # Auto-discover selector if not provided
         if not selector:
@@ -307,7 +309,8 @@ class NBAnnotationToolBrowserSession:
                 selector = discovered
             else:
                 print(
-                    f"⚠ Could not auto-discover {file_type.upper()} file input selector")
+                    f"⚠ Could not auto-discover {file_type.upper()} file input selector"
+                )
                 print(await self._diagnose_upload_issue())
                 raise RuntimeError(
                     f"No {file_type.upper()} file input element found on page. "
@@ -332,22 +335,24 @@ class NBAnnotationToolBrowserSession:
                 # Wait for file to be processed (short wait, not networkidle)
                 await asyncio.sleep(2.0)
 
-                print(
-                    f"✓ {file_type.upper()} upload successful on attempt {attempt}")
+                print(f"✓ {file_type.upper()} upload successful on attempt {attempt}")
                 return
 
             except Exception as e:
                 if attempt < max_attempts:
-                    wait_time = min(1 * (2 ** (attempt - 1)),
-                                    5)  # 1, 2, 5 seconds
+                    wait_time = min(1 * (2 ** (attempt - 1)), 5)  # 1, 2, 5 seconds
                     print(
-                        f"⚠ {file_type.upper()} upload attempt {attempt}/{max_attempts} failed: {e}")
+                        f"⚠ {file_type.upper()} upload attempt {attempt}/{max_attempts} failed: {e}"
+                    )
                     print(f"  Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                 else:
                     print(
-                        f"✗ {file_type.upper()} upload failed after {max_attempts} attempts on selector: {selector}")
-                    print("\n" + await self._diagnose_upload_issue())
+                        f"✗ {file_type.upper()} upload failed after {max_attempts} attempts on selector: {selector}"
+                    )
+                    issue = await self._diagnose_upload_issue()
+                    if issue:
+                        print("\n" + issue)
                     raise RuntimeError(
                         f"Failed to upload {file_type.upper()} file to '{selector}' after {max_attempts} attempts: {e}"
                     ) from e
@@ -376,11 +381,13 @@ class NBAnnotationToolBrowserSession:
                 if attempt < max_attempts:
                     wait_time = min(0.5 * (2 ** (attempt - 1)), 3)
                     print(
-                        f"⚠ Click attempt {attempt}/{max_attempts} failed, retrying in {wait_time}s...")
+                        f"⚠ Click attempt {attempt}/{max_attempts} failed, retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                 else:
                     raise RuntimeError(
-                        f"Failed to click '{selector}' after {max_attempts} attempts: {e}") from e
+                        f"Failed to click '{selector}' after {max_attempts} attempts: {e}"
+                    ) from e
 
     async def fill(self, selector: str, text: str) -> None:
         """
@@ -431,11 +438,13 @@ class NBAnnotationToolBrowserSession:
                 if attempt < max_attempts:
                     wait_time = min(1 * (2 ** (attempt - 1)), 3)
                     print(
-                        f"⚠ Selector not found, attempt {attempt}/{max_attempts}, retrying in {wait_time}s...")
+                        f"⚠ Selector not found, attempt {attempt}/{max_attempts}, retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                 else:
                     raise RuntimeError(
-                        f"Selector not found within timeout: '{selector}'") from e
+                        f"Selector not found within timeout: '{selector}'"
+                    ) from e
 
     async def wait_for_navigation(self) -> None:
         """
@@ -455,7 +464,9 @@ class NBAnnotationToolBrowserSession:
             # Don't fail hard - page might be functional even if load state didn't fire
             print(f"⚠ Warning: Page load state not confirmed: {e}")
 
-    async def wait_for_download(self, expected_filename: Optional[str] = None, timeout: Optional[int] = None) -> Path:
+    async def wait_for_download(
+        self, expected_filename: Optional[str] = None, timeout: Optional[int] = None
+    ) -> Path | None:
         """
         Wait for a file to be downloaded and return its path.
 
@@ -479,8 +490,11 @@ class NBAnnotationToolBrowserSession:
         timeout_ms = timeout if timeout is not None else self.timeout
 
         # Determine download directory
-        download_dir = self.artifacts_dir if self.artifacts_dir else Path.home() / \
-            ".cache" / "npdb-downloads"
+        download_dir = (
+            self.artifacts_dir
+            if self.artifacts_dir
+            else Path.home() / ".cache" / "npdb-downloads"
+        )
         download_dir.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -490,14 +504,14 @@ class NBAnnotationToolBrowserSession:
             start_time = time.time()
             elapsed_ms = 0
 
-            async with self.page.context.expect_download() as download_info_coro:
+            async with self.page.context.expect_download() as download_info_coro:  # type: ignore
                 # Wait for download event (this is set up by caller via click() etc.)
                 # The context manager will capture the download
                 while elapsed_ms < timeout_ms:
                     try:
                         download = await asyncio.wait_for(
                             download_info_coro.value,
-                            timeout=(timeout_ms - elapsed_ms) / 1000.0
+                            timeout=(timeout_ms - elapsed_ms) / 1000.0,
                         )
                         downloaded_path = Path(download.path)
 

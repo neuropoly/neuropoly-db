@@ -7,7 +7,7 @@ which maps known Bagel error patterns to actionable user guidance.
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List
 
 from rich.text import Text
 
@@ -30,9 +30,7 @@ class BagelCLIError(RuntimeError):
     rich_output: Text = field(default_factory=Text)
 
     def __post_init__(self):
-        super().__init__(
-            f"Bagel CLI failed (exit {self.exit_code}): {self.command}"
-        )
+        super().__init__(f"Bagel CLI failed (exit {self.exit_code}): {self.command}")
 
     @classmethod
     def from_result(cls, command: str, exit_code: int, output: str) -> "BagelCLIError":
@@ -48,6 +46,7 @@ class BagelCLIError(RuntimeError):
 # Step helper — create a resolution step dict
 # ---------------------------------------------------------------------------
 
+
 def _step(action: str, detail: str, auto_fixable: bool = False) -> dict:
     """Return a resolution-step dict with action, detail, and auto_fixable flag."""
     return {"action": action, "detail": detail, "auto_fixable": auto_fixable}
@@ -59,9 +58,7 @@ def _step(action: str, detail: str, auto_fixable: bool = False) -> dict:
 # fix_steps is now a list of dicts: {action, detail, auto_fixable}
 # ---------------------------------------------------------------------------
 
-_PATTERN_REGISTRY: List[
-    tuple[re.Pattern, str, str, List[dict]]
-] = [
+_PATTERN_REGISTRY: List[tuple[re.Pattern, str, str, List[dict]]] = [
     (
         re.compile(r"missing from the phenotypic table", re.IGNORECASE),
         "Missing annotated columns",
@@ -375,9 +372,8 @@ def classify_bagel_error(plain_text: str) -> List[dict]:
     # bids2tsv crash: BIDS validation started but did not complete successfully.
     # Detected by the presence of the BIDS directory banner without the
     # "BIDS validation passed" confirmation line.
-    if (
-        re.search(r"Input BIDS directory:", plain_text, re.IGNORECASE)
-        and not re.search(r"BIDS validation passed", plain_text, re.IGNORECASE)
+    if re.search(r"Input BIDS directory:", plain_text, re.IGNORECASE) and not re.search(
+        r"BIDS validation passed", plain_text, re.IGNORECASE
     ):
         results.append(
             {

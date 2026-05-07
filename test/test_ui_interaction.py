@@ -4,8 +4,9 @@ Unit tests for ui_interaction module.
 Tests annotation data building and form filler actions.
 """
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from npdb.automation.mappings.resolvers import ResolvedMapping
 from npdb.automation.playwright.resolver import (
@@ -13,7 +14,7 @@ from npdb.automation.playwright.resolver import (
     ColumnAnnotationData,
     FormatAnnotationData,
     FormFillerActions,
-    ValueAnnotationData
+    ValueAnnotationData,
 )
 
 
@@ -27,7 +28,7 @@ class TestColumnAnnotationData:
             variable="nb:Age",
             variable_type="Continuous",
             format="nb:FromFloat",
-            confidence=0.95
+            confidence=0.95,
         )
 
         assert data.column_name == "age"
@@ -55,7 +56,7 @@ class TestValueAnnotationData:
             column_index=1,
             raw_value="M",
             mapped_term="snomed:248153007",
-            mapped_label="Male"
+            mapped_label="Male",
         )
 
         assert data.column_index == 1
@@ -66,9 +67,7 @@ class TestValueAnnotationData:
     def test_missing_value(self):
         """Test missing value marker."""
         data = ValueAnnotationData(
-            column_index=0,
-            raw_value="NA",
-            is_missing_value=True
+            column_index=0, raw_value="NA", is_missing_value=True
         )
 
         assert data.is_missing_value is True
@@ -84,7 +83,7 @@ class TestFormatAnnotationData:
             column_index=0,
             format="nb:FromFloat",
             units="years",
-            missing_values=["NA", "N/A"]
+            missing_values=["NA", "N/A"],
         )
 
         assert data.column_index == 0
@@ -111,17 +110,11 @@ class TestAnnotationUIBuilder:
             mapped_variable="nb:Age",
             confidence=0.95,
             source="static",
-            mapping_data={
-                "variable_type": "Continuous",
-                "format": "nb:FromFloat"
-            },
-            rationale="Static dict match"
+            mapping_data={"variable_type": "Continuous", "format": "nb:FromFloat"},
+            rationale="Static dict match",
         )
 
-        annotation = AnnotationUIBuilder.build_column_annotation(
-            "age",
-            resolved
-        )
+        annotation = AnnotationUIBuilder.build_column_annotation("age", resolved)
 
         assert annotation.column_name == "age"
         assert annotation.variable == "nb:Age"
@@ -136,13 +129,11 @@ class TestAnnotationUIBuilder:
             confidence=0.9,
             source="static",
             mapping_data={"variable_type": ""},
-            rationale=""
+            rationale="",
         )
 
         annotation = AnnotationUIBuilder.build_column_annotation(
-            "sex",
-            resolved,
-            unique_values=["M", "F", "O"]
+            "sex", resolved, unique_values=["M", "F", "O"]
         )
 
         assert annotation.variable_type == "Categorical"
@@ -155,14 +146,12 @@ class TestAnnotationUIBuilder:
             confidence=0.5,
             source="unresolved",
             mapping_data={"variable_type": ""},
-            rationale=""
+            rationale="",
         )
 
         many_values = [str(i) for i in range(100)]
         annotation = AnnotationUIBuilder.build_column_annotation(
-            "score",
-            resolved,
-            unique_values=many_values
+            "score", resolved, unique_values=many_values
         )
 
         assert annotation.variable_type == "Continuous"
@@ -172,14 +161,12 @@ class TestAnnotationUIBuilder:
         mapping_data = {
             "levels": {
                 "M": {"termURL": "snomed:248153007", "label": "Male"},
-                "F": {"termURL": "snomed:248152002", "label": "Female"}
+                "F": {"termURL": "snomed:248152002", "label": "Female"},
             }
         }
 
         values = AnnotationUIBuilder.build_value_annotations(
-            column_index=1,
-            unique_values=["M", "F"],
-            mapping_data=mapping_data
+            column_index=1, unique_values=["M", "F"], mapping_data=mapping_data
         )
 
         assert len(values) == 2
@@ -193,9 +180,7 @@ class TestAnnotationUIBuilder:
         mapping_data = {"levels": {}}
 
         values = AnnotationUIBuilder.build_value_annotations(
-            column_index=0,
-            unique_values=["A", "B"],
-            mapping_data=mapping_data
+            column_index=0, unique_values=["A", "B"], mapping_data=mapping_data
         )
 
         assert len(values) == 2
@@ -205,18 +190,15 @@ class TestAnnotationUIBuilder:
 
     def test_build_format_annotation(self):
         """Test building format annotation."""
-        mapping_data = {
-            "format": "nb:FromBounded",
-            "missing_values": ["NA", "-999"]
-        }
+        mapping_data = {"format": "nb:FromBounded", "missing_values": ["NA", "-999"]}
 
         format_ann = AnnotationUIBuilder.build_format_annotation(
-            column_index=0,
-            mapping_data=mapping_data
+            column_index=0, mapping_data=mapping_data
         )
 
         assert format_ann.column_index == 0
         assert format_ann.format == "nb:FromBounded"
+        assert format_ann.missing_values is not None
         assert "NA" in format_ann.missing_values
 
     def test_build_format_annotation_defaults(self):
@@ -224,8 +206,7 @@ class TestAnnotationUIBuilder:
         mapping_data = {}
 
         format_ann = AnnotationUIBuilder.build_format_annotation(
-            column_index=2,
-            mapping_data=mapping_data
+            column_index=2, mapping_data=mapping_data
         )
 
         assert format_ann.column_index == 2
@@ -248,7 +229,7 @@ class TestFormFillerActions:
             column_name="age",
             description="Age in years",
             variable="nb:Age",
-            variable_type="Continuous"
+            variable_type="Continuous",
         )
 
         await FormFillerActions.fill_column_annotation(mock_session, data)
@@ -279,15 +260,11 @@ class TestFormFillerActions:
 
         values = [
             ValueAnnotationData(
-                column_index=0,
-                raw_value="M",
-                mapped_term="snomed:248153007"
+                column_index=0, raw_value="M", mapped_term="snomed:248153007"
             ),
             ValueAnnotationData(
-                column_index=0,
-                raw_value="F",
-                mapped_term="snomed:248152002"
-            )
+                column_index=0, raw_value="F", mapped_term="snomed:248152002"
+            ),
         ]
 
         await FormFillerActions.fill_value_annotations(mock_session, values)
@@ -314,11 +291,7 @@ class TestFormFillerActions:
         mock_session.select_option = AsyncMock()
         mock_session.fill = AsyncMock()
 
-        fmt = FormatAnnotationData(
-            column_index=0,
-            format="nb:FromFloat",
-            units="years"
-        )
+        fmt = FormatAnnotationData(column_index=0, format="nb:FromFloat", units="years")
 
         await FormFillerActions.fill_format_annotation(mock_session, fmt)
 
@@ -342,9 +315,7 @@ class TestFormFillerActions:
         mock_session.fill = AsyncMock()
 
         fmt = FormatAnnotationData(
-            column_index=0,
-            format="nb:FromBounded",
-            units=""  # Empty units
+            column_index=0, format="nb:FromBounded", units=""  # Empty units
         )
 
         await FormFillerActions.fill_format_annotation(mock_session, fmt)
@@ -362,9 +333,7 @@ class TestEdgeCases:
     def test_build_value_annotations_empty_list(self):
         """Test with empty unique values."""
         values = AnnotationUIBuilder.build_value_annotations(
-            column_index=0,
-            unique_values=[],
-            mapping_data={}
+            column_index=0, unique_values=[], mapping_data={}
         )
 
         assert values == []
@@ -373,9 +342,7 @@ class TestEdgeCases:
         """Test with many unique values."""
         many_values = [f"val_{i}" for i in range(1000)]
         values = AnnotationUIBuilder.build_value_annotations(
-            column_index=0,
-            unique_values=many_values,
-            mapping_data={}
+            column_index=0, unique_values=many_values, mapping_data={}
         )
 
         assert len(values) == 1000
@@ -388,13 +355,10 @@ class TestEdgeCases:
             confidence=0.0,
             source="unresolved",
             mapping_data={},  # Empty
-            rationale=""
+            rationale="",
         )
 
-        annotation = AnnotationUIBuilder.build_column_annotation(
-            "x",
-            resolved
-        )
+        annotation = AnnotationUIBuilder.build_column_annotation("x", resolved)
 
         assert annotation.column_name == "x"
         assert annotation.format == ""

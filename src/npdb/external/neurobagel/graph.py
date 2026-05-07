@@ -7,8 +7,8 @@ without requiring container restart.
 
 import json
 import logging
-from pathlib import Path
 from base64 import b64encode
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -54,7 +54,8 @@ class GraphUpdater:
         """Build HTTP Basic Auth header if credentials are provided."""
         if self.username and self.password:
             credentials = b64encode(
-                f"{self.username}:{self.password}".encode()).decode()
+                f"{self.username}:{self.password}".encode()
+            ).decode()
             return {"Authorization": f"Basic {credentials}"}
         return None
 
@@ -104,8 +105,7 @@ class GraphUpdater:
             response.raise_for_status()
 
             if verbose:
-                logger.info(
-                    f"✓ Successfully uploaded {jsonld_path.name} to GraphDB")
+                logger.info(f"✓ Successfully uploaded {jsonld_path.name} to GraphDB")
             return True
 
         except httpx.HTTPStatusError as e:
@@ -165,9 +165,7 @@ class GraphUpdater:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
 
             if verbose:
-                logger.info(
-                    f"✓ Updated datasets_metadata.json with {dataset_uuid}"
-                )
+                logger.info(f"✓ Updated datasets_metadata.json with {dataset_uuid}")
             return True
 
         except (json.JSONDecodeError, IOError) as e:
@@ -243,5 +241,6 @@ class GraphUpdater:
 
         logger.info(f"✅ Hot-reload complete for {dataset_uuid}")
         logger.info(
-            "   Graph updated without restart. Dataset should be queryable now.")
+            "   Graph updated without restart. Dataset should be queryable now."
+        )
         return True

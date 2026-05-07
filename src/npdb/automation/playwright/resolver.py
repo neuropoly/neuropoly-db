@@ -4,6 +4,7 @@ UI interaction helpers for annotation tool form filling.
 Handles column annotation, value annotation, and format specification.
 Bridges MappingResolver results to Playwright form inputs.
 """
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -13,6 +14,7 @@ from npdb.automation.mappings.resolvers import ResolvedMapping
 @dataclass
 class ColumnAnnotationData:
     """Data for annotating a single column."""
+
     column_name: str
     description: str = ""
     variable: str = ""  # e.g., "nb:Age"
@@ -25,6 +27,7 @@ class ColumnAnnotationData:
 @dataclass
 class ValueAnnotationData:
     """Data for annotating a single categorical value."""
+
     column_index: int
     raw_value: str
     mapped_term: str = ""  # e.g., "snomed:248153007"
@@ -35,10 +38,11 @@ class ValueAnnotationData:
 @dataclass
 class FormatAnnotationData:
     """Data for continuous variable format specification."""
+
     column_index: int
     format: str = "nb:FromFloat"
     units: str = ""
-    missing_values: List[str] = None  # e.g., ["NA", "N/A", "-999"]
+    missing_values: List[str] | None = None  # e.g., ["NA", "N/A", "-999"]
 
 
 class AnnotationUIBuilder:
@@ -52,7 +56,7 @@ class AnnotationUIBuilder:
     def build_column_annotation(
         column_name: str,
         resolved_mapping: ResolvedMapping,
-        unique_values: Optional[List[str]] = None
+        unique_values: Optional[List[str]] = None,
     ) -> ColumnAnnotationData:
         """
         Build column annotation data from resolver result.
@@ -82,14 +86,12 @@ class AnnotationUIBuilder:
             variable_type=variable_type,
             format=resolved_mapping.mapping_data.get("format", ""),
             confidence=resolved_mapping.confidence,
-            description=""  # To be filled by user or AI
+            description="",  # To be filled by user or AI
         )
 
     @staticmethod
     def build_value_annotations(
-        column_index: int,
-        unique_values: List[str],
-        mapping_data: Dict[str, Any]
+        column_index: int, unique_values: List[str], mapping_data: Dict[str, Any]
     ) -> List[ValueAnnotationData]:
         """
         Build value annotation data for categorical column.
@@ -108,20 +110,21 @@ class AnnotationUIBuilder:
         for value_idx, raw_value in enumerate(unique_values):
             term_mapping = levels.get(raw_value, {})
 
-            annotations.append(ValueAnnotationData(
-                column_index=column_index,
-                raw_value=raw_value,
-                mapped_term=term_mapping.get("termURL", ""),
-                mapped_label=term_mapping.get("label", raw_value),
-                is_missing_value=False
-            ))
+            annotations.append(
+                ValueAnnotationData(
+                    column_index=column_index,
+                    raw_value=raw_value,
+                    mapped_term=term_mapping.get("termURL", ""),
+                    mapped_label=term_mapping.get("label", raw_value),
+                    is_missing_value=False,
+                )
+            )
 
         return annotations
 
     @staticmethod
     def build_format_annotation(
-        column_index: int,
-        mapping_data: Dict[str, Any]
+        column_index: int, mapping_data: Dict[str, Any]
     ) -> FormatAnnotationData:
         """
         Build format annotation for continuous variable.
@@ -137,7 +140,7 @@ class AnnotationUIBuilder:
             column_index=column_index,
             format=mapping_data.get("format", "nb:FromFloat"),
             units="",  # To be filled by user or AI
-            missing_values=mapping_data.get("missing_values", [])
+            missing_values=mapping_data.get("missing_values", []),
         )
 
 
@@ -150,8 +153,7 @@ class FormFillerActions:
 
     @staticmethod
     async def fill_column_annotation(
-        browser_session,
-        column_annotation: ColumnAnnotationData
+        browser_session, column_annotation: ColumnAnnotationData
     ) -> None:
         """
         Fill column annotation form fields.
@@ -163,22 +165,18 @@ class FormFillerActions:
         from npdb.annotation.automation import AnnotationUIPatterns as UI
 
         await browser_session.fill(
-            UI.COLUMN_DESCRIPTION_INPUT,
-            column_annotation.description
+            UI.COLUMN_DESCRIPTION_INPUT, column_annotation.description
         )
         await browser_session.select_option(
-            UI.COLUMN_VARIABLE_SELECT,
-            column_annotation.variable
+            UI.COLUMN_VARIABLE_SELECT, column_annotation.variable
         )
         await browser_session.select_option(
-            UI.COLUMN_TYPE_SELECT,
-            column_annotation.variable_type
+            UI.COLUMN_TYPE_SELECT, column_annotation.variable_type
         )
 
     @staticmethod
     async def fill_value_annotations(
-        browser_session,
-        value_annotations: List[ValueAnnotationData]
+        browser_session, value_annotations: List[ValueAnnotationData]
     ) -> None:
         """
         Fill value annotation form for categorical column.
@@ -192,18 +190,15 @@ class FormFillerActions:
         for idx, annotation in enumerate(value_annotations):
             selector = UI.get_value_mapping_row(annotation.column_index, idx)
             await browser_session.fill(
-                f"{selector} {UI.VALUE_INPUT}",
-                annotation.raw_value
+                f"{selector} {UI.VALUE_INPUT}", annotation.raw_value
             )
             await browser_session.select_option(
-                f"{selector} {UI.VALUE_TERM_SELECT}",
-                annotation.mapped_term
+                f"{selector} {UI.VALUE_TERM_SELECT}", annotation.mapped_term
             )
 
     @staticmethod
     async def fill_format_annotation(
-        browser_session,
-        format_annotation: FormatAnnotationData
+        browser_session, format_annotation: FormatAnnotationData
     ) -> None:
         """
         Fill format annotation for continuous variable.
@@ -214,22 +209,16 @@ class FormFillerActions:
         """
         from npdb.annotation.automation import AnnotationUIPatterns as UI
 
-        await browser_session.select_option(
-            UI.FORMAT_SELECT,
-            format_annotation.format
-        )
+        await browser_session.select_option(UI.FORMAT_SELECT, format_annotation.format)
         if format_annotation.units:
-            await browser_session.fill(
-                UI.UNITS_INPUT,
-                format_annotation.units
-            )
+            await browser_session.fill(UI.UNITS_INPUT, format_annotation.units)
 
     @staticmethod
     async def download_export_file(
         browser_session,
         expected_filename: str = "phenotypes_annotations.json",
         dataset_name: str = "",
-        timeout: int = 30000
+        timeout: int = 30000,
     ) -> None:
         """
         Click export button and wait for file download.
@@ -261,6 +250,7 @@ class FormFillerActions:
             # This is a simplified version that just waits for the click to trigger download
             # In production, would integrate event-based download detection
             import asyncio
+
             await asyncio.sleep(2.0)  # Allow time for download to start
 
             print(f"✓ Export download initiated")

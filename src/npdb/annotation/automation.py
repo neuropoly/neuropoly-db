@@ -4,6 +4,7 @@ Annotation tool step management and navigation.
 Detects current step in Neurobagel annotation workflow and routes to handlers.
 Steps: upload → column annotation → value annotation → export.
 """
+
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -11,6 +12,7 @@ from typing import Optional
 
 class AnnotationStep(Enum):
     """Annotation workflow steps."""
+
     UPLOAD = "upload"
     COLUMN_ANNOTATION = "column_annotation"
     VALUE_ANNOTATION = "value_annotation"
@@ -21,6 +23,7 @@ class AnnotationStep(Enum):
 @dataclass
 class StepInfo:
     """Information about current annotation step."""
+
     step: AnnotationStep
     title: str
     description: str
@@ -42,28 +45,28 @@ class StepNavigator:
             title="Upload Data",
             description="Upload TSV file and optional phenotype dictionary",
             next_button_selector="button:has-text('Next')",
-            content_area_selector="[data-testid='upload-step']"
+            content_area_selector="[data-testid='upload-step']",
         ),
         AnnotationStep.COLUMN_ANNOTATION: StepInfo(
             step=AnnotationStep.COLUMN_ANNOTATION,
             title="Annotate Columns",
             description="Describe columns and map to standardized variables",
             next_button_selector="button:has-text('Next')",
-            content_area_selector="[data-testid='column-step']"
+            content_area_selector="[data-testid='column-step']",
         ),
         AnnotationStep.VALUE_ANNOTATION: StepInfo(
             step=AnnotationStep.VALUE_ANNOTATION,
             title="Annotate Values",
             description="Map categorical values and define continuous formats",
             next_button_selector="button:has-text('Finish')",
-            content_area_selector="[data-testid='value-step']"
+            content_area_selector="[data-testid='value-step']",
         ),
         AnnotationStep.EXPORT: StepInfo(
             step=AnnotationStep.EXPORT,
             title="Export Results",
             description="Download phenotypes.json and phenotypes_annotations.json",
             next_button_selector="button:has-text('Download')",
-            content_area_selector="[data-testid='export-step']"
+            content_area_selector="[data-testid='export-step']",
         ),
     }
 
@@ -128,7 +131,9 @@ class AnnotationUIPatterns:
     # Format selectors (for continuous variables)
     FORMAT_SELECT = "select[name='format']"
     UNITS_INPUT = "input[placeholder='Units (optional)']"
-    MISSING_VALUES_INPUT = "textarea[placeholder='Missing value indicators (comma-separated)']"
+    MISSING_VALUES_INPUT = (
+        "textarea[placeholder='Missing value indicators (comma-separated)']"
+    )
 
     # Export selectors
     DOWNLOAD_BUTTON = "button:has-text('Download')"

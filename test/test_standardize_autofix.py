@@ -9,17 +9,17 @@ Tests for auto-fix functions in npdb.annotation.standardize:
 
 import csv
 import json
-import pytest
 from pathlib import Path
 
-from npdb.annotation.standardize import (
-    fix_single_column_tsv,
-    dedup_participant_ids,
-    auto_add_missing_value_sentinels,
-    load_categorical_terms,
-    fix_missing_levels,
-)
+import pytest
 
+from npdb.annotation.standardize import (
+    auto_add_missing_value_sentinels,
+    dedup_participant_ids,
+    fix_missing_levels,
+    fix_single_column_tsv,
+    load_categorical_terms,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers

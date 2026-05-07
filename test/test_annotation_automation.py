@@ -1,7 +1,7 @@
 import pytest
 
 from npdb.annotation import AnnotationConfig
-from npdb.managers.neurobagel import NeurobagelAnnotator
+from npdb.managers.annotation import NeurobagelAnnotator
 
 
 class TestAnnotationConfig:
@@ -23,9 +23,7 @@ class TestAnnotationConfig:
     def test_config_with_ai_provider(self):
         """Test config with AI provider settings."""
         config = AnnotationConfig(
-            mode="assist",
-            ai_provider="ollama",
-            ai_model="neural-chat"
+            mode="assist", ai_provider="ollama", ai_model="neural-chat"
         )
         assert config.ai_provider == "ollama"
         assert config.ai_model == "neural-chat"
@@ -42,10 +40,7 @@ class TestAnnotationManager:
 
     def test_manager_rejects_ai_in_manual_mode(self):
         """Test that AI config is rejected in manual mode."""
-        config = AnnotationConfig(
-            mode="manual",
-            ai_provider="ollama"
-        )
+        config = AnnotationConfig(mode="manual", ai_provider="ollama")
         with pytest.raises(ValueError):
             NeurobagelAnnotator(config)
 

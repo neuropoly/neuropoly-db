@@ -6,9 +6,9 @@ break existing CLI functionality.
 """
 
 from typer.testing import CliRunner
-from npdb.cli import npdb
-from npdb.annotation import AnnotationConfig
 
+from npdb.annotation import AnnotationConfig
+from npdb.cli.cli import npdb
 
 runner = CliRunner()
 
@@ -31,7 +31,9 @@ class TestCLIStructure:
         result = runner.invoke(npdb, ["--help"])
         assert result.exit_code == 0
         # CRITICAL: Must show "COMMAND" in usage, not just options
-        assert "COMMAND" in result.stdout, "CLI help should show command hierarchy, not flatten to options"
+        assert (
+            "COMMAND" in result.stdout
+        ), "CLI help should show command hierarchy, not flatten to options"
         # Must list Commands section
         assert "Commands" in result.stdout, "CLI help must show Commands section"
 
@@ -80,7 +82,10 @@ class TestCLIArgumentParsing:
         """Test that phenotype-dict flag exists."""
         result = runner.invoke(npdb, ["gitea2bagel", "--help"])
         if result.exit_code == 0:
-            assert "--phenotype-dict" in result.stdout or "phenotype" in result.stdout.lower()
+            assert (
+                "--phenotype-dict" in result.stdout
+                or "phenotype" in result.stdout.lower()
+            )
 
 
 class TestCLINoRegressions:
@@ -134,8 +139,7 @@ class TestStandardizeSubcommand:
 
     def test_standardize_bids_missing_dir(self):
         """Test error when BIDS dir doesn't exist."""
-        result = runner.invoke(
-            npdb, ["standardize", "bids", "/nonexistent/path"])
+        result = runner.invoke(npdb, ["standardize", "bids", "/nonexistent/path"])
         assert result.exit_code != 0
 
     def test_gitea2bagel_annotation_modes_accepted(self):
@@ -156,13 +160,15 @@ class TestStandardizeSubcommand:
 
     def test_cli_imports_correctly(self):
         """Test that CLI module imports without errors."""
-        from npdb.cli import npdb, gitea2bagel
+        from npdb.cli.cli import gitea2bagel, npdb
+
         assert npdb is not None
         assert callable(gitea2bagel)
 
     def test_annotation_config_available_in_cli(self):
         """Test that AnnotationConfig is available in CLI."""
-        from npdb.managers.neurobagel import NeurobagelAnnotator
+        from npdb.managers.annotation import NeurobagelAnnotator
+
         assert NeurobagelAnnotator is not None
         assert AnnotationConfig is not None
 

@@ -1,13 +1,14 @@
-import pytest
 from datetime import datetime
 
-from npdb.annotation.provenance import (
-    ProvenanceReport,
+import pytest
+
+from npdb.report.provenance import (
     ColumnProvenance,
+    ProvenanceReport,
     add_column_provenance,
     add_warning,
-    save_provenance,
     load_provenance,
+    save_provenance,
 )
 
 
@@ -21,7 +22,7 @@ class TestColumnProvenance:
             source="static",
             confidence=0.95,
             variable="nb:Age",
-            rationale="Found in built-in dictionary"
+            rationale="Found in built-in dictionary",
         )
         assert prov.column_name == "age"
         assert prov.source == "static"
@@ -36,7 +37,7 @@ class TestColumnProvenance:
             variable="nb:Diagnosis",
             rationale="Inferred from column values",
             ai_model="ollama/neural-chat",
-            ai_model_version="1.2"
+            ai_model_version="1.2",
         )
         assert prov.source == "ai"
         assert prov.ai_model == "ollama/neural-chat"
@@ -58,7 +59,7 @@ class TestProvenanceReport:
             mode="full-auto",
             ai_provider="ollama",
             ai_model="neural-chat",
-            ai_threshold=0.5
+            ai_threshold=0.5,
         )
         assert report.mode == "full-auto"
         assert report.ai_provider == "ollama"
@@ -77,7 +78,7 @@ class TestAddColumnProvenance:
             source="static",
             confidence=0.95,
             variable="nb:Age",
-            rationale="Built-in mapping"
+            rationale="Built-in mapping",
         )
 
         assert "age" in report.per_column
@@ -94,7 +95,7 @@ class TestAddColumnProvenance:
             confidence=0.72,
             variable="nb:Diagnosis",
             rationale="AI inference",
-            ai_model="ollama/neural-chat"
+            ai_model="ollama/neural-chat",
         )
 
         assert report.mapping_source_counts["ai"] == 1
@@ -105,12 +106,15 @@ class TestAddColumnProvenance:
         """Test adding multiple columns and verifying source counts."""
         report = ProvenanceReport(mode="auto")
 
-        add_column_provenance(report, "id", "static", 1.0,
-                              "nb:ParticipantID", rationale="Static")
-        add_column_provenance(report, "age", "deterministic",
-                              0.82, "nb:Age", rationale="Fuzzy")
-        add_column_provenance(report, "diag", "ai", 0.65,
-                              "nb:Diagnosis", rationale="AI")
+        add_column_provenance(
+            report, "id", "static", 1.0, "nb:ParticipantID", rationale="Static"
+        )
+        add_column_provenance(
+            report, "age", "deterministic", 0.82, "nb:Age", rationale="Fuzzy"
+        )
+        add_column_provenance(
+            report, "diag", "ai", 0.65, "nb:Diagnosis", rationale="AI"
+        )
 
         assert report.mapping_source_counts["static"] == 1
         assert report.mapping_source_counts["deterministic"] == 1
@@ -172,3 +176,105 @@ class TestProvenanceSerialization:
         """Test error when loading non-existent provenance file."""
         with pytest.raises(FileNotFoundError):
             load_provenance(tmp_path / "nonexistent.json")
+
+
+# ---------------------------------------------------------------------------
+# Observer isolation and LedgerObserver tests
+# ---------------------------------------------------------------------------
+
+
+class TestObserverIsolation:
+    """Extra observers must not corrupt the ProvenanceReport."""
+
+    def _make_resolved_mapping(self, col: str):
+        from npdb.automation.mappings.resolvers import ResolvedMapping
+
+        return ResolvedMapping(
+            column_name=col,
+            mapped_variable="nb:Age",
+            source="static",
+            confidence=0.95,
+            rationale="test",
+            mapping_data={},
+        )
+
+    def test_extra_observer_does_not_duplicate_provenance(self):
+        """Registering a no-op extra observer must not double-write provenance."""
+        from npdb.report.observers import ProvenanceObserver
+
+        report = ProvenanceReport(mode="manual")
+        obs = ProvenanceObserver(report)
+        mapping = self._make_resolved_mapping("age")
+
+        # Simulate two observers but only ProvenanceObserver writes provenance
+        obs.on_resolved("age", mapping)
+
+        class NoopObserver:
+            def on_resolved(self, col, m):
+                pass
+
+            def on_warning(self, msg):
+                pass
+
+        noop = NoopObserver()
+        noop.on_resolved("age", mapping)  # must not add a second entry
+
+        assert len(report.per_column) == 1
+
+    def test_warning_observer_isolation(self):
+        """Warnings from extra observers must not leak into unrelated ProvenanceReports."""
+        from npdb.report.observers import ProvenanceObserver
+
+        report_a = ProvenanceReport(mode="auto")
+        report_b = ProvenanceReport(mode="auto")
+        obs_a = ProvenanceObserver(report_a)
+        obs_b = ProvenanceObserver(report_b)
+
+        obs_a.on_warning("warn-for-a")
+
+        assert "warn-for-a" in report_a.warnings
+        assert "warn-for-a" not in report_b.warnings
+
+
+class TestLedgerObserver:
+    """LedgerObserver forwards warnings to RunLedger but does not write provenance."""
+
+    def test_warning_forwarded_to_ledger(self):
+        from npdb.report import LedgerObserver, RunLedger
+
+        ledger = RunLedger()
+        obs = LedgerObserver(ledger)
+        obs.on_warning("column 'foo' below confidence threshold")
+
+        assert len(ledger.warnings) == 1
+        assert "foo" in ledger.warnings[0]
+
+    def test_on_resolved_is_noop(self):
+        """on_resolved must not raise and must not modify the ledger."""
+        from npdb.automation.mappings.resolvers import ResolvedMapping
+        from npdb.report import LedgerObserver, RunLedger
+
+        ledger = RunLedger()
+        obs = LedgerObserver(ledger)
+        mapping = ResolvedMapping(
+            column_name="sex",
+            mapped_variable="nb:Sex",
+            source="static",
+            confidence=1.0,
+            rationale="exact match",
+            mapping_data={},
+        )
+        obs.on_resolved("sex", mapping)
+
+        assert ledger.warnings == []
+        assert ledger.errors == []
+
+    def test_multiple_warnings_accumulated(self):
+        from npdb.report import LedgerObserver, RunLedger
+
+        ledger = RunLedger()
+        obs = LedgerObserver(ledger)
+        for i in range(5):
+            obs.on_warning(f"warning {i}")
+
+        assert len(ledger.warnings) == 5

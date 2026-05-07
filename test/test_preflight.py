@@ -5,19 +5,20 @@ Tests for pre-flight check functions in npdb.managers:
     extra_suffix_map, PreflightError raised correctly
 """
 
-import pytest
 from pathlib import Path
 
-from npdb.managers import (
-    check_bids_suffixes,
-    PreflightError,
-    BAGEL_SUPPORTED_SUFFIXES,
-)
+import pytest
 
+from npdb.annotation.preflight import (
+    PreflightError,
+    check_bids_suffixes,
+)
+from npdb.external.neurobagel.schema import BAGEL_SUPPORTED_SUFFIXES
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _create_nii(bids_dir: Path, relative_path: str) -> Path:
     """Create a zero-byte .nii or .nii.gz file in the BIDS directory."""
@@ -30,6 +31,7 @@ def _create_nii(bids_dir: Path, relative_path: str) -> Path:
 # ===========================================================================
 # PreflightError
 # ===========================================================================
+
 
 class TestPreflightError:
 
@@ -81,6 +83,7 @@ class TestPreflightError:
 # ===========================================================================
 # check_bids_suffixes
 # ===========================================================================
+
 
 class TestCheckBidsSuffixes:
 
@@ -180,13 +183,17 @@ class TestCheckBidsSuffixes:
         _create_nii(tmp_path, "sub-01/anat/sub-01_TEM.nii.gz")
         extra = {"TEM": "nb:TransmissionElectronMicroscopy"}
         # Must not raise
-        supported, unsupported = check_bids_suffixes(str(tmp_path), extra_suffix_map=extra)
+        supported, unsupported = check_bids_suffixes(
+            str(tmp_path), extra_suffix_map=extra
+        )
         assert "TEM" in supported
 
     def test_extra_suffix_treated_as_supported(self, tmp_path):
         _create_nii(tmp_path, "sub-01/anat/sub-01_BF.nii.gz")
         extra = {"BF": "nb:BrightFieldMicroscopy"}
-        supported, unsupported = check_bids_suffixes(str(tmp_path), extra_suffix_map=extra)
+        supported, unsupported = check_bids_suffixes(
+            str(tmp_path), extra_suffix_map=extra
+        )
         assert "BF" in supported
         assert "BF" not in unsupported
 
@@ -194,7 +201,9 @@ class TestCheckBidsSuffixes:
         _create_nii(tmp_path, "sub-01/anat/sub-01_T1w.nii.gz")
         _create_nii(tmp_path, "sub-01/anat/sub-01_CUSTOM.nii.gz")
         extra = {"CUSTOM": "nb:CustomImage"}
-        supported, unsupported = check_bids_suffixes(str(tmp_path), extra_suffix_map=extra)
+        supported, unsupported = check_bids_suffixes(
+            str(tmp_path), extra_suffix_map=extra
+        )
         assert "T1w" in supported
         assert "CUSTOM" in supported
 

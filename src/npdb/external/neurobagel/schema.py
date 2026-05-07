@@ -21,39 +21,21 @@ Bagel expects the following structure:
 
 This module converts our intermediate format to this schema.
 """
+
 import json
 from pathlib import Path
 from typing import Any, Dict
 
-
 VARIABLE_TERMS = {
-    "nb:ParticipantID": {
-        "TermURL": "nb:ParticipantID",
-        "Label": "Participant ID"
-    },
-    "nb:SessionID": {
-        "TermURL": "nb:SessionID",
-        "Label": "Session ID"
-    },
-    "nb:Age": {
-        "TermURL": "nb:Age",
-        "Label": "Age"
-    },
-    "nb:Sex": {
-        "TermURL": "nb:Sex",
-        "Label": "Sex"
-    },
-    "nb:Diagnosis": {
-        "TermURL": "nb:Diagnosis",
-        "Label": "Diagnosis"
-    },
+    "nb:ParticipantID": {"TermURL": "nb:ParticipantID", "Label": "Participant ID"},
+    "nb:SessionID": {"TermURL": "nb:SessionID", "Label": "Session ID"},
+    "nb:Age": {"TermURL": "nb:Age", "Label": "Age"},
+    "nb:Sex": {"TermURL": "nb:Sex", "Label": "Sex"},
+    "nb:Diagnosis": {"TermURL": "nb:Diagnosis", "Label": "Diagnosis"},
 }
 # Mapping from format IRIs to Term representations (abbreviated)
 FORMAT_TERMS = {
-    "nb:FromFloat": {
-        "TermURL": "nb:FromFloat",
-        "Label": "Floating point number"
-    },
+    "nb:FromFloat": {"TermURL": "nb:FromFloat", "Label": "Floating point number"},
 }
 # URL prefixes for expanding abbreviated IRIs
 URL_PREFIXES = {
@@ -86,8 +68,7 @@ def expand_iri(iri: str) -> str:
 
 
 def convert_to_bagel_schema(
-    parsed_annotations: Dict[str, Any],
-    phenotype_mappings: Dict[str, Any]
+    parsed_annotations: Dict[str, Any], phenotype_mappings: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Convert parsed annotations to Bagel-compliant data dictionary schema.
@@ -109,8 +90,7 @@ def convert_to_bagel_schema(
         # Get the variable term
         term = VARIABLE_TERMS.get(variable)
         if not term:
-            print(
-                f"⚠ Warning: No term mapping for {variable}, skipping {column_name}")
+            print(f"⚠ Warning: No term mapping for {variable}, skipping {column_name}")
             continue
 
         # Initialize the column entry
@@ -119,7 +99,7 @@ def convert_to_bagel_schema(
             "Annotations": {
                 "IsAbout": term
                 # Note: MissingValues will be added later if appropriate for the type
-            }
+            },
         }
 
         # Determine variable type from mappings
@@ -157,7 +137,11 @@ def convert_to_bagel_schema(
         # Include common missing value markers found in the data
         if variable_type != "Identifier":
             bagel_dict[column_name]["Annotations"]["MissingValues"] = [
-                "n/a", "N/A", "NA", ""]
+                "n/a",
+                "N/A",
+                "NA",
+                "",
+            ]
 
         # Add type-specific fields
         if variable_type == "Categorical" and levels:
@@ -165,12 +149,11 @@ def convert_to_bagel_schema(
             # Keep abbreviated IRIs (e.g., snomed:123), don't expand to full URLs
             normalized_levels = {}
             for level_key, level_value in levels.items():
-                term_url = level_value.get(
-                    "TermURL") or level_value.get("termURL", "")
+                term_url = level_value.get("TermURL") or level_value.get("termURL", "")
                 #  Don't expand URLs - keep abbreviated IRIs for Bagel validation
                 normalized_levels[level_key] = {
                     "TermURL": term_url,
-                    "Label": level_value.get("Label") or level_value.get("label", "")
+                    "Label": level_value.get("Label") or level_value.get("label", ""),
                 }
             bagel_dict[column_name]["Annotations"]["Levels"] = normalized_levels
         elif variable_type == "Continuous" and format_term:
@@ -179,7 +162,7 @@ def convert_to_bagel_schema(
             # Default continuous format
             bagel_dict[column_name]["Annotations"]["Format"] = {
                 "TermURL": "http://neurobagel.org/vocab/FromFloat",
-                "Label": "Floating point number"
+                "Label": "Floating point number",
             }
 
     return bagel_dict
@@ -189,7 +172,7 @@ def save_as_bagel_schema(
     output_path: Path,
     parsed_annotations: Dict[str, Any],
     phenotype_mappings: Dict[str, Any],
-    verbose: bool = True
+    verbose: bool = True,
 ) -> None:
     """
     Convert annotations to Bagel schema and save to file.
@@ -203,12 +186,46 @@ def save_as_bagel_schema(
     if verbose:
         print(f"\n→ Converting to Bagel schema...")
 
-    bagel_dict = convert_to_bagel_schema(
-        parsed_annotations, phenotype_mappings)
+    bagel_dict = convert_to_bagel_schema(parsed_annotations, phenotype_mappings)
 
-    with open(output_path, 'w') as f:
+    with open(output_path, "w") as f:
         json.dump(bagel_dict, f, indent=2)
 
     if verbose:
         print(f"✓ Saved Bagel-compliant dictionary: {output_path}")
         print(f"  Columns: {list(bagel_dict.keys())}")
+
+
+# ---------------------------------------------------------------------------
+# BIDS suffixes supported by Bagel CLI for imaging data
+# ---------------------------------------------------------------------------
+
+BAGEL_SUPPORTED_SUFFIXES: frozenset = frozenset(
+    {
+        "T1w",
+        "T2w",
+        "FLAIR",
+        "bold",
+        "dwi",
+        "T2star",
+        "T2starw",
+        "T1map",
+        "T2map",
+        "PDw",
+        "PDT2",
+        "PDmap",
+        "inplaneT1",
+        "inplaneT2",
+        "MTRmap",
+        "MTsat",
+        "T1rho",
+        "fmap",
+        "sbref",
+        "epi",
+        "magnitude1",
+        "magnitude2",
+        "phasediff",
+        "phase1",
+        "phase2",
+    }
+)
