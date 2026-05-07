@@ -8,7 +8,7 @@ from npdb.annotation.automation import (
     AnnotationStep,
     AnnotationUIPatterns,
     StepInfo,
-    StepNavigator
+    StepNavigator,
 )
 
 
@@ -22,7 +22,7 @@ class TestAnnotationStep:
             AnnotationStep.COLUMN_ANNOTATION,
             AnnotationStep.VALUE_ANNOTATION,
             AnnotationStep.EXPORT,
-            AnnotationStep.UNKNOWN
+            AnnotationStep.UNKNOWN,
         ]
         assert len(steps) == 5
 
@@ -45,7 +45,7 @@ class TestStepInfo:
             title="Upload",
             description="Upload TSV",
             next_button_selector="button:next",
-            content_area_selector="div:upload"
+            content_area_selector="div:upload",
         )
 
         assert info.step == AnnotationStep.UPLOAD
@@ -71,7 +71,7 @@ class TestStepNavigator:
             AnnotationStep.UPLOAD,
             AnnotationStep.COLUMN_ANNOTATION,
             AnnotationStep.VALUE_ANNOTATION,
-            AnnotationStep.EXPORT
+            AnnotationStep.EXPORT,
         ]:
             info = StepNavigator.get_step_info(step)
             assert info is not None
@@ -101,6 +101,7 @@ class TestStepNavigator:
         for step in StepNavigator.get_steps_in_order():
             info = StepNavigator.get_step_info(step)
 
+            assert info is not None
             assert info.title is not None
             assert len(info.title) > 0
             assert info.next_button_selector is not None

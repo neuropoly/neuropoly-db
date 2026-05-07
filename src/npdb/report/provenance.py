@@ -7,51 +7,79 @@ auditability and retrospection, especially important for full-auto mode.
 
 import json
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Literal
+from typing import Dict, List, Optional
 from uuid import uuid4
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, field_validator
+
+from npdb.annotation import AnnotationMode
+
+
+class MappingSource(str, Enum):
+    STATIC = "static"
+    DETERMINISTIC = "deterministic"
+    AI = "ai"
+    MANUAL = "manual"
+    UNRESOLVED = "unresolved"
 
 
 class ColumnProvenance(BaseModel):
     """Provenance metadata for a single column mapping."""
+
     column_name: str
-    source: Literal["static", "deterministic", "ai", "manual"]
+    source: str
     confidence: float = Field(ge=0.0, le=1.0)
+
+    @field_validator("source")
+    @classmethod
+    def _validate_source(cls, v: str) -> str:
+        valid = {s.value for s in MappingSource}
+        if v not in valid:
+            raise ValueError(f"source must be one of {sorted(valid)}, got {v!r}")
+        return v
+
     variable: Optional[str] = Field(
-        default=None, description="Mapped standardized variable")
-    format: Optional[str] = Field(
-        default=None, description="For continuous variables")
-    rationale: str = Field(...,
-                           description="Explanation of the mapping decision")
-    ai_model: Optional[str] = Field(
-        default=None, description="LLM model if source=ai")
+        default=None, description="Mapped standardized variable"
+    )
+    format: Optional[str] = Field(default=None, description="For continuous variables")
+    rationale: str = Field(..., description="Explanation of the mapping decision")
+    ai_model: Optional[str] = Field(default=None, description="LLM model if source=ai")
     ai_model_version: Optional[str] = Field(
-        default=None, description="Model version if source=ai")
+        default=None, description="Model version if source=ai"
+    )
 
 
 class ConfidenceDistribution(BaseModel):
     """Distribution of confidence scores across mappings."""
+
     high: List[float] = Field(default=[], description="Scores in [0.85, 1.0]")
-    medium: List[float] = Field(
-        default=[], description="Scores in [0.7, 0.84]")
+    medium: List[float] = Field(default=[], description="Scores in [0.7, 0.84]")
     low: List[float] = Field(default=[], description="Scores in [0.5, 0.69]")
-    unresolved: int = Field(
-        default=0, description="Count of unresolved columns")
+    unresolved: int = Field(default=0, description="Count of unresolved columns")
 
 
 class ProvenanceReport(BaseModel):
     """Complete provenance report for an annotation run."""
+
     run_id: str = Field(default_factory=lambda: str(uuid4()))
-    mode: Literal["manual", "assist", "auto", "full-auto"]
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc))
+    mode: str
+
+    @field_validator("mode")
+    @classmethod
+    def _validate_mode(cls, v: str) -> str:
+        valid = {m.value for m in AnnotationMode}
+        if v not in valid:
+            raise ValueError(f"mode must be one of {sorted(valid)}, got {v!r}")
+        return v
+
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     dataset_name: Optional[str] = Field(default=None)
 
     # Mapping source summary
     mapping_source_counts: Dict[str, int] = Field(
-        default_factory=lambda: {"static": 0,
-                                 "deterministic": 0, "ai": 0, "manual": 0}
+        default_factory=lambda: {"static": 0, "deterministic": 0, "ai": 0, "manual": 0}
     )
 
     # Confidence distribution
@@ -61,14 +89,13 @@ class ProvenanceReport(BaseModel):
 
     # Per-column provenance
     per_column: Dict[str, ColumnProvenance] = Field(
-        default_factory=dict,
-        description="Mapping provenance for each column"
+        default_factory=dict, description="Mapping provenance for each column"
     )
 
     # Warnings and notes
     warnings: List[str] = Field(
         default_factory=list,
-        description="Warnings or issues encountered during annotation"
+        description="Warnings or issues encountered during annotation",
     )
 
     # AI configuration (if applicable)
@@ -78,7 +105,7 @@ class ProvenanceReport(BaseModel):
 
 
 def compute_confidence_distribution(
-    per_column: Dict[str, ColumnProvenance]
+    per_column: Dict[str, ColumnProvenance],
 ) -> ConfidenceDistribution:
     """
     Compute confidence distribution from per-column mappings.
@@ -114,13 +141,13 @@ def compute_confidence_distribution(
 def add_column_provenance(
     report: ProvenanceReport,
     column_name: str,
-    source: Literal["static", "deterministic", "ai", "manual"],
+    source: str,
     confidence: float,
     variable: Optional[str] = None,
     format: Optional[str] = None,
     rationale: str = "No rationale provided",
     ai_model: Optional[str] = None,
-    ai_model_version: Optional[str] = None
+    ai_model_version: Optional[str] = None,
 ) -> None:
     """
     Add or update column provenance in a report.
@@ -144,18 +171,18 @@ def add_column_provenance(
         format=format,
         rationale=rationale,
         ai_model=ai_model,
-        ai_model_version=ai_model_version
+        ai_model_version=ai_model_version,
     )
 
     report.per_column[column_name] = col_prov
 
     # Update source counts
-    report.mapping_source_counts[source] = report.mapping_source_counts.get(
-        source, 0) + 1
+    report.mapping_source_counts[source] = (
+        report.mapping_source_counts.get(source, 0) + 1
+    )
 
     # Recompute confidence distribution
-    report.confidence_distribution = compute_confidence_distribution(
-        report.per_column)
+    report.confidence_distribution = compute_confidence_distribution(report.per_column)
 
 
 def add_warning(report: ProvenanceReport, warning: str) -> None:

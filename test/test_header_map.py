@@ -21,11 +21,12 @@ from npdb.annotation.standardize import (
     validate_header_map_keys,
 )
 
-
 # ── Helpers ────────────────────────────────────────────────────────
 
 
-def _make_tsv(tmp_path: Path, headers: list[str], rows: list[list[str]] | None = None) -> Path:
+def _make_tsv(
+    tmp_path: Path, headers: list[str], rows: list[list[str]] | None = None
+) -> Path:
     """Create a TSV file with given headers and optional data rows."""
     tsv = tmp_path / "participants.tsv"
     lines = ["\t".join(headers)]
@@ -94,7 +95,8 @@ class TestLoadHeaderMap:
 
     def test_non_string_variable(self, tmp_path):
         path = _write_header_map(
-            tmp_path, {"age": {"aliases": ["AGE"], "variable": 123}})
+            tmp_path, {"age": {"aliases": ["AGE"], "variable": 123}}
+        )
         with pytest.raises(ValueError, match="variable"):
             load_header_map(path)
 
@@ -115,14 +117,16 @@ class TestValidateHeaderMapKeys:
         validate_header_map_keys(hmap, self.VALID_KEYS)  # no error
 
     def test_invalid_keys_raise(self):
-        hmap = {"age": {"aliases": ["AGE"]},
-                "nonexistent": {"aliases": ["foo"]}}
+        hmap = {"age": {"aliases": ["AGE"]}, "nonexistent": {"aliases": ["foo"]}}
         with pytest.raises(ValueError, match="nonexistent"):
             validate_header_map_keys(hmap, self.VALID_KEYS)
 
     def test_error_lists_all_invalid(self):
-        hmap = {"bad1": {"aliases": ["x"]}, "bad2": {
-            "aliases": ["y"]}, "age": {"aliases": ["AGE"]}}
+        hmap = {
+            "bad1": {"aliases": ["x"]},
+            "bad2": {"aliases": ["y"]},
+            "age": {"aliases": ["AGE"]},
+        }
         with pytest.raises(ValueError, match="bad1.*bad2|bad2.*bad1"):
             validate_header_map_keys(hmap, self.VALID_KEYS)
 
@@ -155,15 +159,15 @@ class TestHeaderMapVariables:
 
 class TestApplyHeaderMap:
     def test_basic_rename(self, tmp_path):
-        tsv = _make_tsv(tmp_path, ["SubjectID", "Age_Baseline", "notes"],
-                        [["sub-01", "25", "ok"]])
+        tsv = _make_tsv(
+            tmp_path, ["SubjectID", "Age_Baseline", "notes"], [["sub-01", "25", "ok"]]
+        )
         hmap = {
             "participant_id": {"aliases": ["SubjectID"]},
             "age": {"aliases": ["Age_Baseline"]},
         }
         renames = apply_header_map(tsv, hmap)
-        assert renames == {
-            "SubjectID": "participant_id", "Age_Baseline": "age"}
+        assert renames == {"SubjectID": "participant_id", "Age_Baseline": "age"}
         assert _read_headers(tsv) == ["participant_id", "age", "notes"]
 
     def test_case_insensitive(self, tmp_path):
@@ -181,8 +185,9 @@ class TestApplyHeaderMap:
         assert _read_headers(tsv) == ["participant_id", "age", "sex"]
 
     def test_preserves_data_rows(self, tmp_path):
-        tsv = _make_tsv(tmp_path, ["Subject", "Score"],
-                        [["sub-01", "10"], ["sub-02", "20"]])
+        tsv = _make_tsv(
+            tmp_path, ["Subject", "Score"], [["sub-01", "10"], ["sub-02", "20"]]
+        )
         hmap = {"participant_id": {"aliases": ["Subject"]}}
         apply_header_map(tsv, hmap)
         lines = tsv.read_text(encoding="utf-8").strip().split("\n")
@@ -203,8 +208,7 @@ class TestApplyHeaderMap:
     def test_ambiguous_variant_in_map(self, tmp_path):
         """Same variant listed under two different keys."""
         tsv = _make_tsv(tmp_path, ["Gender"])
-        hmap = {"sex": {"aliases": ["Gender"]},
-                "other": {"aliases": ["Gender"]}}
+        hmap = {"sex": {"aliases": ["Gender"]}, "other": {"aliases": ["Gender"]}}
         with pytest.raises(ValueError, match="Ambiguous"):
             apply_header_map(tsv, hmap)
 

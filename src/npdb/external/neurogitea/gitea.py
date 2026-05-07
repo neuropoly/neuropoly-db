@@ -16,23 +16,23 @@ class GiteaManager(Manager):
         # accepted and produce the same behaviour.
         if "://" in url:
             _parsed = urlparse(url)
-            self._proto = _parsed.scheme          # "https" or "http"
-            self.host = _parsed.netloc          # "data.neuro.polymtl.ca"
+            self._proto = _parsed.scheme  # "https" or "http"
+            self.host = _parsed.netloc  # "data.neuro.polymtl.ca"
         else:
-            self._proto = "https"                 # sensible default
-            self.host = url.split("/")[0]       # strip any trailing path
+            self._proto = "https"  # sensible default
+            self.host = url.split("/")[0]  # strip any trailing path
 
         self._http_base = f"{self._proto}://{self.host}"
 
         self.client = gt_client.Gitea(
-            gitea_url=self._http_base, token_text=token, verify=ssl_verify)
-        self.git_auth = b64encode(
-            f"{user}:{token}".encode("utf-8")).decode("ascii")
+            gitea_url=self._http_base, token_text=token, verify=ssl_verify
+        )
+        self.git_auth = b64encode(f"{user}:{token}".encode("utf-8")).decode("ascii")
 
     def git_http_config(self):
         config = {
             "extraHeader": f"Authorization: Basic {self.git_auth}",
-            "sslVerify": str(self.client.requests.verify).lower()
+            "sslVerify": str(self.client.requests.verify).lower(),
         }
         return [c for k, v in config.items() for c in ["-c", f"http.{k}={v}"]]
 
@@ -48,9 +48,7 @@ class GiteaManager(Manager):
         host differs from the configured server (e.g. after a redirect) are
         corrected automatically.
         """
-        parsed = urlparse(
-            http_url if "://" in http_url else f"https://{http_url}"
-        )
+        parsed = urlparse(http_url if "://" in http_url else f"https://{http_url}")
         path = parsed.path.rstrip("/")
         if not path.endswith(".git"):
             path += ".git"
@@ -65,8 +63,7 @@ class GiteaManager(Manager):
     def _run_git(self, cmd: list[str], env: dict, context: str) -> None:
         """Run a git command, raising RuntimeError with full detail on failure."""
         try:
-            subprocess.run(cmd, check=True, capture_output=True,
-                           env=env, timeout=3600)
+            subprocess.run(cmd, check=True, capture_output=True, env=env, timeout=3600)
         except subprocess.CalledProcessError as e:
             detail = (
                 f"Command: {' '.join(e.cmd)}\n"
@@ -107,9 +104,7 @@ class GiteaManager(Manager):
         # Build the HTTPS clone URL from the normalised host so that
         # protocol mismatches in the TSV (e.g. bare host or http vs https)
         # are corrected automatically.
-        parsed_repo = urlparse(
-            repo_url if "://" in repo_url else f"https://{repo_url}"
-        )
+        parsed_repo = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
         repo_path = parsed_repo.path.rstrip("/")
         git_url = f"{self._http_base}{repo_path}.git"
         env = self._git_env()
@@ -119,8 +114,15 @@ class GiteaManager(Manager):
         if not (dest / ".git").exists():
             dest.mkdir(parents=True, exist_ok=True)
             self._run_git(
-                git + ["clone", "--filter=blob:none", "--no-checkout",
-                       "--depth=1", git_url, str(dest)],
+                git
+                + [
+                    "clone",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    "--depth=1",
+                    git_url,
+                    str(dest),
+                ],
                 env=env,
                 context=f"clone '{repo_url}'",
             )
@@ -190,13 +192,14 @@ class GiteaManager(Manager):
         # 1. Switch origin to SSH (git-annex requires SSH transport for Gitea).
         origin_proc = subprocess.run(
             ["git", "-C", str(repo_dir), "remote", "get-url", "origin"],
-            capture_output=True, text=True, env=env,
+            capture_output=True,
+            text=True,
+            env=env,
         )
         if origin_proc.returncode == 0:
             ssh_url = self._to_ssh_url(origin_proc.stdout.strip())
             self._run_git(
-                ["git", "-C", str(repo_dir),
-                 "remote", "set-url", "origin", ssh_url],
+                ["git", "-C", str(repo_dir), "remote", "set-url", "origin", ssh_url],
                 env=env,
                 context=f"switch origin to SSH in '{repo_dir}'",
             )
@@ -205,8 +208,14 @@ class GiteaManager(Manager):
         #    git clone --depth=1 only fetches the HEAD branch; the git-annex
         #    branch (location logs) must be fetched explicitly.
         self._run_git(
-            ["git", "-C", str(repo_dir), "fetch", "origin",
-             "refs/heads/git-annex:refs/remotes/origin/git-annex"],
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "fetch",
+                "origin",
+                "refs/heads/git-annex:refs/remotes/origin/git-annex",
+            ],
             env=env,
             context=f"fetch git-annex branch in '{repo_dir}'",
         )
@@ -220,8 +229,14 @@ class GiteaManager(Manager):
 
         # 4. Unset annex-ignore: init on a shallow clone sets this to true.
         self._run_git(
-            ["git", "-C", str(repo_dir),
-             "config", "remote.origin.annex-ignore", "false"],
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "config",
+                "remote.origin.annex-ignore",
+                "false",
+            ],
             env=env,
             context=f"unset annex-ignore in '{repo_dir}'",
         )

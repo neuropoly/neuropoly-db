@@ -3,10 +3,11 @@ Tests for the GraphUpdater hot-reload functionality.
 """
 
 import json
-import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+
+import pytest
 
 from npdb.external.neurobagel.graph import GraphUpdater
 
@@ -23,7 +24,7 @@ class TestGraphUpdater:
         assert updater.graph_db == "repositories/my_db"
         assert updater.base_url in [
             "http://graphdb:7200/repositories/my_db",
-            "http://graph:7200/repositories/my_db"
+            "http://graph:7200/repositories/my_db",
         ]
 
     def test_init_custom_values(self):
@@ -33,7 +34,7 @@ class TestGraphUpdater:
             graph_port=8888,
             graph_db="repositories/custom",
             username="admin",
-            password="secret"
+            password="secret",
         )
         assert updater.graph_host == "remote-graphdb"
         assert updater.graph_port == 8888
@@ -65,7 +66,7 @@ class TestGraphUpdater:
     def test_upload_jsonld_success(self, mock_post):
         """Test successful JSON-LD upload."""
         # Create temporary JSON-LD file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonld', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonld", delete=False) as f:
             json.dump({"@context": {}, "@id": "test"}, f)
             temp_file = Path(f.name)
 
@@ -81,8 +82,10 @@ class TestGraphUpdater:
             assert result is True
             mock_post.assert_called_once()
             call_args = mock_post.call_args
-            assert "statements" in call_args[1]["headers"]["Content-Type"] or \
-                   "application/ld+json" in call_args[1]["headers"]["Content-Type"]
+            assert (
+                "statements" in call_args[1]["headers"]["Content-Type"]
+                or "application/ld+json" in call_args[1]["headers"]["Content-Type"]
+            )
         finally:
             temp_file.unlink()
 
@@ -91,7 +94,7 @@ class TestGraphUpdater:
         """Test upload fails on HTTP error."""
         import httpx
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonld', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonld", delete=False) as f:
             json.dump({"@context": {}, "@id": "test"}, f)
             temp_file = Path(f.name)
 
@@ -103,7 +106,8 @@ class TestGraphUpdater:
 
             # Use httpx.HTTPStatusError which is a real class
             error = httpx.HTTPStatusError(
-                "Bad Request", request=Mock(), response=mock_response)
+                "Bad Request", request=Mock(), response=mock_response
+            )
             mock_post.side_effect = error
 
             updater = GraphUpdater(username="user", password="pass")
@@ -126,7 +130,7 @@ class TestGraphUpdater:
                 jsonld_file,
                 "dataset-001",
                 {"dataset_name": "Test Dataset", "authors": ["Jane Doe"]},
-                verbose=False
+                verbose=False,
             )
 
             assert result is True
@@ -145,9 +149,7 @@ class TestGraphUpdater:
             jsonld_file.write_text("{}")
 
             # Create existing metadata
-            existing = {
-                "existing-001": {"dataset_name": "Existing Dataset"}
-            }
+            existing = {"existing-001": {"dataset_name": "Existing Dataset"}}
             with open(metadata_file, "w") as f:
                 json.dump(existing, f)
 
@@ -157,7 +159,7 @@ class TestGraphUpdater:
                 jsonld_file,
                 "dataset-002",
                 {"dataset_name": "New Dataset"},
-                verbose=False
+                verbose=False,
             )
 
             assert result is True
@@ -186,7 +188,7 @@ class TestGraphUpdater:
                 jsonld_file,
                 "test-dataset",
                 {"dataset_name": "Test Dataset"},
-                metadata_file
+                metadata_file,
             )
 
             assert result is True
@@ -208,7 +210,7 @@ class TestGraphUpdater:
                 jsonld_file,
                 "test-dataset",
                 {"dataset_name": "Test Dataset"},
-                None  # No metadata file
+                None,  # No metadata file
             )
 
             assert result is True

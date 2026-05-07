@@ -49,8 +49,7 @@ class Step:
         if self.status == StepStatus.SUCCESS:
             return Text(f"\u2705 {self.name}", style="green")
         if self.status == StepStatus.RUNNING:
-            body = "\n".join(
-                self.output) if self.output else "[dim]Running\u2026[/dim]"
+            body = "\n".join(self.output) if self.output else "[dim]Running\u2026[/dim]"
             return Panel(
                 body,
                 title=f"[yellow]\u27f3 {self.name}[/yellow]",

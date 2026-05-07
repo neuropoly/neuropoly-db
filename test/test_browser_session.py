@@ -4,8 +4,9 @@ Unit tests for browser_session module.
 Tests session lifecycle, navigation, file operations, and error handling.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
 
@@ -26,7 +27,8 @@ class TestBrowserSessionInit:
         """Test BrowserSession with custom configuration."""
         artifacts_dir = Path("/tmp/artifacts")
         session = NBAnnotationToolBrowserSession(
-            headless=False, timeout=600, artifacts_dir=artifacts_dir)
+            headless=False, timeout=600, artifacts_dir=artifacts_dir
+        )
 
         assert session.headless is False
         assert session.timeout == 600000
@@ -43,7 +45,10 @@ class TestBrowserSessionConfig:
 
     def test_annotation_url_constant(self):
         """Test annotation URL constant."""
-        assert NBAnnotationToolBrowserSession.ANNOTATION_URL == "https://annotate.neurobagel.org"
+        assert (
+            NBAnnotationToolBrowserSession.ANNOTATION_URL
+            == "https://annotate.neurobagel.org"
+        )
 
     def test_artifacts_dir_optional(self):
         """Test that artifacts_dir is optional."""
@@ -66,6 +71,7 @@ class TestBrowserSessionCleanup:
         session = NBAnnotationToolBrowserSession()
         # Should not raise
         import asyncio
+
         asyncio.run(session.cleanup())
 
     def test_context_manager_cleanup_on_success(self):
@@ -93,7 +99,9 @@ class TestBrowserSessionFileOperations:
             session = NBAnnotationToolBrowserSession()
             # Both FileNotFoundError (file not found) and RuntimeError (not launched) are possible
             with pytest.raises((FileNotFoundError, RuntimeError)):
-                await session.upload_file(Path("/nonexistent/file.tsv"), "input[type='file']")
+                await session.upload_file(
+                    Path("/nonexistent/file.tsv"), "input[type='file']"
+                )
 
         asyncio.run(test())
 

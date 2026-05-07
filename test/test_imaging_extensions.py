@@ -14,28 +14,28 @@ Covers:
 
 import json
 import re
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from npdb.external.neurobagel.imaging_extensions import (
-    STATIC_FALLBACKS,
-    _NIDM_ALIASES,
     _NB_FALLBACKS,
+    _NIDM_ALIASES,
+    STATIC_FALLBACKS,
+    _llm_resolve,
+    _sanitize_iri,
+    build_extra_mapping,
     load_extensions,
     load_neuropoly_vocab,
-    save_extensions,
-    resolve_suffix,
     patch_bagel_suffix_map,
-    build_extra_mapping,
-    _sanitize_iri,
-    _llm_resolve,
+    resolve_suffix,
+    save_extensions,
 )
-
 
 # ---------------------------------------------------------------------------
 # load_extensions / save_extensions
 # ---------------------------------------------------------------------------
+
 
 class TestLoadSaveExtensions:
 
@@ -45,8 +45,7 @@ class TestLoadSaveExtensions:
 
     def test_load_returns_file_contents(self, tmp_path):
         cfg = tmp_path / "ext.json"
-        payload = {"version": "1", "extensions": {
-            "UNIT1": {"iri": "nidm:T1Weighted"}}}
+        payload = {"version": "1", "extensions": {"UNIT1": {"iri": "nidm:T1Weighted"}}}
         cfg.write_text(json.dumps(payload), encoding="utf-8")
         assert load_extensions(cfg) == payload
 
@@ -73,30 +72,34 @@ class TestLoadSaveExtensions:
 # STATIC_FALLBACKS
 # ---------------------------------------------------------------------------
 
+
 class TestStaticFallbacks:
     """Verify every well-known suffix maps to the right term."""
 
-    @pytest.mark.parametrize("suffix,expected_iri", [
-        ("UNIT1",    "nidm:T1Weighted"),
-        ("MP2RAGE",  "nidm:T1Weighted"),
-        ("T1map",    "nidm:T1Weighted"),
-        ("T2map",    "nidm:T2Weighted"),
-        ("T2starmap", "nidm:T2StarWeighted"),
-        ("T2star",   "nb:T2StarWeighted"),
-        ("SWI",      "nidm:T2StarWeighted"),
-        ("BF",       "nb:BrightFieldMicroscopy"),
-        ("DF",       "nb:DarkFieldMicroscopy"),
-        ("PC",       "nb:PhaseContrastMicroscopy"),
-        ("DIC",      "nb:DifferentialInterferenceContrastMicroscopy"),
-        ("FLUO",     "nb:FluorescenceMicroscopy"),
-        ("CONF",     "nb:ConfocalMicroscopy"),
-        ("PLI",      "nb:PolarisedLightImaging"),
-        ("TEM",      "nb:TransmissionElectronMicroscopy"),
-        ("SEM",      "nb:ScanningElectronMicroscopy"),
-        ("uCT",      "nb:MicroComputedTomography"),
-        ("OCT",      "nb:OpticalCoherenceTomography"),
-        ("CARS",     "nb:CoherentAntiStokesRamanSpectroscopyMicroscopy"),
-    ])
+    @pytest.mark.parametrize(
+        "suffix,expected_iri",
+        [
+            ("UNIT1", "nidm:T1Weighted"),
+            ("MP2RAGE", "nidm:T1Weighted"),
+            ("T1map", "nidm:T1Weighted"),
+            ("T2map", "nidm:T2Weighted"),
+            ("T2starmap", "nidm:T2StarWeighted"),
+            ("T2star", "nb:T2StarWeighted"),
+            ("SWI", "nidm:T2StarWeighted"),
+            ("BF", "nb:BrightFieldMicroscopy"),
+            ("DF", "nb:DarkFieldMicroscopy"),
+            ("PC", "nb:PhaseContrastMicroscopy"),
+            ("DIC", "nb:DifferentialInterferenceContrastMicroscopy"),
+            ("FLUO", "nb:FluorescenceMicroscopy"),
+            ("CONF", "nb:ConfocalMicroscopy"),
+            ("PLI", "nb:PolarisedLightImaging"),
+            ("TEM", "nb:TransmissionElectronMicroscopy"),
+            ("SEM", "nb:ScanningElectronMicroscopy"),
+            ("uCT", "nb:MicroComputedTomography"),
+            ("OCT", "nb:OpticalCoherenceTomography"),
+            ("CARS", "nb:CoherentAntiStokesRamanSpectroscopyMicroscopy"),
+        ],
+    )
     def test_known_suffix_iri(self, suffix, expected_iri):
         assert suffix in STATIC_FALLBACKS, f"'{suffix}' missing from STATIC_FALLBACKS"
         iri, _ = STATIC_FALLBACKS[suffix]
@@ -110,28 +113,32 @@ class TestStaticFallbacks:
         """Every IRI must match the namespace:Term pattern."""
         pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*:[a-zA-Z][a-zA-Z0-9_]+$")
         for suffix, (iri, _) in STATIC_FALLBACKS.items():
-            assert pattern.match(iri), (
-                f"IRI '{iri}' for suffix '{suffix}' is not a valid prefixed IRI"
-            )
+            assert pattern.match(
+                iri
+            ), f"IRI '{iri}' for suffix '{suffix}' is not a valid prefixed IRI"
 
 
 # ---------------------------------------------------------------------------
 # _NIDM_ALIASES  (nidm: MRI variants — not in the vocab file)
 # ---------------------------------------------------------------------------
 
+
 class TestNidmAliases:
     """Verify all nidm:-aliased entries are correct and distinct from nb: terms."""
 
-    @pytest.mark.parametrize("suffix,expected_iri", [
-        ("UNIT1",    "nidm:T1Weighted"),
-        ("MP2RAGE",  "nidm:T1Weighted"),
-        ("T1map",    "nidm:T1Weighted"),
-        ("T2map",    "nidm:T2Weighted"),
-        ("T2starmap", "nidm:T2StarWeighted"),
-        ("SWI",      "nidm:T2StarWeighted"),
-        ("SWIp",     "nidm:T2StarWeighted"),
-        ("angio",    "nidm:T1Weighted"),
-    ])
+    @pytest.mark.parametrize(
+        "suffix,expected_iri",
+        [
+            ("UNIT1", "nidm:T1Weighted"),
+            ("MP2RAGE", "nidm:T1Weighted"),
+            ("T1map", "nidm:T1Weighted"),
+            ("T2map", "nidm:T2Weighted"),
+            ("T2starmap", "nidm:T2StarWeighted"),
+            ("SWI", "nidm:T2StarWeighted"),
+            ("SWIp", "nidm:T2StarWeighted"),
+            ("angio", "nidm:T1Weighted"),
+        ],
+    )
     def test_nidm_alias_correct(self, suffix, expected_iri):
         assert suffix in _NIDM_ALIASES, f"'{suffix}' missing from _NIDM_ALIASES"
         iri, _ = _NIDM_ALIASES[suffix]
@@ -139,37 +146,51 @@ class TestNidmAliases:
 
     def test_all_nidm_alias_iris_start_with_nidm(self):
         for suffix, (iri, _) in _NIDM_ALIASES.items():
-            assert iri.startswith("nidm:"), (
-                f"_NIDM_ALIASES entry '{suffix}' has non-nidm IRI: {iri!r}"
-            )
+            assert iri.startswith(
+                "nidm:"
+            ), f"_NIDM_ALIASES entry '{suffix}' has non-nidm IRI: {iri!r}"
 
     def test_all_nidm_aliases_have_description(self):
         for suffix, (_, desc) in _NIDM_ALIASES.items():
-            assert desc.strip(
-            ), f"Empty description for _NIDM_ALIASES['{suffix}']"
+            assert desc.strip(), f"Empty description for _NIDM_ALIASES['{suffix}']"
 
 
 # ---------------------------------------------------------------------------
 # _NB_FALLBACKS  (nb: backward-compat fallbacks)
 # ---------------------------------------------------------------------------
 
+
 class TestNbFallbacks:
     """Verify all nb: backward-compat fallback entries."""
 
     def test_all_nb_fallback_iris_start_with_nb(self):
         for suffix, (iri, _) in _NB_FALLBACKS.items():
-            assert iri.startswith("nb:"), (
-                f"_NB_FALLBACKS entry '{suffix}' has non-nb IRI: {iri!r}"
-            )
+            assert iri.startswith(
+                "nb:"
+            ), f"_NB_FALLBACKS entry '{suffix}' has non-nb IRI: {iri!r}"
 
     def test_all_nb_fallbacks_have_description(self):
         for suffix, (_, desc) in _NB_FALLBACKS.items():
-            assert desc.strip(
-            ), f"Empty description for _NB_FALLBACKS['{suffix}']"
+            assert desc.strip(), f"Empty description for _NB_FALLBACKS['{suffix}']"
 
-    @pytest.mark.parametrize("suffix", [
-        "BF", "DF", "PC", "DIC", "FLUO", "CONF", "PLI", "TEM", "SEM", "uCT", "OCT", "CARS", "T2star",
-    ])
+    @pytest.mark.parametrize(
+        "suffix",
+        [
+            "BF",
+            "DF",
+            "PC",
+            "DIC",
+            "FLUO",
+            "CONF",
+            "PLI",
+            "TEM",
+            "SEM",
+            "uCT",
+            "OCT",
+            "CARS",
+            "T2star",
+        ],
+    )
     def test_expected_nb_suffix_present(self, suffix):
         assert suffix in _NB_FALLBACKS
 
@@ -182,6 +203,7 @@ class TestNbFallbacks:
 # load_neuropoly_vocab (smoke tests; full coverage in test_neuropoly_vocab.py)
 # ---------------------------------------------------------------------------
 
+
 class TestLoadNeuropolyVocabSmoke:
 
     def test_returns_dict(self, tmp_path):
@@ -193,17 +215,31 @@ class TestLoadNeuropolyVocabSmoke:
 
     def test_loaded_keys_are_abbreviations(self, tmp_path):
         p = tmp_path / "vocab.json"
-        p.write_text(json.dumps([{
-            "namespace_prefix": "nb",
-            "namespace_url": "http://neurobagel.org/vocab/",
-            "vocabulary_name": "Test",
-            "version": "1.0.0",
-            "terms": [
-                {"name": "BF", "id": "BrightFieldMicroscopy", "abbreviation": "BF"},
-                {"name": "TEM", "id": "TransmissionElectronMicroscopy",
-                    "abbreviation": "TEM"},
-            ],
-        }]), encoding="utf-8")
+        p.write_text(
+            json.dumps(
+                [
+                    {
+                        "namespace_prefix": "nb",
+                        "namespace_url": "http://neurobagel.org/vocab/",
+                        "vocabulary_name": "Test",
+                        "version": "1.0.0",
+                        "terms": [
+                            {
+                                "name": "BF",
+                                "id": "BrightFieldMicroscopy",
+                                "abbreviation": "BF",
+                            },
+                            {
+                                "name": "TEM",
+                                "id": "TransmissionElectronMicroscopy",
+                                "abbreviation": "TEM",
+                            },
+                        ],
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
         result = load_neuropoly_vocab(p)
         assert set(result.keys()) == {"BF", "TEM"}
 
@@ -215,24 +251,30 @@ class TestLoadNeuropolyVocabSmoke:
 
 class TestSanitizeIri:
 
-    @pytest.mark.parametrize("iri", [
-        "nidm:T1Weighted",
-        "nb:BrightFieldMicroscopy",
-        "nb:CustomImage",
-        "foo:Bar123",
-    ])
+    @pytest.mark.parametrize(
+        "iri",
+        [
+            "nidm:T1Weighted",
+            "nb:BrightFieldMicroscopy",
+            "nb:CustomImage",
+            "foo:Bar123",
+        ],
+    )
     def test_valid_iris_pass_through(self, iri):
         assert _sanitize_iri(iri) == iri
 
-    @pytest.mark.parametrize("bad", [
-        "",
-        "no-colon",
-        "bad colon:Term",
-        ":Term",
-        "nb:",
-        "nidm:has space",
-        "123:Term",
-    ])
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "",
+            "no-colon",
+            "bad colon:Term",
+            ":Term",
+            "nb:",
+            "nidm:has space",
+            "123:Term",
+        ],
+    )
     def test_invalid_iris_return_none(self, bad):
         assert _sanitize_iri(bad) is None
 
@@ -243,6 +285,7 @@ class TestSanitizeIri:
 # ---------------------------------------------------------------------------
 # resolve_suffix
 # ---------------------------------------------------------------------------
+
 
 class TestResolveSuffix:
 
@@ -277,13 +320,26 @@ class TestResolveSuffix:
 
     def test_vocab_file_used_at_step2(self, tmp_path):
         vocab = tmp_path / "vocab.json"
-        vocab.write_text(json.dumps([{
-            "namespace_prefix": "nb",
-            "namespace_url": "http://neurobagel.org/vocab/",
-            "vocabulary_name": "Test",
-            "version": "1.0.0",
-            "terms": [{"name": "BF", "id": "BrightFieldMicroscopy", "abbreviation": "BF"}],
-        }]), encoding="utf-8")
+        vocab.write_text(
+            json.dumps(
+                [
+                    {
+                        "namespace_prefix": "nb",
+                        "namespace_url": "http://neurobagel.org/vocab/",
+                        "vocabulary_name": "Test",
+                        "version": "1.0.0",
+                        "terms": [
+                            {
+                                "name": "BF",
+                                "id": "BrightFieldMicroscopy",
+                                "abbreviation": "BF",
+                            }
+                        ],
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
         ext = self._empty_ext()
         iri, is_new, _ = resolve_suffix("BF", ext, neuropoly_vocab_path=vocab)
         assert iri == "nb:BrightFieldMicroscopy"
@@ -302,8 +358,7 @@ class TestResolveSuffix:
         vocab = tmp_path / "empty_vocab.json"
         vocab.write_text("[]", encoding="utf-8")
         ext = self._empty_ext()
-        iri, is_new, _ = resolve_suffix(
-            "UNIT1", ext, neuropoly_vocab_path=vocab)
+        iri, is_new, _ = resolve_suffix("UNIT1", ext, neuropoly_vocab_path=vocab)
         assert iri == "nidm:T1Weighted"
         assert is_new is True
 
@@ -316,7 +371,9 @@ class TestResolveSuffix:
         for suffix, (expected_iri, _) in _NIDM_ALIASES.items():
             ext = self._empty_ext()
             iri, _, _ = resolve_suffix(suffix, ext)
-            assert iri == expected_iri, f"suffix '{suffix}': expected {expected_iri!r}, got {iri!r}"
+            assert (
+                iri == expected_iri
+            ), f"suffix '{suffix}': expected {expected_iri!r}, got {iri!r}"
 
     # ── Chain: static fallback (nb: backward compat) ───────────────────────
 
@@ -355,9 +412,7 @@ class TestResolveSuffix:
     def test_llm_called_with_suffix_in_prompt(self):
         ext = self._empty_ext()
         mock_client = MagicMock()
-        mock_client.chat.return_value = (
-            '{"iri": "nb:TestMod", "description": "Test."}'
-        )
+        mock_client.chat.return_value = '{"iri": "nb:TestMod", "description": "Test."}'
         resolve_suffix("XMOD", ext, ai_client=mock_client)
         call_args = mock_client.chat.call_args[0][0]
         assert "XMOD" in call_args
@@ -391,8 +446,7 @@ class TestResolveSuffix:
         ext = self._empty_ext()
         iri, _, _ = resolve_suffix("ABC123", ext)
         pattern = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*:[a-zA-Z][a-zA-Z0-9_]+$")
-        assert pattern.match(
-            iri), f"Generic IRI {iri!r} is not a valid prefixed IRI"
+        assert pattern.match(iri), f"Generic IRI {iri!r} is not a valid prefixed IRI"
 
     def test_generic_fallback_handles_suffix_starting_with_digit(self):
         """Suffixes like '3DRA' that start with a digit must produce valid IRI."""
@@ -421,6 +475,7 @@ class TestResolveSuffix:
 # ---------------------------------------------------------------------------
 # _llm_resolve
 # ---------------------------------------------------------------------------
+
 
 class TestLlmResolve:
 
@@ -462,6 +517,7 @@ class TestLlmResolve:
 # patch_bagel_suffix_map
 # ---------------------------------------------------------------------------
 
+
 class TestPatchBagelSuffixMap:
 
     def test_extra_entries_appear_in_mapping(self):
@@ -470,8 +526,10 @@ class TestPatchBagelSuffixMap:
         except ImportError:
             pytest.skip("bagel not installed")
 
-        extra = {"TEM": "nb:TransmissionElectronMicroscopy",
-                 "BF": "nb:BrightFieldMicroscopy"}
+        extra = {
+            "TEM": "nb:TransmissionElectronMicroscopy",
+            "BF": "nb:BrightFieldMicroscopy",
+        }
         patch_bagel_suffix_map(extra)
         mapping = bids_utils.get_bids_suffix_to_std_term_mapping()
         assert mapping.get("TEM") == "nb:TransmissionElectronMicroscopy"
@@ -504,6 +562,7 @@ class TestPatchBagelSuffixMap:
     def test_no_error_when_bagel_not_installed(self, monkeypatch):
         """patch_bagel_suffix_map must be a no-op if bagel is not importable."""
         import sys
+
         # Temporarily hide bagel
         saved = sys.modules.pop("bagel", None)
         saved_utils = sys.modules.pop("bagel.utilities", None)
@@ -522,6 +581,7 @@ class TestPatchBagelSuffixMap:
 # ---------------------------------------------------------------------------
 # build_extra_mapping
 # ---------------------------------------------------------------------------
+
 
 class TestBuildExtraMapping:
 
@@ -547,6 +607,7 @@ class TestBuildExtraMapping:
 
         # Second call — already cached, file should not be rewritten
         import time
+
         time.sleep(0.01)
         build_extra_mapping(["TEM"], cfg)
         mtime2 = cfg.stat().st_mtime

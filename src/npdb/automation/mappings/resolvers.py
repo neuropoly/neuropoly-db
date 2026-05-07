@@ -9,15 +9,22 @@ Chains three layers of authority:
 Resolver returns per-column mapping with source and confidence tracking.
 """
 
-from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
-from npdb.automation.mappings.solvers import load_static_mappings, load_user_mappings, merge_mappings
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from npdb.annotation.matching import ColumnMatcher
+from npdb.automation.mappings.solvers import (
+    load_static_mappings,
+    load_user_mappings,
+    merge_mappings,
+)
 
 
 @dataclass
 class ResolvedMapping:
     """Result of resolving a column header to a phenotype variable."""
+
     column_name: str
     mapped_variable: str
     confidence: float
@@ -38,9 +45,9 @@ class MappingResolver:
 
     def __init__(
         self,
-        user_dictionary_path: Optional[str] = None,
+        user_dictionary_path: Optional[str | Path] = None,
         exact_threshold: float = 1.0,
-        fuzzy_threshold: float = 0.75
+        fuzzy_threshold: float = 0.75,
     ):
         """
         Initialize resolver with optional user dictionary override.
@@ -96,7 +103,7 @@ class MappingResolver:
                 confidence=mapping_data.get("confidence", 0.95),
                 source="static",
                 mapping_data=mapping_data,
-                rationale="Exact match in static dictionary"
+                rationale="Exact match in static dictionary",
             )
             self._resolved_cache[column_name] = resolved
             return resolved
@@ -105,7 +112,7 @@ class MappingResolver:
         match_result = self.matcher.match_column(
             column_name,
             exact_threshold=self.exact_threshold,
-            fuzzy_threshold=self.fuzzy_threshold
+            fuzzy_threshold=self.fuzzy_threshold,
         )
 
         if match_result:
@@ -119,7 +126,7 @@ class MappingResolver:
                     confidence=confidence,
                     source="deterministic",
                     mapping_data=mapping_data,
-                    rationale=f"Fuzzy match: '{column_name}' → '{mapping_key}' ({match_source}, score {confidence:.2f})"
+                    rationale=f"Fuzzy match: '{column_name}' → '{mapping_key}' ({match_source}, score {confidence:.2f})",
                 )
                 self._resolved_cache[column_name] = resolved
                 return resolved
@@ -131,7 +138,7 @@ class MappingResolver:
             confidence=0.0,
             source="unresolved",
             mapping_data={},
-            rationale=f"No static or fuzzy match found for '{column_name}'; requires AI suggestion or manual annotation"
+            rationale=f"No static or fuzzy match found for '{column_name}'; requires AI suggestion or manual annotation",
         )
         self._resolved_cache[column_name] = resolved
         return resolved
@@ -148,7 +155,9 @@ class MappingResolver:
         """
         return [self.resolve_column(name) for name in column_names]
 
-    def get_resolution_summary(self, resolved_mappings: List[ResolvedMapping]) -> Dict[str, Any]:
+    def get_resolution_summary(
+        self, resolved_mappings: List[ResolvedMapping]
+    ) -> Dict[str, Any]:
         """
         Generate summary statistics on resolution quality.
 
@@ -158,8 +167,7 @@ class MappingResolver:
         Returns:
             Summary dict with source counts, confidence distribution, unresolved list.
         """
-        source_counts = {"static": 0,
-                         "deterministic": 0, "ai": 0, "unresolved": 0}
+        source_counts = {"static": 0, "deterministic": 0, "ai": 0, "unresolved": 0}
         confidence_scores = []
         unresolved = []
 
@@ -175,7 +183,7 @@ class MappingResolver:
             "high": sum(1 for s in confidence_scores if s >= 0.85),
             "medium": sum(1 for s in confidence_scores if 0.7 <= s < 0.85),
             "low": sum(1 for s in confidence_scores if 0.5 <= s < 0.7),
-            "unresolved": len(unresolved)
+            "unresolved": len(unresolved),
         }
 
         return {
@@ -183,7 +191,7 @@ class MappingResolver:
             "confidence_distribution": confidence_dist,
             "unresolved_columns": unresolved,
             "total_resolved": len(resolved_mappings) - len(unresolved),
-            "total_columns": len(resolved_mappings)
+            "total_columns": len(resolved_mappings),
         }
 
     def clear_cache(self) -> None:

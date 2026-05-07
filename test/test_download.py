@@ -5,18 +5,15 @@ All network I/O (git subprocesses, httpx, gitea client) is mocked so that
 these tests run without any server access.
 """
 
-import csv
-import io
 import subprocess
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
 
-from npdb.cli import _fetch_url, _read_download_tsv, npdb
-from npdb.managers import DataNeuroPolyMTL
+from npdb.cli.cli import _fetch_url, _read_download_tsv, npdb
+from npdb.managers.neuropoly import DataNeuroPolyMTL
 
 runner = CliRunner()
 
@@ -588,7 +585,7 @@ class TestFetchUrl:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("npdb.cli.httpx.stream", return_value=mock_response):
+        with patch("npdb.cli.cli.httpx.stream", return_value=mock_response):
             ok, msg = _fetch_url("https://example.com/file.nii.gz", dest)
 
         assert ok
@@ -604,14 +601,14 @@ class TestFetchUrl:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("npdb.cli.httpx.stream", return_value=mock_response):
+        with patch("npdb.cli.cli.httpx.stream", return_value=mock_response):
             _fetch_url("https://example.com/file.bin", dest)
 
         assert dest.parent.is_dir()
 
     def test_returns_false_on_http_error(self, tmp_path):
         dest = tmp_path / "file.bin"
-        with patch("npdb.cli.httpx.stream", side_effect=Exception("connection refused")):
+        with patch("npdb.cli.cli.httpx.stream", side_effect=Exception("connection refused")):
             ok, msg = _fetch_url("https://example.com/file.bin", dest)
 
         assert not ok
@@ -648,7 +645,7 @@ class TestDownloadCLI:
 
     def test_missing_env_vars_in_git_mode_errors(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row()])
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", {}, clear=True):
             result = runner.invoke(
                 npdb,
@@ -676,7 +673,7 @@ class TestDownloadCLI:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("npdb.cli.httpx.stream", return_value=mock_response):
+        with patch("npdb.cli.cli.httpx.stream", return_value=mock_response):
             result = runner.invoke(npdb, ["download", str(tsv),
                                           "--output-dir", str(tmp_path)])
         assert result.exit_code == 0
@@ -692,7 +689,7 @@ class TestDownloadCLI:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("npdb.cli.httpx.stream", return_value=mock_response) as mock_stream:
+        with patch("npdb.cli.cli.httpx.stream", return_value=mock_response) as mock_stream:
             runner.invoke(npdb, ["download", str(tsv),
                                  "--output-dir", str(tmp_path)])
 
@@ -708,10 +705,10 @@ class TestDownloadCLI:
             _make_row(SubjectID="sub-amuAP", ImagingSessionPath=""),
         ])
 
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.DataNeuroPolyMTL") as MockMgr:
-            instance = MockMgr.return_value
+                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+            instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (True, "whole-spine [sub-amuAP, sub-amuLJ]", "OK"),
             ]
@@ -731,9 +728,9 @@ class TestDownloadCLI:
     def test_git_mode_no_imaging_rows_warns(self, tmp_path):
         # All rows have empty ImagingSessionPath
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="")])
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.DataNeuroPolyMTL"):
+                patch("npdb.cli.cli.GiteaManagerFactory"):
             result = runner.invoke(
                 npdb,
                 ["download", str(tsv), "--git",
@@ -743,10 +740,10 @@ class TestDownloadCLI:
 
     def test_git_mode_failure_exits_nonzero(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.DataNeuroPolyMTL") as MockMgr:
-            instance = MockMgr.return_value
+                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+            instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (False, "whole-spine [sub-amuAP]", "fatal: some git error"),
             ]
@@ -762,10 +759,10 @@ class TestDownloadCLI:
 
     def test_git_annex_mode_passes_use_annex_true(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.DataNeuroPolyMTL") as MockMgr:
-            instance = MockMgr.return_value
+                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+            instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (True, "whole-spine [sub-amuAP]", "OK")]
             runner.invoke(
@@ -786,10 +783,10 @@ class TestDownloadCLI:
 
     def test_git_mode_label_shows_mode_in_output(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.load_dotenv"), \
+        with patch("npdb.cli.cli.load_dotenv"), \
                 patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.DataNeuroPolyMTL") as MockMgr:
-            instance = MockMgr.return_value
+                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+            instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (True, "whole-spine [sub-amuAP]", "OK")]
             result = runner.invoke(

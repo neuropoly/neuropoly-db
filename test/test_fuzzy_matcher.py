@@ -6,10 +6,7 @@ Tests exact matching, fuzzy matching, confidence scoring, and ColumnMatcher.
 
 import pytest
 
-from npdb.annotation.matching import (
-    ColumnMatcher,
-    PhenotypeMatcher
-)
+from npdb.annotation.matching import ColumnMatcher, PhenotypeMatcher
 from npdb.automation.mappings.solvers import load_static_mappings
 
 
@@ -21,16 +18,13 @@ class TestFuzzyMatcher:
         # Lowercase
         assert PhenotypeMatcher.normalize_header("AGE") == "age"
         # Underscore to space
-        assert PhenotypeMatcher.normalize_header(
-            "participant_id") == "participant id"
+        assert PhenotypeMatcher.normalize_header("participant_id") == "participant id"
         # Dash to space
         assert PhenotypeMatcher.normalize_header("age-years") == "age years"
         # Combined
-        assert PhenotypeMatcher.normalize_header(
-            "  Age_in_Years  ") == "age in years"
+        assert PhenotypeMatcher.normalize_header("  Age_in_Years  ") == "age in years"
         # Multiple spaces collapsed
-        assert PhenotypeMatcher.normalize_header(
-            "age  in  years") == "age in years"
+        assert PhenotypeMatcher.normalize_header("age  in  years") == "age in years"
 
     def test_exact_match_basic(self):
         """Test exact matching with simple candidates."""
@@ -63,7 +57,8 @@ class TestFuzzyMatcher:
 
         # "age_at_baseline" should match "age"
         result = PhenotypeMatcher.fuzzy_match(
-            "age_at_baseline", candidates, score_cutoff=75)
+            "age_at_baseline", candidates, score_cutoff=75
+        )
         assert result is not None
         matched, confidence = result
         assert matched == "age"
@@ -75,8 +70,7 @@ class TestFuzzyMatcher:
 
         # "partID" may not match well enough on score_cutoff=60 with token_set_ratio
         # Adjust cutoff lower for this weak match test
-        result = PhenotypeMatcher.fuzzy_match(
-            "partID", candidates, score_cutoff=40)
+        result = PhenotypeMatcher.fuzzy_match("partID", candidates, score_cutoff=40)
         assert result is not None
         matched, confidence = result
         assert 0.75 <= confidence <= 0.9
@@ -85,7 +79,8 @@ class TestFuzzyMatcher:
         """Test fuzzy matching returns None below cutoff."""
         candidates = ["age", "sex"]
         result = PhenotypeMatcher.fuzzy_match(
-            "completely_unrelated_column", candidates, score_cutoff=75)
+            "completely_unrelated_column", candidates, score_cutoff=75
+        )
         assert result is None
 
     def test_fuzzy_match_confidence_scaling(self):
@@ -94,12 +89,12 @@ class TestFuzzyMatcher:
 
         # At cutoff (75), confidence should be ~0.75
         result_at_cutoff = PhenotypeMatcher.fuzzy_match(
-            "age", candidates, score_cutoff=75)
+            "age", candidates, score_cutoff=75
+        )
         assert result_at_cutoff and result_at_cutoff[1] >= 0.75
 
         # At 100 (exact), confidence should be ~0.9 (capped)
-        result_at_100 = PhenotypeMatcher.fuzzy_match(
-            "age", candidates, score_cutoff=0)
+        result_at_100 = PhenotypeMatcher.fuzzy_match("age", candidates, score_cutoff=0)
         assert result_at_100 and result_at_100[1] <= 0.9
 
     def test_match_header_exact_priority(self):
@@ -126,7 +121,8 @@ class TestFuzzyMatcher:
         """Test no match returns None."""
         candidates = ["age", "sex"]
         result = PhenotypeMatcher.match_header(
-            "unrelated", candidates, fuzzy_threshold=0.75)
+            "unrelated", candidates, fuzzy_threshold=0.75
+        )
         assert result is None
 
     def test_match_header_thresholds(self):
@@ -135,13 +131,15 @@ class TestFuzzyMatcher:
 
         # Use high fuzzy threshold to filter matches
         result_strict = PhenotypeMatcher.match_header(
-            "age_years", candidates, fuzzy_threshold=0.95)
+            "age_years", candidates, fuzzy_threshold=0.95
+        )
         # Should still match since "age" is similar
         assert result_strict is None or result_strict[2] == "exact"
 
         # Use low threshold to allow more matches
         result_lenient = PhenotypeMatcher.match_header(
-            "age_years", candidates, fuzzy_threshold=0.5)
+            "age_years", candidates, fuzzy_threshold=0.5
+        )
         assert result_lenient is not None
 
 
@@ -160,22 +158,22 @@ class TestColumnMatcher:
                     "variable": "nb:ParticipantID",
                     "confidence": 1.0,
                     "variable_type": "Identifier",
-                    "aliases": ["sub_id", "subject_id", "partID"]
+                    "aliases": ["sub_id", "subject_id", "partID"],
                 },
                 "age": {
                     "variable": "nb:Age",
                     "confidence": 0.95,
                     "variable_type": "Continuous",
                     "format": "nb:FromFloat",
-                    "aliases": ["age_years", "years_old"]
+                    "aliases": ["age_years", "years_old"],
                 },
                 "sex": {
                     "variable": "nb:Sex",
                     "confidence": 0.9,
                     "variable_type": "Categorical",
-                    "aliases": ["gender"]
+                    "aliases": ["gender"],
                 },
-            }
+            },
         }
 
     def test_column_matcher_exact(self, test_registry):
@@ -242,10 +240,7 @@ class TestColumnMatcher:
         """Test that ColumnMatcher extracts all names and aliases."""
         registry = {
             "mappings": {
-                "age": {
-                    "variable": "nb:Age",
-                    "aliases": ["age_years", "years"]
-                }
+                "age": {"variable": "nb:Age", "aliases": ["age_years", "years"]}
             }
         }
         matcher = ColumnMatcher(registry)
@@ -262,21 +257,20 @@ class TestConfidenceScaling:
         """Exact matches should have confidence 1.0."""
         candidates = ["age"]
         result = PhenotypeMatcher.match_header("age", candidates)
+        assert result is not None
         assert result[1] == 1.0
 
     def test_fuzzy_match_confidence_range(self):
         """Fuzzy matches should be in [0.75, 0.9) range."""
         candidates = ["age"]
-        result = PhenotypeMatcher.fuzzy_match(
-            "ageXXX", candidates, score_cutoff=50)
+        result = PhenotypeMatcher.fuzzy_match("ageXXX", candidates, score_cutoff=50)
         assert result is not None
         assert 0.75 <= result[1] < 0.9
 
     def test_no_match_returns_none(self):
         """No match should return None, not 0 confidence."""
         candidates = ["age", "sex"]
-        result = PhenotypeMatcher.match_header(
-            "completely_unrelated", candidates)
+        result = PhenotypeMatcher.match_header("completely_unrelated", candidates)
         assert result is None
 
 

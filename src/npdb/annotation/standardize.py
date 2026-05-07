@@ -19,7 +19,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from npdb.automation.mappings.resolvers import ResolvedMapping
 from npdb.external.neurobagel.schema import expand_iri
 
-
 # BIDS-valid fields for tabular file sidecar entries (from BIDS common-principles spec)
 BIDS_VALID_SIDECAR_FIELDS = {
     "LongName",
@@ -93,26 +92,27 @@ def load_header_map(path: Path) -> Dict[str, Dict[str, Any]]:
     for key, value in data.items():
         if not isinstance(key, str):
             raise ValueError(
-                f"Header map keys must be strings, got: {type(key).__name__}")
+                f"Header map keys must be strings, got: {type(key).__name__}"
+            )
         if not isinstance(value, dict):
             raise ValueError(
                 f"Header map values must be objects, invalid value for key '{key}'"
             )
         aliases = value.get("aliases")
-        if not isinstance(aliases, list) or not all(isinstance(v, str) for v in aliases):
-            raise ValueError(
-                f"'aliases' must be a list of strings for key '{key}'"
-            )
+        if not isinstance(aliases, list) or not all(
+            isinstance(v, str) for v in aliases
+        ):
+            raise ValueError(f"'aliases' must be a list of strings for key '{key}'")
         variable = value.get("variable")
         if variable is not None and not isinstance(variable, str):
-            raise ValueError(
-                f"'variable' must be a string for key '{key}'"
-            )
+            raise ValueError(f"'variable' must be a string for key '{key}'")
 
     return data
 
 
-def validate_header_map_keys(header_map: Dict[str, Dict[str, Any]], valid_keys: Set[str]) -> None:
+def validate_header_map_keys(
+    header_map: Dict[str, Dict[str, Any]], valid_keys: Set[str]
+) -> None:
     """
     Validate that all keys in a header map belong to a set of valid keys.
 
@@ -141,11 +141,7 @@ def header_map_variables(header_map: Dict[str, Dict[str, Any]]) -> Set[str]:
     Returns:
         Set of variable IRI strings (entries without ``"variable"`` are skipped).
     """
-    return {
-        entry["variable"]
-        for entry in header_map.values()
-        if "variable" in entry
-    }
+    return {entry["variable"] for entry in header_map.values() if "variable" in entry}
 
 
 def apply_header_map(
@@ -313,7 +309,7 @@ def _extract_canonical_name(mapping: ResolvedMapping) -> Optional[str]:
         rationale = mapping.rationale
         arrow_idx = rationale.find("→")
         if arrow_idx != -1:
-            rest = rationale[arrow_idx + 1:].strip()
+            rest = rationale[arrow_idx + 1 :].strip()
             # Extract the quoted key after the arrow
             if rest.startswith("'"):
                 end = rest.find("'", 1)
@@ -497,9 +493,7 @@ def generate_participants_json(
 
         # Description
         if "Description" not in entry:
-            entry["Description"] = mapping_data.get(
-                "note", f"Column: {col}"
-            )
+            entry["Description"] = mapping_data.get("note", f"Column: {col}")
 
         # Format (BIDS string)
         variable_type = mapping_data.get("variableType")
@@ -676,28 +670,29 @@ _CATEGORICAL_TERMS_PATH = (
     Path(__file__).resolve().parents[3] / "config" / "categorical_terms.json"
 )
 _ALIAS_TO_PREFERRED, _PREFERRED_TO_TERM = load_categorical_terms(
-    _CATEGORICAL_TERMS_PATH)
+    _CATEGORICAL_TERMS_PATH
+)
 
 # Age format detection — ordered list of (neurobagel_term, pattern) tuples.
 # Multiple patterns may map to the same term; the first match wins per value.
 # Standard notations come first so they take priority in majority voting.
 _AGE_FORMAT_PATTERNS: List[Tuple[str, re.Pattern]] = [
     # Standard / canonical notations
-    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?\+$")),           # 89+
-    ("nb:FromRange",   re.compile(r"^\d+(\.\d+)?-\d+(\.\d+)?$")),  # 18-25
-    ("nb:FromISO8601", re.compile(r"^P\d")),                       # P30Y
-    ("nb:FromEuro",    re.compile(r"^\d+,\d+$")),                  # 42,5
+    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?\+$")),  # 89+
+    ("nb:FromRange", re.compile(r"^\d+(\.\d+)?-\d+(\.\d+)?$")),  # 18-25
+    ("nb:FromISO8601", re.compile(r"^P\d")),  # P30Y
+    ("nb:FromEuro", re.compile(r"^\d+,\d+$")),  # 42,5
     # Non-standard but accepted single-ended notations — all map to FromBounded
-    ("nb:FromBounded", re.compile(r"^\+\d+(\.\d+)?$")),            # +89
-    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?-$")),             # 42-
-    ("nb:FromBounded", re.compile(r"^-\d+(\.\d+)?$")),             # -42
+    ("nb:FromBounded", re.compile(r"^\+\d+(\.\d+)?$")),  # +89
+    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?-$")),  # 42-
+    ("nb:FromBounded", re.compile(r"^-\d+(\.\d+)?$")),  # -42
 ]
 
 # Subset used only to emit soft warnings (non-standard but accepted forms)
 _AGE_NONSTANDARD_PATTERNS: List[Tuple[str, re.Pattern]] = [
-    ("nb:FromBounded", re.compile(r"^\+\d+(\.\d+)?$")),            # +89
-    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?-$")),             # 42-
-    ("nb:FromBounded", re.compile(r"^-\d+(\.\d+)?$")),             # -42
+    ("nb:FromBounded", re.compile(r"^\+\d+(\.\d+)?$")),  # +89
+    ("nb:FromBounded", re.compile(r"^\d+(\.\d+)?-$")),  # 42-
+    ("nb:FromBounded", re.compile(r"^-\d+(\.\d+)?$")),  # -42
 ]
 
 
@@ -793,7 +788,9 @@ def fix_age_format(tsv_path: Path, annotations_path: Path) -> List[str]:
     parseable: List[str] = []
     unparseable: List[str] = []
     for v in age_values:
-        if any(pat.match(v.strip()) for _, pat in _AGE_FORMAT_PATTERNS) or _is_plain_float(v):
+        if any(
+            pat.match(v.strip()) for _, pat in _AGE_FORMAT_PATTERNS
+        ) or _is_plain_float(v):
             parseable.append(v)
         else:
             unparseable.append(v)
@@ -811,8 +808,7 @@ def fix_age_format(tsv_path: Path, annotations_path: Path) -> List[str]:
     # ── Format detection ──────────────────────────────────────────────────
     if parseable:
         detected = _detect_age_format(parseable)
-        current_fmt = ann_block.get("Format", {}).get(
-            "TermURL", "nb:FromFloat")
+        current_fmt = ann_block.get("Format", {}).get("TermURL", "nb:FromFloat")
         if current_fmt != detected:
             ann_block.setdefault("Format", {})
             ann_block["Format"]["TermURL"] = detected
@@ -826,7 +822,8 @@ def fix_age_format(tsv_path: Path, annotations_path: Path) -> List[str]:
 
         # Warn (non-breaking) about non-standard single-ended notations
         nonstandard = [
-            v for v in parseable
+            v
+            for v in parseable
             if any(pat.match(v.strip()) for _, pat in _AGE_NONSTANDARD_PATTERNS)
         ]
         if nonstandard:
@@ -951,7 +948,10 @@ def auto_add_missing_value_sentinels(
                 continue
             val_stripped = val.strip()
 
-            if val_stripped.lower() in {p.lower() for p in _NA_PATTERNS} or val_stripped == "":
+            if (
+                val_stripped.lower() in {p.lower() for p in _NA_PATTERNS}
+                or val_stripped == ""
+            ):
                 # NA-like → add as sentinel
                 missing_values.append(val)
                 changed = True
@@ -1045,12 +1045,15 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> List[str]:
                 term = _PREFERRED_TO_TERM.get(preferred) if preferred else None
                 canonical_key = preferred if preferred else val
                 nb_levels.pop(val)
-                nb_levels[canonical_key] = term if term else {
-                    "TermURL": "nb:Unresolved",
-                    "Label": val,
-                }
-                bids_levels.setdefault(
-                    canonical_key, nb_levels[canonical_key]["Label"])
+                nb_levels[canonical_key] = (
+                    term
+                    if term
+                    else {
+                        "TermURL": "nb:Unresolved",
+                        "Label": val,
+                    }
+                )
+                bids_levels.setdefault(canonical_key, nb_levels[canonical_key]["Label"])
                 if preferred and preferred != val:
                     tsv_renames.setdefault(col, {})[val] = preferred
                 changed = True
@@ -1068,12 +1071,15 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> List[str]:
             if val.strip().lower() in na_lower or val.strip() == "":
                 continue
             term = _PREFERRED_TO_TERM.get(preferred) if preferred else None
-            nb_levels[canonical_key] = term if term else {
-                "TermURL": "nb:Unresolved",
-                "Label": val,
-            }
-            bids_levels.setdefault(
-                canonical_key, nb_levels[canonical_key]["Label"])
+            nb_levels[canonical_key] = (
+                term
+                if term
+                else {
+                    "TermURL": "nb:Unresolved",
+                    "Label": val,
+                }
+            )
+            bids_levels.setdefault(canonical_key, nb_levels[canonical_key]["Label"])
             if preferred and preferred != val:
                 tsv_renames.setdefault(col, {})[val] = preferred
             changed = True

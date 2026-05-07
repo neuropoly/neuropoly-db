@@ -17,6 +17,7 @@ def builtin_mappings():
 def user_mappings_path(tmp_path):
     """Create a temporary user mappings file."""
     import json
+
     user_mapping = {
         "@context": {
             "nb": "http://neurobagel.org/vocab/",
@@ -26,9 +27,9 @@ def user_mappings_path(tmp_path):
                 "variable": "nb:Age",
                 "format": "nb:FromFloat",
                 "confidence": 0.9,
-                "variableType": "Continuous"
+                "variableType": "Continuous",
             }
-        }
+        },
     }
     mapping_file = tmp_path / "user_mappings.json"
     with open(mapping_file, "w") as f:
@@ -73,7 +74,9 @@ class TestMappingsRegistry:
         assert "M" in mapping["levels"]
         assert "F" in mapping["levels"]
 
-    def test_merge_mappings_respects_user_priority(self, builtin_mappings, user_mappings_path):
+    def test_merge_mappings_respects_user_priority(
+        self, builtin_mappings, user_mappings_path
+    ):
         """Test that user mappings take precedence over built-in."""
         user_map = load_user_mappings(user_mappings_path)
         merged = merge_mappings(builtin_mappings, user_map)

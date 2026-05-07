@@ -4,6 +4,7 @@ Download handling for annotation tool exports.
 Detects, waits for, and manages file downloads from browser.
 Supports headless and headed modes with different download behaviors.
 """
+
 import asyncio
 import json
 from datetime import datetime
@@ -34,10 +35,7 @@ class DownloadHandler:
         self.last_download_path: Optional[Path] = None
 
     async def wait_for_download(
-        self,
-        page,
-        button_selector: str,
-        expected_filename: Optional[str] = None
+        self, page, button_selector: str, expected_filename: Optional[str] = None
     ) -> Path:
         """
         Click download button and wait for file to complete.
@@ -102,15 +100,10 @@ class DownloadHandler:
 
             await asyncio.sleep(0.5)
 
-        raise RuntimeError(
-            f"File not complete within {self.timeout}s: {file_path}"
-        )
+        raise RuntimeError(f"File not complete within {self.timeout}s: {file_path}")
 
     async def move_download(
-        self,
-        source_path: Path,
-        dest_dir: Path,
-        rename_to: Optional[str] = None
+        self, source_path: Path, dest_dir: Path, rename_to: Optional[str] = None
     ) -> Path:
         """
         Move downloaded file to output directory.
@@ -128,8 +121,7 @@ class DownloadHandler:
             RuntimeError: If move fails.
         """
         if not source_path.exists():
-            raise FileNotFoundError(
-                f"Downloaded file not found: {source_path}")
+            raise FileNotFoundError(f"Downloaded file not found: {source_path}")
 
         dest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -140,6 +132,7 @@ class DownloadHandler:
         try:
             # Move file (or copy if cross-filesystem)
             import shutil
+
             shutil.move(str(source_path), str(dest_path))
             return dest_path
         except Exception as e:
@@ -179,13 +172,16 @@ class DownloadDetector:
         Args:
             context: Playwright browser context.
         """
+
         def on_download(download):
             """Handle download event."""
-            self.downloads_detected.append({
-                "filename": download.suggested_filename,
-                "url": download.url,
-                "timestamp": datetime.now().isoformat()
-            })
+            self.downloads_detected.append(
+                {
+                    "filename": download.suggested_filename,
+                    "url": download.url,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
 
         context.on("download", on_download)
 
@@ -283,8 +279,10 @@ class ExpectedFileValidator:
         """
 
         expected_files = {
-            ExpectedFileValidator.PHENOTYPES_JSON: output_dir / ExpectedFileValidator.PHENOTYPES_JSON,
-            ExpectedFileValidator.PHENOTYPES_SIDECAR: output_dir / ExpectedFileValidator.PHENOTYPES_SIDECAR,
+            ExpectedFileValidator.PHENOTYPES_JSON: output_dir
+            / ExpectedFileValidator.PHENOTYPES_JSON,
+            ExpectedFileValidator.PHENOTYPES_SIDECAR: output_dir
+            / ExpectedFileValidator.PHENOTYPES_SIDECAR,
         }
 
         results = {}

@@ -4,7 +4,9 @@ Fuzzy column header matcher for deterministic phenotype mapping.
 Uses rapidfuzz for scoring column headers against known phenotype variable names.
 Provides confidence-calibrated matching for exact, fuzzy, and no-match cases.
 """
+
 from typing import Dict, List, Optional, Tuple
+
 from rapidfuzz import fuzz, process
 
 
@@ -53,7 +55,8 @@ class PhenotypeMatcher:
         """
         normalized_header = PhenotypeMatcher.normalize_header(header)
         normalized_candidates = {
-            PhenotypeMatcher.normalize_header(c): c for c in candidates}
+            PhenotypeMatcher.normalize_header(c): c for c in candidates
+        }
 
         if normalized_header in normalized_candidates:
             return (normalized_candidates[normalized_header], 1.0)
@@ -61,9 +64,7 @@ class PhenotypeMatcher:
 
     @staticmethod
     def fuzzy_match(
-        header: str,
-        candidates: List[str],
-        score_cutoff: float = 75.0
+        header: str, candidates: List[str], score_cutoff: float = 75.0
     ) -> Optional[Tuple[str, float]]:
         """
         Find best fuzzy match using token-based scoring.
@@ -82,14 +83,15 @@ class PhenotypeMatcher:
 
         normalized_header = PhenotypeMatcher.normalize_header(header)
         normalized_candidates = [
-            PhenotypeMatcher.normalize_header(c) for c in candidates]
+            PhenotypeMatcher.normalize_header(c) for c in candidates
+        ]
 
         # Use token_set_ratio for partial matches (e.g., "age_at_baseline" vs "age")
         result = process.extractOne(
             normalized_header,
             normalized_candidates,
             scorer=fuzz.token_set_ratio,
-            score_cutoff=score_cutoff
+            score_cutoff=score_cutoff,
         )
 
         if result is None:
@@ -99,8 +101,7 @@ class PhenotypeMatcher:
 
         # Normalize score from [score_cutoff, 100] to [0.75, 0.9]
         # This reserves [0.9, 1.0] for exact matches and [0.5, 0.75) for AI suggestions
-        confidence = 0.75 + (best_score - score_cutoff) / \
-            (100.0 - score_cutoff) * 0.15
+        confidence = 0.75 + (best_score - score_cutoff) / (100.0 - score_cutoff) * 0.15
         confidence = min(confidence, 0.9)  # Cap at 0.9
 
         original_candidate = candidates[idx]
@@ -111,7 +112,7 @@ class PhenotypeMatcher:
         header: str,
         candidates: List[str],
         exact_threshold: float = 1.0,
-        fuzzy_threshold: float = 0.75
+        fuzzy_threshold: float = 0.75,
     ) -> Optional[Tuple[str, float, str]]:
         """
         Match column header with two-tier strategy: exact → fuzzy.
@@ -187,10 +188,7 @@ class ColumnMatcher:
                     self.all_known_names.append(name)
 
     def match_column(
-        self,
-        header: str,
-        exact_threshold: float = 1.0,
-        fuzzy_threshold: float = 0.75
+        self, header: str, exact_threshold: float = 1.0, fuzzy_threshold: float = 0.75
     ) -> Optional[Tuple[str, float, str]]:
         """
         Match a column header to a known phenotype mapping.
@@ -207,7 +205,7 @@ class ColumnMatcher:
             header,
             self.all_known_names,
             exact_threshold=exact_threshold,
-            fuzzy_threshold=fuzzy_threshold
+            fuzzy_threshold=fuzzy_threshold,
         )
 
         if match_result:

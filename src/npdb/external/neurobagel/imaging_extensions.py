@@ -75,26 +75,41 @@ _NB_FALLBACKS: Dict[str, Tuple[str, str]] = {
     "BF": ("nb:BrightFieldMicroscopy", "Bright-field optical microscopy image."),
     "DF": ("nb:DarkFieldMicroscopy", "Dark-field optical microscopy image."),
     "PC": ("nb:PhaseContrastMicroscopy", "Phase-contrast optical microscopy image."),
-    "DIC": ("nb:DifferentialInterferenceContrastMicroscopy", "Differential interference contrast (DIC) optical microscopy image."),
+    "DIC": (
+        "nb:DifferentialInterferenceContrastMicroscopy",
+        "Differential interference contrast (DIC) optical microscopy image.",
+    ),
     "FLUO": ("nb:FluorescenceMicroscopy", "Fluorescence microscopy image."),
     "CONF": ("nb:ConfocalMicroscopy", "Confocal fluorescence microscopy image."),
-    "PLI": ("nb:PolarisedLightImaging", "Polarised Light Imaging (PLI) of white matter fiber orientation."),
-    "TEM": ("nb:TransmissionElectronMicroscopy", "Transmission electron microscopy image."),
+    "PLI": (
+        "nb:PolarisedLightImaging",
+        "Polarised Light Imaging (PLI) of white matter fiber orientation.",
+    ),
+    "TEM": (
+        "nb:TransmissionElectronMicroscopy",
+        "Transmission electron microscopy image.",
+    ),
     "SEM": ("nb:ScanningElectronMicroscopy", "Scanning electron microscopy image."),
-    "uCT": ("nb:MicroComputedTomography", "Micro-computed tomography (micro-CT) image."),
+    "uCT": (
+        "nb:MicroComputedTomography",
+        "Micro-computed tomography (micro-CT) image.",
+    ),
     "OCT": ("nb:OpticalCoherenceTomography", "Optical coherence tomography image."),
-    "CARS": ("nb:CoherentAntiStokesRamanSpectroscopyMicroscopy", "Coherent anti-Stokes Raman scattering (CARS) microscopy image."),
+    "CARS": (
+        "nb:CoherentAntiStokesRamanSpectroscopyMicroscopy",
+        "Coherent anti-Stokes Raman scattering (CARS) microscopy image.",
+    ),
     "T2star": ("nb:T2StarWeighted", "T2*-weighted image."),
 }
 
 # Public alias kept for backward compatibility (tests import this by name)
-STATIC_FALLBACKS: Dict[str, Tuple[str, str]] = {
-    **_NB_FALLBACKS, **_NIDM_ALIASES}
+STATIC_FALLBACKS: Dict[str, Tuple[str, str]] = {**_NB_FALLBACKS, **_NIDM_ALIASES}
 
 
 # ---------------------------------------------------------------------------
 # Extensions file helpers
 # ---------------------------------------------------------------------------
+
 
 def load_neuropoly_vocab(path: Path) -> Dict[str, Tuple[str, str]]:
     """
@@ -240,8 +255,9 @@ def resolve_suffix(
         return entry["iri"], False, entry.get("description", "")
 
     # 2. neuropoly_imaging_modalities.json (nb: terms)
-    neuropoly_vocab = load_neuropoly_vocab(
-        neuropoly_vocab_path) if neuropoly_vocab_path else {}
+    neuropoly_vocab = (
+        load_neuropoly_vocab(neuropoly_vocab_path) if neuropoly_vocab_path else {}
+    )
     if suffix in neuropoly_vocab:
         iri, description = neuropoly_vocab[suffix]
         existing[suffix] = {
@@ -311,6 +327,7 @@ def resolve_suffix(
 # ---------------------------------------------------------------------------
 # Runtime bagel patch
 # ---------------------------------------------------------------------------
+
 
 def patch_bagel_suffix_map(extra: Dict[str, str]) -> None:
     """

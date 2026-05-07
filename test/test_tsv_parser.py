@@ -2,14 +2,12 @@
 Tests for TSV file parsing utilities.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
-from npdb.utils import (
-    get_unique_values,
-    parse_tsv_columns
-)
+import pytest
+
+from npdb.annotation.utils import get_unique_values, parse_tsv_columns
 
 
 @pytest.fixture
@@ -21,7 +19,7 @@ sub-02\t28\tF\tPD\t78.2
 sub-03\t35\tM\tCTRL\t92.1
 sub-04\t31\tF\tPD\t85.0
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
         f.write(content)
         return Path(f.name)
 
@@ -29,7 +27,7 @@ sub-04\t31\tF\tPD\t85.0
 @pytest.fixture
 def empty_tsv() -> Path:
     """Create an empty TSV file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
         return Path(f.name)
 
 
@@ -60,8 +58,7 @@ class TestParseTSVColumns:
     def test_column_order_preserved(self, sample_tsv: Path):
         """Test that column order is preserved."""
         columns = parse_tsv_columns(sample_tsv)
-        expected = ["participant_id", "age",
-                    "sex", "diagnosis", "cognitive_score"]
+        expected = ["participant_id", "age", "sex", "diagnosis", "cognitive_score"]
         assert columns == expected
 
 
@@ -111,7 +108,7 @@ class TestTSVParsingEdgeCases:
     def test_single_column(self):
         """Test TSV with only one column."""
         content = "participant_id\nsub-01\nsub-02\n"
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
             f.write(content)
             tsv_path = Path(f.name)
 
@@ -127,7 +124,7 @@ class TestTSVParsingEdgeCases:
         row = "\t".join([str(i) for i in range(100)])
         content = f"{headers}\n{row}\n"
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
             f.write(content)
             tsv_path = Path(f.name)
 
@@ -142,7 +139,7 @@ class TestTSVParsingEdgeCases:
     def test_missing_data_in_column(self):
         """Test handling of missing data (NA, n/a, N/A)."""
         content = "participant_id\tage\nsub-01\t25\nsub-02\tNA\nsub-03\tn/a\nsub-04\tN/A\nsub-05\t30\n"
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tsv", delete=False) as f:
             f.write(content)
             tsv_path = Path(f.name)
 

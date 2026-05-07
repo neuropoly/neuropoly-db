@@ -15,20 +15,21 @@ Also covers:
 
 import csv
 import json
-import pytest
 from pathlib import Path
 
+import pytest
+
 from npdb.annotation.standardize import (
-    _detect_age_format,
     _AGE_FORMAT_PATTERNS,
     _AGE_NONSTANDARD_PATTERNS,
+    _detect_age_format,
     fix_age_format,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_tsv(path: Path, rows: list[dict]) -> None:
     """Write a minimal tab-separated file."""
@@ -60,6 +61,7 @@ def _write_annotations(path: Path, age_col: str, fmt_iri: str = "nb:FromFloat") 
 # ---------------------------------------------------------------------------
 # _detect_age_format — unit tests for every accepted notation
 # ---------------------------------------------------------------------------
+
 
 class TestDetectAgeFormat:
     """Unit tests for the internal _detect_age_format helper."""
@@ -155,15 +157,17 @@ class TestDetectAgeFormat:
         """Every non-standard pattern must also appear in the main registry."""
         registry_patterns = [pat.pattern for _, pat in _AGE_FORMAT_PATTERNS]
         for _, ns_pat in _AGE_NONSTANDARD_PATTERNS:
-            assert ns_pat.pattern in registry_patterns, (
-                f"Non-standard pattern {ns_pat.pattern!r} is not in _AGE_FORMAT_PATTERNS"
-            )
+            assert (
+                ns_pat.pattern in registry_patterns
+            ), f"Non-standard pattern {ns_pat.pattern!r} is not in _AGE_FORMAT_PATTERNS"
 
     def test_standard_bounded_takes_priority_over_nonstandard(self):
         """'89+' (standard) matches before '+89' (non-standard) in the ordered list."""
         # Both produce FromBounded so the term is the same — verify by checking
         # that the match comes from the standard pattern position.
-        standard_pat = _AGE_FORMAT_PATTERNS[0][1]  # first entry: nb:FromBounded, "^\d+..."
+        standard_pat = _AGE_FORMAT_PATTERNS[0][
+            1
+        ]  # first entry: nb:FromBounded, "^\d+..."
         assert standard_pat.match("89+") is not None
         assert standard_pat.match("+89") is None  # standard pattern does NOT match +89
 
@@ -172,59 +176,68 @@ class TestDetectAgeFormat:
 # fix_age_format — integration tests (TSV + annotations file)
 # ---------------------------------------------------------------------------
 
+
 class TestFixAgeFormat:
     """Integration tests for fix_age_format()."""
 
     # ── Standard notations update annotations correctly ───────────────────
 
-    @pytest.mark.parametrize("values,expected_fmt", [
-        (["89+", "75+", "62+"], "nb:FromBounded"),
-        (["18-25", "26-35"], "nb:FromRange"),
-        (["P30Y", "P45Y"], "nb:FromISO8601"),
-        (["42,5", "31,0"], "nb:FromEuro"),
-        (["22", "31", "45"], "nb:FromFloat"),
-    ])
-    def test_standard_format_detected_and_written(
-        self, tmp_path, values, expected_fmt
-    ):
+    @pytest.mark.parametrize(
+        "values,expected_fmt",
+        [
+            (["89+", "75+", "62+"], "nb:FromBounded"),
+            (["18-25", "26-35"], "nb:FromRange"),
+            (["P30Y", "P45Y"], "nb:FromISO8601"),
+            (["42,5", "31,0"], "nb:FromEuro"),
+            (["22", "31", "45"], "nb:FromFloat"),
+        ],
+    )
+    def test_standard_format_detected_and_written(self, tmp_path, values, expected_fmt):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
-        _write_tsv(tsv, [{"participant_id": f"sub-0{i+1}", "age": v}
-                          for i, v in enumerate(values)])
+        _write_tsv(
+            tsv,
+            [{"participant_id": f"sub-0{i+1}", "age": v} for i, v in enumerate(values)],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromFloat")
 
         warnings = fix_age_format(tsv, ann)
 
         data = json.loads(ann.read_text())
         actual = data["age"]["Annotations"]["Format"]["TermURL"]
-        assert actual == expected_fmt, (
-            f"Expected {expected_fmt!r}, got {actual!r} for values {values}"
-        )
+        assert (
+            actual == expected_fmt
+        ), f"Expected {expected_fmt!r}, got {actual!r} for values {values}"
 
     # ── Non-standard notations: accepted + soft warning ───────────────────
 
-    @pytest.mark.parametrize("values,label", [
-        (["+89", "+75"], "leading plus"),
-        (["42-", "55-"], "trailing minus"),
-        (["-42", "-55"], "leading minus"),
-        (["+89", "42-", "-55"], "mixed non-standard"),
-    ])
+    @pytest.mark.parametrize(
+        "values,label",
+        [
+            (["+89", "+75"], "leading plus"),
+            (["42-", "55-"], "trailing minus"),
+            (["-42", "-55"], "leading minus"),
+            (["+89", "42-", "-55"], "mixed non-standard"),
+        ],
+    )
     def test_nonstandard_notation_accepted_and_maps_to_bounded(
         self, tmp_path, values, label
     ):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
-        _write_tsv(tsv, [{"participant_id": f"sub-0{i+1}", "age": v}
-                          for i, v in enumerate(values)])
+        _write_tsv(
+            tsv,
+            [{"participant_id": f"sub-0{i+1}", "age": v} for i, v in enumerate(values)],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromFloat")
 
         warnings = fix_age_format(tsv, ann)
 
         # Format must be updated to FromBounded
         data = json.loads(ann.read_text())
-        assert data["age"]["Annotations"]["Format"]["TermURL"] == "nb:FromBounded", (
-            f"[{label}] Expected nb:FromBounded"
-        )
+        assert (
+            data["age"]["Annotations"]["Format"]["TermURL"] == "nb:FromBounded"
+        ), f"[{label}] Expected nb:FromBounded"
         # Must emit a non-standard warning
         nonstandard_warns = [w for w in warnings if "non-standard" in w]
         assert nonstandard_warns, f"[{label}] Expected a non-standard notation warning"
@@ -232,8 +245,13 @@ class TestFixAgeFormat:
     def test_nonstandard_warning_contains_examples(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
-        _write_tsv(tsv, [{"participant_id": "sub-01", "age": "+42"},
-                          {"participant_id": "sub-02", "age": "+55"}])
+        _write_tsv(
+            tsv,
+            [
+                {"participant_id": "sub-01", "age": "+42"},
+                {"participant_id": "sub-02", "age": "+55"},
+            ],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromFloat")
 
         warnings = fix_age_format(tsv, ann)
@@ -256,8 +274,13 @@ class TestFixAgeFormat:
     def test_no_op_when_format_already_correct(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
-        _write_tsv(tsv, [{"participant_id": "sub-01", "age": "89+"},
-                          {"participant_id": "sub-02", "age": "75+"}])
+        _write_tsv(
+            tsv,
+            [
+                {"participant_id": "sub-01", "age": "89+"},
+                {"participant_id": "sub-02", "age": "75+"},
+            ],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromBounded")
 
         original_mtime = ann.stat().st_mtime
@@ -272,10 +295,13 @@ class TestFixAgeFormat:
     def test_only_age_annotated_column_touched(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
-        _write_tsv(tsv, [
-            {"participant_id": "sub-01", "age": "89+", "age2": "50"},
-            {"participant_id": "sub-02", "age": "75+", "age2": "30"},
-        ])
+        _write_tsv(
+            tsv,
+            [
+                {"participant_id": "sub-01", "age": "89+", "age2": "50"},
+                {"participant_id": "sub-02", "age": "75+", "age2": "30"},
+            ],
+        )
         # Two columns but only 'age' annotated as nb:Age
         annotations = {
             "age": {
@@ -320,8 +346,9 @@ class TestFixAgeFormat:
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "participants_annotations.json"
         rows = [{"participant_id": f"sub-{i:02d}", "age": "n/a"} for i in range(5)]
-        rows += [{"participant_id": f"sub-{i+5:02d}", "age": str(20 + i)}
-                 for i in range(5)]
+        rows += [
+            {"participant_id": f"sub-{i+5:02d}", "age": str(20 + i)} for i in range(5)
+        ]
         _write_tsv(tsv, rows)
         _write_annotations(ann, "age")
 
@@ -366,11 +393,14 @@ class TestFixAgeFormat:
         """All-NA age column: NA warning emitted but no format-change warning."""
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "annotations.json"
-        _write_tsv(tsv, [
-            {"participant_id": "sub-01", "age": "n/a"},
-            {"participant_id": "sub-02", "age": "N/A"},
-            {"participant_id": "sub-03", "age": ""},
-        ])
+        _write_tsv(
+            tsv,
+            [
+                {"participant_id": "sub-01", "age": "n/a"},
+                {"participant_id": "sub-02", "age": "N/A"},
+                {"participant_id": "sub-03", "age": ""},
+            ],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromFloat")
 
         warnings = fix_age_format(tsv, ann)
@@ -395,8 +425,10 @@ class TestFixAgeFormat:
     def test_update_warning_mentions_old_and_new_format(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "annotations.json"
-        _write_tsv(tsv, [{"participant_id": f"sub-{i:02d}", "age": f"P{20+i}Y"}
-                          for i in range(5)])
+        _write_tsv(
+            tsv,
+            [{"participant_id": f"sub-{i:02d}", "age": f"P{20+i}Y"} for i in range(5)],
+        )
         _write_annotations(ann, "age", fmt_iri="nb:FromFloat")
 
         warnings = fix_age_format(tsv, ann)

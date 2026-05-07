@@ -18,11 +18,11 @@ duplicates per Neurobagel specifications:
 This preserves ranking/provenance info and avoids re-running algorithms.
 Reference: https://neurobagel.org/user_guide/data_prep/#multiple-participant-or-session-id-columns
 """
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-
 
 # Identifier variables that can have alternates per Neurobagel spec
 IDENTIFIER_VARIABLES = {
@@ -34,6 +34,7 @@ IDENTIFIER_VARIABLES = {
 @dataclass
 class ColumnMapping:
     """Mapping info for a column."""
+
     column_name: str
     variable: str
     confidence: float
@@ -43,25 +44,25 @@ class ColumnMapping:
 
 def load_annotations(json_path: Path) -> Dict[str, Any]:
     """Load phenotypes_annotations.json."""
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         return json.load(f)
 
 
 def save_annotations(json_path: Path, data: Dict[str, Any]) -> None:
     """Save phenotypes_annotations.json."""
-    with open(json_path, 'w') as f:
+    with open(json_path, "w") as f:
         json.dump(data, f, indent=2)
 
 
 def load_tsv_lines(tsv_path: Path) -> List[str]:
     """Load all TSV lines including header."""
-    with open(tsv_path, 'r', encoding='utf-8') as f:
+    with open(tsv_path, "r", encoding="utf-8") as f:
         return f.readlines()
 
 
 def save_tsv(tsv_path: Path, lines: List[str]) -> None:
     """Save TSV lines."""
-    with open(tsv_path, 'w', encoding='utf-8') as f:
+    with open(tsv_path, "w", encoding="utf-8") as f:
         f.writelines(lines)
 
 
@@ -89,7 +90,7 @@ def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMappi
                 variable=variable,
                 confidence=confidence,
                 source=source,
-                rationale=rationale
+                rationale=rationale,
             )
         )
 
@@ -189,11 +190,7 @@ def resolve_duplicates(
     return annotations, renames, drops
 
 
-def update_tsv(
-    tsv_path: Path,
-    renames: Dict[str, str],
-    drops: List[str]
-) -> None:
+def update_tsv(tsv_path: Path, renames: Dict[str, str], drops: List[str]) -> None:
     """
     Update TSV file: rename alternate ID columns and remove duplicate columns.
 
@@ -210,8 +207,8 @@ def update_tsv(
         return
 
     # Parse header
-    header_line = lines[0].rstrip('\n')
-    headers = header_line.split('\t')
+    header_line = lines[0].rstrip("\n")
+    headers = header_line.split("\t")
 
     # Build new header with renames and drops
     new_headers = []
@@ -232,16 +229,16 @@ def update_tsv(
         keep_indices.append(i)
 
     # Update header line
-    lines[0] = '\t'.join(new_headers) + '\n'
+    lines[0] = "\t".join(new_headers) + "\n"
 
     # Update data lines: keep only keep_indices
     updated_lines = [lines[0]]  # Keep new header
 
     for line in lines[1:]:
-        parts = line.rstrip('\n').split('\t')
+        parts = line.rstrip("\n").split("\t")
         # Select only columns to keep
-        kept_parts = [parts[i] if i < len(parts) else '' for i in keep_indices]
-        updated_lines.append('\t'.join(kept_parts) + '\n')
+        kept_parts = [parts[i] if i < len(parts) else "" for i in keep_indices]
+        updated_lines.append("\t".join(kept_parts) + "\n")
 
     save_tsv(tsv_path, updated_lines)
 
@@ -252,9 +249,7 @@ def update_tsv(
 
 
 def resolve_phenotype_duplicates(
-    phenotypes_tsv_path: Path,
-    phenotypes_annotations_path: Path,
-    verbose: bool = True
+    phenotypes_tsv_path: Path, phenotypes_annotations_path: Path, verbose: bool = True
 ) -> None:
     """
     Resolve duplicate field mappings in annotation outputs.
