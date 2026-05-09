@@ -5,8 +5,6 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Set
 
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
 from npdb.external.neurobagel.errors import BagelCLIError
 from npdb.external.neurogitea.gitea import GiteaManager
@@ -66,39 +64,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             import shutil
 
             shutil.copytree(target, local_path, symlinks=True)
-
-    @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True
-    )
-    def _run_git(
-        self,
-        command: list,
-        env: dict,
-        output_callback: Optional[Callable[[str], None]] = None,
-        context: str = "",
-    ):
-        try:
-            if output_callback is None:
-                subprocess.run(command, check=True, env=env, capture_output=True)
-                return
-            # Stream output to callback via Popen
-            proc = subprocess.Popen(
-                command,
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-            )
-            if proc.stdout is not None:
-                for line in proc.stdout:
-                    output_callback(line.rstrip())
-            proc.wait()
-            if proc.returncode != 0:
-                raise subprocess.CalledProcessError(proc.returncode, command)
-        except subprocess.CalledProcessError as e:
-            label = context or "git command"
-            detail = f"Command: {' '.join(str(c) for c in command)}\n{e}"
-            raise RuntimeError(f"{label} failed.\n{detail}") from e
 
     def extend_description(self, dataset: str, local_clone: str):
         """
