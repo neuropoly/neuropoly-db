@@ -2,9 +2,12 @@ import os
 import subprocess
 from base64 import b64encode
 from pathlib import Path
+import tempfile
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import gitea as gt_client
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from npdb.managers.model import Manager
 
@@ -60,17 +63,38 @@ class GiteaManager(Manager):
         env["GIT_TERMINAL_PROMPT"] = "0"
         return env
 
-    def _run_git(self, cmd: list[str], env: dict, context: str) -> None:
-        """Run a git command, raising RuntimeError with full detail on failure."""
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True
+    )
+    def _run_git(
+        self,
+        command: list,
+        env: dict,
+        output_callback: Optional[Callable[[str], None]] = None,
+        context: str = "",
+    ):
         try:
-            subprocess.run(cmd, check=True, capture_output=True, env=env, timeout=3600)
-        except subprocess.CalledProcessError as e:
-            detail = (
-                f"Command: {' '.join(e.cmd)}\n"
-                f"Stdout: {e.stdout.decode(errors='replace')}\n"
-                f"Stderr: {e.stderr.decode(errors='replace')}"
+            if output_callback is None:
+                subprocess.run(command, check=True, env=env, capture_output=True)
+                return
+            # Stream output to callback via Popen
+            proc = subprocess.Popen(
+                command,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
             )
-            raise RuntimeError(f"{context} failed.\n{detail}") from e
+            if proc.stdout is not None:
+                for line in proc.stdout:
+                    output_callback(line.rstrip())
+            proc.wait()
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, command)
+        except subprocess.CalledProcessError as e:
+            label = context or "git command"
+            detail = f"Command: {' '.join(str(c) for c in command)}\n{e}"
+            raise RuntimeError(f"{label} failed.\n{detail}") from e
 
     def clone_sparse(self, repo_url: str, sparse_paths: list[str], dest: Path) -> None:
         """
@@ -143,6 +167,19 @@ class GiteaManager(Manager):
             env=env,
             context=f"checkout in '{dest}'",
         )
+
+    def get_main_branch_head_commit(self, repo_url: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.clone_sparse(repo_url, sparse_paths=["."], dest=Path(tmpdir))
+
+            result = subprocess.run(
+                ["git", "-C", tmpdir, "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            return result.stdout.strip()
 
     def annex_get(self, repo_dir: Path, paths: list[str] | None = None) -> None:
         """
