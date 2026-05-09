@@ -42,7 +42,7 @@ annotation-automation = [
 ]
 
 [project.scripts]
-npdb = "npdb.cli:npdb"
+npdb = "npdb.cli.cli:npdb"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

@@ -173,7 +173,7 @@ def gitea2bagel(
             )
             raise typer.Exit(code=1)
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
     try:
         gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
@@ -349,7 +349,7 @@ def download(
         typer.echo("Download complete!")
         return
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
     try:
         gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
