@@ -101,6 +101,10 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             raise RuntimeError(f"{label} failed.\n{detail}") from e
 
     def extend_description(self, dataset: str, local_clone: str):
+        """
+        Extend the dataset_description.json file using NeuroBagel standard.
+        See : https://neurobagel.org/user_guide/dataset_description/#editable-template
+        """
         desc_path = os.path.join(local_clone, "dataset_description.json")
         with open(desc_path, "r") as f:
             description = json.load(f)
@@ -117,8 +121,14 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         if not description.get("Keywords"):
             description["Keywords"] = [dataset]
 
-        # Add repository URL
-        description["RepositoryURL"] = f"{self.client.url}/{self.organization.name}/{dataset}"  # type: ignore
+        # Add repository URL, including the HEAD commit for reproducibility
+        base_url = f"{self.client.url}/{self.organization.name}/{dataset}"  # type: ignore
+        try:
+            commit = self.get_main_branch_head_commit(base_url)
+            description["RepositoryURL"] = f"{base_url}/tree/{commit}"
+        except subprocess.CalledProcessError:
+            description["RepositoryURL"] = base_url
+
         # Add documentation link as AccessLink
         description["AccessInstructions"] = (
             "Refer to the access link provided with the repository."
