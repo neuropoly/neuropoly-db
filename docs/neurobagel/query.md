@@ -6,7 +6,7 @@ NeuroBagel exposes a user-friendly web interface to query and explore the datase
 
 Once open, **click on `Submit Query`** to display the full list of available datasets.
 
-![NeuroBagel query interface](../assets/neurobagel_query_all.png)
+![NeuroBagel query interface](../assets/neurobagel_query/neurobagel_query_all.png)
 
 ### Refining the query results
 
@@ -14,13 +14,13 @@ Use the **filters stacked on the left of the interface** to refine the query res
 
 Datasets matching the selected filters will be displayed on the right, with the number of matching subjects they contain, as well as the list of available data modalities associated to their imaging sessions.
 
-![NeuroBagel query interface with filters](../assets/neurobagel_query_subset.png)
+![NeuroBagel query interface with filters](../assets/neurobagel_query/neurobagel_query_subset.png)
 
 ### Exporting the query results
 
 Use the **tick boxes on the left of each dataset card** to select the datasets to export. This activates the **Download** button at the bottom right of the interface.
 
-![NeuroBagel query interface with filters](../assets/neurobagel_query_export.png)
+![NeuroBagel query interface with filters](../assets/neurobagel_query/neurobagel_query_export.png)
 
 The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV**) file, with one line per subject and imaging/phenotypic session. In it you'll find most of the metadata associated with the subjects matching the query, like their age, sex, diagnosis, etc. The table below describes some interesting columns, aside `sex`, `age` and `diagnosis` :
 
