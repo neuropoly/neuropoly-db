@@ -2,7 +2,8 @@
 
 ## Neurogitea indexed databases
 
-1. If not already done, copy the `template.env` file to a new `.env` file at the root of the repository :
+> [!IMPORTANT]
+> Follow [these instructions](../neurogitea/token.md) to generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca) if you don't have one already.
 
    ```bash
    cp template.env .env
