@@ -35,11 +35,14 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 |        `AccessLink`        | Link to access the session data.                                                           |
 
 ### Downloading the imaging data from the query results
-> [!IMPORTANT]
-> Follow [these instructions](../neurogitea/token.md) to generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca) if you don't have one already.
 
-> [!TIP]
-> First, install the `npdb` command line tool, following the [instructions here](../npdb/install.md).
+#### Prerequisites
+
+> [!IMPORTANT]
+> Generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca), following [these instructions](../neurogitea/token.md).
+
+> [!IMPORTANT]
+> Install the `npdb` command line tool, following [these instructions](../npdb/install.md).
 
 The exported query results contains an `AccessLink` column that, when possible, will be filled with an URL to download the imaging data associated with each session. **For datasets indexed on `git`, this is not possible.** Instead, use the `npdb download` command line tool with the `--git` option (additionally use the `--git-annex` option if necessary) :
 
