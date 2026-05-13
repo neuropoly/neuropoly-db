@@ -72,7 +72,7 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    docker compose up -d
    ```
 
-   ![Docker Compose up](../assets/docker_compose_up.png)
+   ![Docker Compose up](../assets/neurobagel_install/docker_compose_up.png)
 
    > You can ignore the **warnings** of unset environment variables when running the above command.
 
@@ -82,11 +82,11 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    docker compose ps
    ```
 
-   ![Docker Compose ps](../assets/docker_compose_ps.png)
+   ![Docker Compose ps](../assets/neurobagel_install/docker_compose_ps.png)
 
 7. Access the **NeuroBagel query tool** at [http://localhost:9000](http://localhost:9000) (or the port set for `NB_QUERY_PORT_HOST` in the `.env` file).
 
-   ![NeuroBagel query tool](../assets/neurobagel_localhost_9000.png)
+   ![NeuroBagel query tool](../assets/neurobagel_install/neurobagel_localhost_9000.png)
 
    > You might not see the same datasets as **in the screenshot above**. The **default NeuroBagel node deployment** ingests all `jsonld` data located under the `./seed-datasets` directory at the root of the repository :
    > - Place additional datasets there, then deploy the node (or use [hot-reloading if the node is already deployed](./manage.md#hot-reloading)).

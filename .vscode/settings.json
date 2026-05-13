@@ -27,7 +27,7 @@
   "isort.args": ["--profile", "black"],
 
   // Pylance type-checking acts as the in-editor linter
-  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.typeCheckingMode": "standard",
 
   // Terminal
   "terminal.integrated.defaultProfile.linux": "bash",
