@@ -2,8 +2,12 @@
 
 ## Neurogitea indexed databases
 
+### Prerequisites
+
 > [!IMPORTANT]
 > Follow [these instructions](../neurogitea/token.md) to generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca) if you don't have one already.
+
+1. Copy the `template.env` file to a new `.env` file at the root of the repository (if not done already) :
 
    ```bash
    cp template.env .env
@@ -15,7 +19,9 @@
    - `NP_GITEA_APP_TOKEN` : access token associated with the above username.
    - `NP_GITEA_APP_URL` : URL to the Neurogitea instance hosting the database.
 
-3. Run the **dataset ingestion command** :
+### Ingestion
+
+Run the **dataset ingestion command** :
 
    ```bash
    npdb gitea2bagel <dataset_id> <output_directory>
