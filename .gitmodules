@@ -1,3 +1,6 @@
 [submodule "neurobagel-recipes"]
 	path = neurobagel-recipes
 	url = https://github.com/neurobagel/recipes.git
+[submodule "seed-datasets"]
+	path = seed-datasets
+	url = https://github.com/neuropoly/neurobagel-datasets.git
