@@ -21,14 +21,28 @@ runner = CliRunner()
 # Helpers
 # ---------------------------------------------------------------------------
 
-TSV_HEADER = "\t".join([
-    "DatasetName", "RepositoryURL", "NumMatchingSubjects", "SubjectID",
-    "SessionID", "ImagingSessionPath", "SessionType",
-    "NumMatchingPhenotypicSessions", "NumMatchingImagingSessions",
-    "Age", "Sex", "Diagnosis", "Assessment", "SessionImagingModalities",
-    "SessionCompletedPipelines", "DatasetImagingModalities",
-    "DatasetPipelines", "AccessLink",
-])
+TSV_HEADER = "\t".join(
+    [
+        "DatasetName",
+        "RepositoryURL",
+        "NumMatchingSubjects",
+        "SubjectID",
+        "SessionID",
+        "ImagingSessionPath",
+        "SessionType",
+        "NumMatchingPhenotypicSessions",
+        "NumMatchingImagingSessions",
+        "Age",
+        "Sex",
+        "Diagnosis",
+        "Assessment",
+        "SessionImagingModalities",
+        "SessionCompletedPipelines",
+        "DatasetImagingModalities",
+        "DatasetPipelines",
+        "AccessLink",
+    ]
+)
 
 
 def _make_row(**kwargs) -> str:
@@ -59,8 +73,7 @@ def _make_row(**kwargs) -> str:
 
 def _write_tsv(tmp_path: Path, rows: list[str]) -> Path:
     tsv = tmp_path / "results.tsv"
-    tsv.write_text(TSV_HEADER + "\n" + "\n".join(rows) +
-                   "\n", encoding="utf-8")
+    tsv.write_text(TSV_HEADER + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
     return tsv
 
 
@@ -68,11 +81,14 @@ def _write_tsv(tmp_path: Path, rows: list[str]) -> Path:
 # GiteaManager — URL parsing and protocol helpers
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def manager(tmp_path):
     """A DataNeuroPolyMTL instance with all network calls mocked (no server needed)."""
-    with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea, \
-            patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None):
+    with (
+        patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+        patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None),
+    ):
         mock_client = MagicMock()
         mock_client.requests.verify = False
         MockGitea.return_value = mock_client
@@ -88,32 +104,48 @@ def manager(tmp_path):
 class TestGiteaManagerURLParsing:
     """GiteaManager correctly parses URLs with or without a scheme."""
 
-    @pytest.mark.parametrize("url,expected_host,expected_proto", [
-        ("https://data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "https"),
-        ("http://data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "http"),
-        ("data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "https"),
-        ("data.neuro.polymtl.ca/extra/path", "data.neuro.polymtl.ca", "https"),
-        ("https://data.neuro.polymtl.ca/", "data.neuro.polymtl.ca", "https"),
-    ])
+    @pytest.mark.parametrize(
+        "url,expected_host,expected_proto",
+        [
+            ("https://data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "https"),
+            ("http://data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "http"),
+            ("data.neuro.polymtl.ca", "data.neuro.polymtl.ca", "https"),
+            ("data.neuro.polymtl.ca/extra/path", "data.neuro.polymtl.ca", "https"),
+            ("https://data.neuro.polymtl.ca/", "data.neuro.polymtl.ca", "https"),
+        ],
+    )
     def test_host_and_proto_extracted(self, url, expected_host, expected_proto):
-        with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea, \
-                patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None):
+        with (
+            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch(
+                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+            ),
+        ):
             MockGitea.return_value = MagicMock()
             mgr = DataNeuroPolyMTL(url=url, user="u", token="t")
         assert mgr.host == expected_host
         assert mgr._proto == expected_proto
 
     def test_http_base_constructed(self):
-        with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea, \
-                patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None):
+        with (
+            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch(
+                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+            ),
+        ):
             MockGitea.return_value = MagicMock()
             mgr = DataNeuroPolyMTL(
-                url="https://data.neuro.polymtl.ca", user="u", token="t")
+                url="https://data.neuro.polymtl.ca", user="u", token="t"
+            )
         assert mgr._http_base == "https://data.neuro.polymtl.ca"
 
     def test_gitea_client_receives_normalised_url(self):
-        with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea, \
-                patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None):
+        with (
+            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch(
+                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+            ),
+        ):
             MockGitea.return_value = MagicMock()
             DataNeuroPolyMTL(url="data.neuro.polymtl.ca", user="u", token="t")
         MockGitea.assert_called_once()
@@ -124,30 +156,48 @@ class TestGiteaManagerURLParsing:
 class TestToSshUrl:
     """_to_ssh_url converts all supported HTTP URL forms correctly."""
 
-    @pytest.mark.parametrize("http_url,expected", [
-        (
-            "https://data.neuro.polymtl.ca/datasets/whole-spine",
-            "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
-        ),
-        (
-            "https://data.neuro.polymtl.ca/datasets/whole-spine.git",
-            "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
-        ),
-        (
-            "http://data.neuro.polymtl.ca/datasets/whole-spine",
-            "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
-        ),
-        (
-            # bare host (no scheme) — should still work
-            "data.neuro.polymtl.ca/datasets/whole-spine",
-            "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
-        ),
-        (
-            # trailing slash stripped
-            "https://data.neuro.polymtl.ca/datasets/whole-spine/",
-            "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
-        ),
-    ])
+    @pytest.mark.parametrize(
+        "http_url,expected",
+        [
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine.git",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            (
+                "http://data.neuro.polymtl.ca/datasets/whole-spine",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            (
+                # bare host (no scheme) — should still work
+                "data.neuro.polymtl.ca/datasets/whole-spine",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            (
+                # trailing slash stripped
+                "https://data.neuro.polymtl.ca/datasets/whole-spine/",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            # --- SSH inputs (already-converted; must be idempotent) ---
+            # annex_get calls _to_ssh_url with the value returned by
+            # "git remote get-url origin".  On a repo that was initialised
+            # in a previous run the origin is already in SSH form, so
+            # _to_ssh_url receives an SSH URL, not an HTTPS one.
+            (
+                # correct SSH URL — must pass through unchanged
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+            (
+                # SSH URL without .git suffix — must be normalised
+                "git@data.neuro.polymtl.ca:datasets/whole-spine",
+                "git@data.neuro.polymtl.ca:datasets/whole-spine.git",
+            ),
+        ],
+    )
     def test_conversion(self, manager, http_url, expected):
         assert manager._to_ssh_url(http_url) == expected
 
@@ -178,13 +228,15 @@ class TestGitHttpConfig:
 # GiteaManager — clone_sparse
 # ---------------------------------------------------------------------------
 
+
 class TestCloneSparse:
     """clone_sparse issues the right sequence of git subprocesses."""
 
     def test_raises_on_empty_paths(self, manager, tmp_path):
-        with pytest.raises(ValueError, match="sparse_paths must contain at least one path"):
-            manager.clone_sparse(
-                "https://example.com/repo", [], tmp_path / "dest")
+        with pytest.raises(
+            ValueError, match="sparse_paths must contain at least one path"
+        ):
+            manager.clone_sparse("https://example.com/repo", [], tmp_path / "dest")
 
     def test_clone_then_sparse_checkout(self, manager, tmp_path):
         dest = tmp_path / "repo"
@@ -202,14 +254,18 @@ class TestCloneSparse:
         contexts = [c.kwargs["context"] for c in mock_run_git.call_args_list]
         cmds = [" ".join(c.args[0]) for c in mock_run_git.call_args_list]
 
-        assert any(ctx.startswith("clone ") for ctx in contexts), \
-            f"Expected a clone call, contexts: {contexts}"
-        assert any("whole-spine.git" in cmd for cmd in cmds), \
-            f"Clone URL not found, cmds: {cmds}"
-        assert any(ctx.startswith("sparse-checkout")
-                   and "init" in ctx for ctx in contexts)
-        assert any(ctx.startswith("sparse-checkout")
-                   and "set" in ctx for ctx in contexts)
+        assert any(
+            ctx.startswith("clone ") for ctx in contexts
+        ), f"Expected a clone call, contexts: {contexts}"
+        assert any(
+            "whole-spine.git" in cmd for cmd in cmds
+        ), f"Clone URL not found, cmds: {cmds}"
+        assert any(
+            ctx.startswith("sparse-checkout") and "init" in ctx for ctx in contexts
+        )
+        assert any(
+            ctx.startswith("sparse-checkout") and "set" in ctx for ctx in contexts
+        )
         assert any(ctx.startswith("checkout") for ctx in contexts)
 
     def test_skips_clone_when_git_dir_exists(self, manager, tmp_path):
@@ -225,8 +281,9 @@ class TestCloneSparse:
             )
 
         contexts = [c.kwargs["context"] for c in mock_run_git.call_args_list]
-        assert not any(ctx.startswith("clone ") for ctx in contexts), \
-            f"Should not clone when .git already exists, contexts: {contexts}"
+        assert not any(
+            ctx.startswith("clone ") for ctx in contexts
+        ), f"Should not clone when .git already exists, contexts: {contexts}"
 
     def test_url_normalised_to_https(self, manager, tmp_path):
         """repo_url with bare host or http is upgraded to the configured https base."""
@@ -240,7 +297,8 @@ class TestCloneSparse:
             )
 
         clone_cmds = [
-            " ".join(c.args[0]) for c in mock_run_git.call_args_list
+            " ".join(c.args[0])
+            for c in mock_run_git.call_args_list
             if c.kwargs["context"].startswith("clone ")
         ]
         assert clone_cmds, "Expected a clone call"
@@ -249,7 +307,8 @@ class TestCloneSparse:
     def test_subprocess_failure_raises_runtime_error(self, manager, tmp_path):
         dest = tmp_path / "repo"
         err = subprocess.CalledProcessError(
-            128, ["git", "clone"], output=b"", stderr=b"fatal: repo not found")
+            128, ["git", "clone"], output=b"", stderr=b"fatal: repo not found"
+        )
         with patch("subprocess.run", side_effect=err):
             with pytest.raises(RuntimeError, match="failed"):
                 manager.clone_sparse(
@@ -262,6 +321,7 @@ class TestCloneSparse:
 # ---------------------------------------------------------------------------
 # GiteaManager — annex_get
 # ---------------------------------------------------------------------------
+
 
 class TestAnnexGet:
     """annex_get issues the right sequence of git/git-annex subprocesses."""
@@ -328,7 +388,8 @@ class TestAnnexGet:
     def test_unsets_annex_ignore(self, manager, tmp_path):
         cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
         config_cmds = [
-            c for c in cmds if "config" in c and "annex-ignore" in " ".join(c)]
+            c for c in cmds if "config" in c and "annex-ignore" in " ".join(c)
+        ]
         assert config_cmds, "Expected a git config annex-ignore command"
         assert "false" in config_cmds[0]
 
@@ -351,8 +412,48 @@ class TestAnnexGet:
         assert get_cmds
         assert "." in get_cmds[0]
 
+    def test_switches_origin_to_ssh_when_already_ssh(self, manager, tmp_path):
+        """When origin is already SSH (repo reused from a previous run),
+        annex_get must not mangle the URL further.
+
+        This is the scenario observed in production: after a first successful
+        (or partial) run, "git remote get-url origin" returns the SSH URL
+        that was stored by the previous set-url call.  The second pass through
+        _to_ssh_url must be idempotent — it must NOT drop the path component.
+        """
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        # origin already switched to SSH by a prior run
+        ssh_origin = "git@data.neuro.polymtl.ca:datasets/whole-spine.git"
+        captured = []
+
+        def fake_run(cmd, **kwargs):
+            captured.append(list(cmd))
+            result = MagicMock(returncode=0)
+            if "get-url" in cmd:
+                result.stdout = ssh_origin
+            return result
+
+        with patch("subprocess.run", side_effect=fake_run):
+            manager.annex_get(repo_dir, ["sub-amuAP"])
+
+        set_url_cmds = [c for c in captured if "set-url" in c]
+        assert set_url_cmds, "Expected a 'remote set-url' command"
+        stored_url = set_url_cmds[0][-1]
+        assert stored_url == ssh_origin, (
+            f"annex_get mangled an already-SSH origin URL.\n"
+            f"  input : {ssh_origin}\n"
+            f"  stored: {stored_url}"
+        )
+
     def test_command_order(self, manager, tmp_path):
-        """SSH switch → fetch → init → config → merge → get (order is critical)."""
+        """fetch → SSH switch → init → config → merge → get (order is critical).
+
+        The git-annex metadata branch fetch must happen over HTTPS (before the
+        SSH switch) so that token auth covers it.  Only git-annex content
+        transfer (annex get) needs SSH.
+        """
+
         cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
         flat = [" ".join(c) for c in cmds]
 
@@ -362,15 +463,15 @@ class TestAnnexGet:
                     return i
             return -1
 
-        i_seturl = idx("set-url")
         i_fetch = idx("fetch")
+        i_seturl = idx("set-url")
         i_init = idx("annex init")
         i_config = idx("annex-ignore")
         i_merge = idx("annex merge")
         i_get = idx("annex get")
 
-        assert i_seturl < i_fetch < i_init < i_config < i_merge < i_get, (
-            f"Command order wrong: set-url={i_seturl} fetch={i_fetch} "
+        assert i_fetch < i_seturl < i_init < i_config < i_merge < i_get, (
+            f"Command order wrong: fetch={i_fetch} set-url={i_seturl} "
             f"init={i_init} config={i_config} merge={i_merge} get={i_get}\n"
             + "\n".join(f"  {i}: {c}" for i, c in enumerate(flat))
         )
@@ -379,6 +480,7 @@ class TestAnnexGet:
 # ---------------------------------------------------------------------------
 # DataNeuroPolyMTL — download_subjects
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def dnp(tmp_path):
@@ -401,12 +503,14 @@ class TestDownloadSubjects:
 
     def test_single_subject_single_repo(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse") as mock_clone:
-            results = dnp.download_subjects(
-                subjects, tmp_path, use_annex=False)
+            results = dnp.download_subjects(subjects, tmp_path, use_annex=False)
 
         assert len(results) == 1
         ok, label, msg = results[0]
@@ -415,20 +519,29 @@ class TestDownloadSubjects:
             "https://data.neuro.polymtl.ca/datasets/whole-spine",
             ["sub-amuAP"],
             tmp_path / "whole-spine",
+            step_callback=None,
         )
 
     def test_multiple_subjects_same_repo_cloned_once(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuLJ", "whole-spine"),
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuPA", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuLJ",
+                "whole-spine",
+            ),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuPA",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse") as mock_clone:
-            results = dnp.download_subjects(
-                subjects, tmp_path, use_annex=False)
+            results = dnp.download_subjects(subjects, tmp_path, use_annex=False)
 
         # Only one clone call despite three subjects
         assert mock_clone.call_count == 1
@@ -439,8 +552,11 @@ class TestDownloadSubjects:
     def test_multiple_repos_cloned_independently(self, dnp, tmp_path):
         subjects = [
             ("https://data.neuro.polymtl.ca/datasets/spine-ms", "sub-01", "spine-ms"),
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse") as mock_clone:
             dnp.download_subjects(subjects, tmp_path, use_annex=False)
@@ -452,8 +568,11 @@ class TestDownloadSubjects:
 
     def test_dest_is_output_dir_slash_dataset(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse") as mock_clone:
             dnp.download_subjects(subjects, tmp_path, use_annex=False)
@@ -463,13 +582,21 @@ class TestDownloadSubjects:
 
     def test_annex_get_called_when_use_annex(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuLJ", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuLJ",
+                "whole-spine",
+            ),
         ]
-        with patch.object(dnp, "clone_sparse"), \
-                patch.object(dnp, "annex_get") as mock_annex:
+        with (
+            patch.object(dnp, "clone_sparse"),
+            patch.object(dnp, "annex_get") as mock_annex,
+        ):
             dnp.download_subjects(subjects, tmp_path, use_annex=True)
 
         mock_annex.assert_called_once()
@@ -479,21 +606,32 @@ class TestDownloadSubjects:
 
     def test_annex_get_not_called_without_use_annex(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
-        with patch.object(dnp, "clone_sparse"), \
-                patch.object(dnp, "annex_get") as mock_annex:
+        with (
+            patch.object(dnp, "clone_sparse"),
+            patch.object(dnp, "annex_get") as mock_annex,
+        ):
             dnp.download_subjects(subjects, tmp_path, use_annex=False)
 
         mock_annex.assert_not_called()
 
     def test_duplicate_sparse_paths_deduplicated(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse") as mock_clone:
             dnp.download_subjects(subjects, tmp_path, use_annex=False)
@@ -503,12 +641,14 @@ class TestDownloadSubjects:
 
     def test_clone_failure_reported_as_failed_result(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
         with patch.object(dnp, "clone_sparse", side_effect=RuntimeError("clone boom")):
-            results = dnp.download_subjects(
-                subjects, tmp_path, use_annex=False)
+            results = dnp.download_subjects(subjects, tmp_path, use_annex=False)
 
         assert len(results) == 1
         ok, _, msg = results[0]
@@ -517,11 +657,16 @@ class TestDownloadSubjects:
 
     def test_annex_failure_reported_as_failed_result(self, dnp, tmp_path):
         subjects = [
-            ("https://data.neuro.polymtl.ca/datasets/whole-spine",
-             "sub-amuAP", "whole-spine"),
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "sub-amuAP",
+                "whole-spine",
+            ),
         ]
-        with patch.object(dnp, "clone_sparse"), \
-                patch.object(dnp, "annex_get", side_effect=RuntimeError("annex boom")):
+        with (
+            patch.object(dnp, "clone_sparse"),
+            patch.object(dnp, "annex_get", side_effect=RuntimeError("annex boom")),
+        ):
             results = dnp.download_subjects(subjects, tmp_path, use_annex=True)
 
         ok, _, msg = results[0]
@@ -537,6 +682,7 @@ class TestDownloadSubjects:
 # _read_download_tsv helper
 # ---------------------------------------------------------------------------
 
+
 class TestReadDownloadTsv:
     def test_parses_header_and_rows(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(SubjectID="sub-01")])
@@ -547,8 +693,13 @@ class TestReadDownloadTsv:
     def test_all_expected_columns_present(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row()])
         rows = _read_download_tsv(tsv)
-        for col in ["DatasetName", "RepositoryURL", "ImagingSessionPath",
-                    "SubjectID", "AccessLink"]:
+        for col in [
+            "DatasetName",
+            "RepositoryURL",
+            "ImagingSessionPath",
+            "SubjectID",
+            "AccessLink",
+        ]:
             assert col in rows[0]
 
     def test_raises_on_empty_file(self, tmp_path):
@@ -573,6 +724,7 @@ class TestReadDownloadTsv:
 # ---------------------------------------------------------------------------
 # _fetch_url helper
 # ---------------------------------------------------------------------------
+
 
 class TestFetchUrl:
     def test_successful_download(self, tmp_path):
@@ -608,7 +760,9 @@ class TestFetchUrl:
 
     def test_returns_false_on_http_error(self, tmp_path):
         dest = tmp_path / "file.bin"
-        with patch("npdb.cli.cli.httpx.stream", side_effect=Exception("connection refused")):
+        with patch(
+            "npdb.cli.cli.httpx.stream", side_effect=Exception("connection refused")
+        ):
             ok, msg = _fetch_url("https://example.com/file.bin", dest)
 
         assert not ok
@@ -638,15 +792,18 @@ class TestDownloadCLI:
 
     def test_git_annex_without_git_flag_errors(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row()])
-        result = runner.invoke(npdb, ["download", str(tsv), "--git-annex",
-                                      "--output-dir", str(tmp_path)])
+        result = runner.invoke(
+            npdb, ["download", str(tsv), "--git-annex", "--output-dir", str(tmp_path)]
+        )
         assert result.exit_code != 0
         assert "--git-annex requires --git" in result.output
 
     def test_missing_env_vars_in_git_mode_errors(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row()])
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", {}, clear=True):
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", {}, clear=True),
+        ):
             result = runner.invoke(
                 npdb,
                 ["download", str(tsv), "--git", "--output-dir", str(tmp_path)],
@@ -658,14 +815,16 @@ class TestDownloadCLI:
 
     def test_url_mode_no_valid_links_warns(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(AccessLink="")])
-        result = runner.invoke(npdb, ["download", str(tsv),
-                                      "--output-dir", str(tmp_path)])
+        result = runner.invoke(
+            npdb, ["download", str(tsv), "--output-dir", str(tmp_path)]
+        )
         assert result.exit_code == 0
         assert "No valid AccessLink" in result.output
 
     def test_url_mode_dispatches_fetch(self, tmp_path):
-        tsv = _write_tsv(tmp_path, [_make_row(
-            AccessLink="https://example.com/data/file.nii.gz")])
+        tsv = _write_tsv(
+            tmp_path, [_make_row(AccessLink="https://example.com/data/file.nii.gz")]
+        )
 
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -674,8 +833,9 @@ class TestDownloadCLI:
         mock_response.__exit__ = MagicMock(return_value=False)
 
         with patch("npdb.cli.cli.httpx.stream", return_value=mock_response):
-            result = runner.invoke(npdb, ["download", str(tsv),
-                                          "--output-dir", str(tmp_path)])
+            result = runner.invoke(
+                npdb, ["download", str(tsv), "--output-dir", str(tmp_path)]
+            )
         assert result.exit_code == 0
         assert "Download complete" in result.output
 
@@ -689,33 +849,45 @@ class TestDownloadCLI:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("npdb.cli.cli.httpx.stream", return_value=mock_response) as mock_stream:
-            runner.invoke(npdb, ["download", str(tsv),
-                                 "--output-dir", str(tmp_path)])
+        with patch(
+            "npdb.cli.cli.httpx.stream", return_value=mock_response
+        ) as mock_stream:
+            runner.invoke(npdb, ["download", str(tsv), "--output-dir", str(tmp_path)])
 
         assert mock_stream.call_count == 1
 
     # ── Mode 2: git sparse-checkout ──────────────────────────────────────
 
     def test_git_mode_calls_download_subjects(self, tmp_path):
-        tsv = _write_tsv(tmp_path, [
-            _make_row(SubjectID="sub-amuAP", ImagingSessionPath="sub-amuAP"),
-            _make_row(SubjectID="sub-amuLJ", ImagingSessionPath="sub-amuLJ"),
-            # phenotypic row (no ImagingSessionPath) — must be filtered out
-            _make_row(SubjectID="sub-amuAP", ImagingSessionPath=""),
-        ])
+        tsv = _write_tsv(
+            tmp_path,
+            [
+                _make_row(SubjectID="sub-amuAP", ImagingSessionPath="sub-amuAP"),
+                _make_row(SubjectID="sub-amuLJ", ImagingSessionPath="sub-amuLJ"),
+                # phenotypic row (no ImagingSessionPath) — must be filtered out
+                _make_row(SubjectID="sub-amuAP", ImagingSessionPath=""),
+            ],
+        )
 
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", ENV_VARS),
+            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+        ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (True, "whole-spine [sub-amuAP, sub-amuLJ]", "OK"),
             ]
             result = runner.invoke(
                 npdb,
-                ["download", str(tsv), "--git",
-                 "--output-dir", str(tmp_path), "--no-verify-ssl"],
+                [
+                    "download",
+                    str(tsv),
+                    "--git",
+                    "--output-dir",
+                    str(tmp_path),
+                    "--no-verify-ssl",
+                ],
             )
 
         assert result.exit_code == 0, result.output
@@ -728,29 +900,31 @@ class TestDownloadCLI:
     def test_git_mode_no_imaging_rows_warns(self, tmp_path):
         # All rows have empty ImagingSessionPath
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="")])
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.cli.GiteaManagerFactory"):
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", ENV_VARS),
+            patch("npdb.cli.cli.GiteaManagerFactory"),
+        ):
             result = runner.invoke(
                 npdb,
-                ["download", str(tsv), "--git",
-                 "--output-dir", str(tmp_path)],
+                ["download", str(tsv), "--git", "--output-dir", str(tmp_path)],
             )
         assert "No rows with both RepositoryURL and ImagingSessionPath" in result.output
 
     def test_git_mode_failure_exits_nonzero(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", ENV_VARS),
+            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+        ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
                 (False, "whole-spine [sub-amuAP]", "fatal: some git error"),
             ]
             result = runner.invoke(
                 npdb,
-                ["download", str(tsv), "--git",
-                 "--output-dir", str(tmp_path)],
+                ["download", str(tsv), "--git", "--output-dir", str(tmp_path)],
             )
         assert result.exit_code != 0
         assert "failed" in result.output.lower()
@@ -759,16 +933,26 @@ class TestDownloadCLI:
 
     def test_git_annex_mode_passes_use_annex_true(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", ENV_VARS),
+            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+        ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
-                (True, "whole-spine [sub-amuAP]", "OK")]
+                (True, "whole-spine [sub-amuAP]", "OK")
+            ]
             runner.invoke(
                 npdb,
-                ["download", str(tsv), "--git", "--git-annex",
-                 "--output-dir", str(tmp_path), "--no-verify-ssl"],
+                [
+                    "download",
+                    str(tsv),
+                    "--git",
+                    "--git-annex",
+                    "--output-dir",
+                    str(tmp_path),
+                    "--no-verify-ssl",
+                ],
             )
 
         _, call_kwargs = instance.download_subjects.call_args
@@ -783,15 +967,25 @@ class TestDownloadCLI:
 
     def test_git_mode_label_shows_mode_in_output(self, tmp_path):
         tsv = _write_tsv(tmp_path, [_make_row(ImagingSessionPath="sub-amuAP")])
-        with patch("npdb.cli.cli.load_dotenv"), \
-                patch.dict("os.environ", ENV_VARS), \
-                patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory:
+        with (
+            patch("npdb.cli.cli.load_dotenv"),
+            patch.dict("os.environ", ENV_VARS),
+            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+        ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
-                (True, "whole-spine [sub-amuAP]", "OK")]
+                (True, "whole-spine [sub-amuAP]", "OK")
+            ]
             result = runner.invoke(
                 npdb,
-                ["download", str(tsv), "--git", "--git-annex",
-                 "--output-dir", str(tmp_path), "--no-verify-ssl"],
+                [
+                    "download",
+                    str(tsv),
+                    "--git",
+                    "--git-annex",
+                    "--output-dir",
+                    str(tmp_path),
+                    "--no-verify-ssl",
+                ],
             )
         assert "git + git-annex" in result.output
