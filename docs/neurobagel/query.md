@@ -44,6 +44,9 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 > [!IMPORTANT]
 > Install the `npdb` command line tool, following [these instructions](../npdb/install.md).
 
+> [!WARNING]
+> The download procedure uses `git-annex`. Your **git provider** must be setup for `ssh` authentication, and your **SSH keys** must be properly configured on your machine. **For the NeuroPoly NeuroGitea instance, refer to [this setup guide](https://intranet.neuro.polymtl.ca/data/git-datasets.html#initial-setup).** 
+
 The exported query results contains an `AccessLink` column that, when possible, will be filled with an URL to download the imaging data associated with each session. **For datasets indexed on `git`, this is not possible.** Instead, use the `npdb download` command line tool with the `--git` option (additionally use the `--git-annex` option if necessary) :
 
 ```bash
