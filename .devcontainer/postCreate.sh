@@ -119,6 +119,32 @@ else
     fi
 fi
 
+# ── 5b. SSH agent hook ────────────────────────────────────────────────────
+echo ""
+echo "==> Installing SSH agent hook (.bashrc)..."
+
+SSH_AGENT_SCRIPT="/workspaces/neuropoly-db/.devcontainer/ssh-agent.sh"
+SSH_HOOK_BEGIN="# >>> neuropoly ssh-agent >>>"
+SSH_HOOK_END="# <<< neuropoly ssh-agent <<<"
+
+if [ ! -f "$SSH_AGENT_SCRIPT" ]; then
+    echo "   WARNING: Missing SSH agent script at $SSH_AGENT_SCRIPT"
+else
+    if ! grep -Fq "$SSH_HOOK_BEGIN" "$USER_BASHRC"; then
+        {
+            echo ""
+            echo "$SSH_HOOK_BEGIN"
+            echo "if [ -f \"$SSH_AGENT_SCRIPT\" ]; then"
+            echo "  source \"$SSH_AGENT_SCRIPT\""
+            echo "fi"
+            echo "$SSH_HOOK_END"
+        } >> "$USER_BASHRC"
+        echo "   Added SSH agent hook to $USER_BASHRC"
+    else
+        echo "   SSH agent hook already present in $USER_BASHRC"
+    fi
+fi
+
 # ── 6. Wireguard setup (if config file present) ───────────────────────────────────────────────
 WG_CONFIG="/workspaces/neuropoly-db/wg0.conf"
 if [ -f "$WG_CONFIG" ]; then
