@@ -30,6 +30,10 @@
     }
   },
 
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly"
+  ],
+
   "remoteEnv": {
     "NB_API_URL": "http://api:8000",
     "NB_GRAPH_URL": "http://graph:7200",
