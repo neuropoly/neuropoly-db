@@ -1,4 +1,13 @@
-# NeuroGitea token creation
+# NeuroGitea account setup
+
+## SSH key registration
+
+Neurogitea uses `git-annex` to index large files and requires a registered SSH key to pull the data. Follow the **initial setup** instructions on the [NeuroPoly Intranet](https://intranet.neuro.polymtl.ca/data/git-datasets.html#initial-setup) to generate SSH key pairs and register it correctly to your NeuroGitea account.
+
+> [!IMPORTANT]
+> A new SSH key must be registered **for each machine used to access the data**.
+
+## Access token generation
 
 Neurogitea allows users to create **personal access tokens** to authenticate their applications and automated workflows with its API. Follow the instructions below to generate a token with the right permissions for **neuropoly-db**.
 

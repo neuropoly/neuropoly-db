@@ -39,7 +39,7 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 #### Prerequisites
 
 > [!IMPORTANT]
-> Generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca), following [these instructions](../neurogitea/token.md).
+> Setup your [NeuroGitea](https://data.neuro.polymtl.ca) account for automated access, following [these instructions](../neurogitea/account.md).
 
 > [!IMPORTANT]
 > Install the `npdb` command line tool, following [these instructions](../npdb/install.md).
