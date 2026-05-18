@@ -60,7 +60,7 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    > | NeuroBagel API              | `NB_API_PORT_HOST`   | 8000         |
    > | NeuroBagel Federation API   | `NB_FAPI_PORT_HOST`  | 8080         |
 
-5. Deploy the NeuroBagel node with Docker Compose :
+5. <a name="docker-compose-up"></a>Deploy the NeuroBagel node with Docker Compose :
 
    ```bash
    docker compose up -d
@@ -83,5 +83,11 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    ![NeuroBagel query tool](../assets/neurobagel_install/neurobagel_localhost_9000.png)
 
    > You might not see the same datasets as **in the screenshot above**. The **default NeuroBagel node deployment** ingests all `jsonld` data located under the `./seed-datasets` directory at the root of the repository :
-   > - Place additional datasets there, then deploy the node (or use [hot-reloading if the node is already deployed](./manage.md#hot-reloading)).
+   > - If you have access, synchronize the **seed datasets** submodule by running the following command from the root of the repository :
+   >
+   >   ```bash
+   >   git submodule update --init --recursive seed-datasets
+   >   ```
+   >
+   > - Place additional datasets there, then [deploy](#docker-compose-up) the node (or use [hot-reloading if the node is already deployed](./manage.md#hot-reloading)).
    > - Select another directory by changing the `LOCAL_GRAPH_DATA` variable in the `.env` file, then deploy (or re-deploy) the node.
