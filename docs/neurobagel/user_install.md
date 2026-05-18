@@ -45,6 +45,12 @@ Install **[Docker Desktop &geq; v4.56.0](https://docs.docker.com/get-started/get
    git submodule update --init --recursive
    ```
 
+   > The command above will fail if you don't have access to the [private **seed datasets** Github repository](https://github.com/neuropoly/neurobagel-datasets).
+   > Instead, use the command below :
+   > ```bash
+   > git submodule update --init --recursive neurobagel-recipes
+   > ```
+
 4. Copy the `template.env` environment template to `.env` :
 
    ```bash
