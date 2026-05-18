@@ -5,7 +5,7 @@
 ### Prerequisites
 
 > [!IMPORTANT]
-> Follow [these instructions](../neurogitea/token.md) to generate an **application token** in [NeuroGitea](https://data.neuro.polymtl.ca) if you don't have one already.
+> Follow [these instructions](../neurogitea/account.md) to setup your [NeuroGitea](https://data.neuro.polymtl.ca) account (token and ssh keys) for automated access.
 
 1. Copy the `template.env` file to a new `.env` file at the root of the repository (if not done already) :
 
