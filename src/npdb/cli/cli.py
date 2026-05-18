@@ -4,7 +4,6 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
-from threading import Lock
 
 import httpx
 import typer
@@ -20,6 +19,7 @@ from rich.progress import (
 from npdb.annotation.standardize import load_header_map, validate_header_map_keys
 from npdb.automation.mappings.solvers import load_static_mappings
 from npdb.cli.facade import BIDSStandardizationFacade, DatasetConversionFacade
+from npdb.cli.observers import CLIProgressObserver
 from npdb.factories import AnnotationConfigFactory, GiteaManagerFactory
 
 OPTION_GROUP_NAMES = {
@@ -403,97 +403,12 @@ def download(
         transient=True,
         expand=True,
     ) as progress:
-        # Prepare callbacks for progress display
-        step_callback = None  # type: ignore
-        annex_progress_callback = None  # type: ignore
-
-        if git_annex:
-            # Git-annex mode: per-file progress bars
-
-            # Track tasks by filename to update dynamically
-            file_tasks: dict[str, int] = {}
-            lock = Lock()
-
-            def step_callback(description: str, step_ix: int, step_total: int) -> None:  # type: ignore
-                """Callback for clone/checkout steps."""
-                with lock:
-                    # Update or create a spinner task for steps
-                    if not hasattr(step_callback, "step_task_id"):
-                        step_callback.step_task_id = progress.add_task(
-                            f"[cyan]{description}", total=None
-                        )
-                    else:
-                        progress.update(
-                            step_callback.step_task_id,
-                            description=f"[cyan]{description}",
-                            total=step_total,
-                            completed=step_ix,
-                        )
-
-            def annex_progress_callback(
-                file: str, pct: float, bytes_done: int, bytes_total: int
-            ) -> None:
-                """Callback for per-file annex progress."""
-                with lock:
-                    if file not in file_tasks:
-                        # Create a new task for this file
-                        file_tasks[file] = progress.add_task(
-                            f"  {file}", total=bytes_total
-                        )
-                    # Update the task with progress
-                    task_id = file_tasks[file]
-                    progress.update(task_id, completed=bytes_done)  # type: ignore
-                    if pct >= 100.0:
-                        # Mark as complete
-                        pass
-
-        else:
-            # Git-only mode: spinner with step names
-            lock = Lock()
-            repo_tasks: dict[str, int] = {}
-            repo_counter = {"current": 0}
-            groups: dict[tuple[str, str], list[str]] = {}
-            for repo_url, sparse_path, dataset_name in subjects:
-                key = (repo_url, dataset_name)
-                groups.setdefault(key, [])
-                if sparse_path not in groups[key]:
-                    groups[key].append(sparse_path)
-
-            def step_callback(
-                description: str,
-                step_ix: int | None = None,
-                step_total: int | None = None,
-            ) -> None:
-                """Callback for clone/checkout steps."""
-                with lock:
-                    if not hasattr(step_callback, "current_repo"):
-                        step_callback.current_repo = None
-                        step_callback.repo_tasks = {}
-                    # Try to extract repo name from description or increment counter
-                    repo_idx = repo_counter["current"]
-                    if repo_idx not in repo_tasks:
-                        # Create task for this repo
-                        repo_tasks[repo_idx] = progress.add_task(  # type: ignore
-                            f"[repo {repo_idx}]: {description}",
-                            total=step_total,
-                            completed=step_ix,  # type: ignore
-                        )
-                    else:
-                        # Update existing task
-                        progress.update(
-                            repo_tasks[repo_idx],  # type: ignore
-                            description=f"[repo {repo_idx}]: {description}",
-                        )
-                    # If we see "Checking out files...", increment counter for next repo
-                    if "Checking out" in description:
-                        repo_counter["current"] += 1
+        gitea_manager.add_progress_observer(CLIProgressObserver(progress, color="cyan"))
 
         results = gitea_manager.download_subjects(
             subjects,
             output_dir,
             use_annex=git_annex,
-            git_step_callback=step_callback,
-            annex_progress_callback=annex_progress_callback,
         )
 
     for ok, label, msg in results:

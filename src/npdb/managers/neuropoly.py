@@ -3,7 +3,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
 from npdb.external.neurobagel.errors import BagelCLIError
@@ -26,7 +26,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         local_path: str,
         light: bool = False,
         cache_dir: Optional[str] = None,
-        output_callback: Optional[Callable[[str], None]] = None,
     ):
         repo = next(iter([d for d in self.datasets if d.name == dataset]))  # type: ignore
         clone_url = f"{repo.gitea.url}/{self.organization.name}/{repo.name}.git"  # type: ignore
@@ -43,7 +42,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
                     command,
                     env,
                     context="fetch cached",
-                    output_callback=output_callback,
                 )
                 # Symlink / copy into local_path so the rest of the pipeline
                 # continues to point at the expected directory.
@@ -61,7 +59,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             command.extend(["--depth", "1", "--filter=blob:none"])
         command.extend([clone_url, target])
 
-        self._run_git(command, env, context="clone", output_callback=output_callback)
+        self._run_git(command, env, context="clone")
 
         # When using cache_dir and the clone target differs from local_path,
         # copy into local_path so callers see the expected path.
@@ -125,8 +123,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         subjects: list[tuple[str, str, str]],
         output_dir: Path,
         use_annex: bool = False,
-        git_step_callback: Callable[[str, int, int], None] | None = None,
-        annex_progress_callback: Callable[[str, float, int, int], None] | None = None,
     ) -> list[tuple[bool, str, str]]:
         """
         Download subject directories using authenticated sparse git clone.
@@ -142,9 +138,6 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             output_dir: Base output directory.  Each dataset lands in
                         ``output_dir / dataset_name``.
             use_annex: When ``True``, run ``git annex get`` after each clone.
-            git_step_callback: Optional callback(description, step_ix, step_total) for clone step updates.
-            annex_progress_callback: Optional callback(file, pct, bytes_done, bytes_total)
-                                    for per-file download progress.
 
         Returns:
             List of ``(success, label, message)`` for each unique repository.
@@ -165,15 +158,11 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             label = f"{dataset_name} [{', '.join(sparse_paths)}]"
 
             try:
-                self.clone_sparse(
-                    repo_url, sparse_paths, dest, step_callback=git_step_callback
-                )
+                self.clone_sparse(repo_url, sparse_paths, dest)
                 if use_annex:
                     self.annex_get(
                         dest,
                         sparse_paths,
-                        step_callback=git_step_callback,
-                        progress_callback=annex_progress_callback,
                     )
                 results.append((True, label, "OK"))
             except RuntimeError as e:

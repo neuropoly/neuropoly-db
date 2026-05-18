@@ -1,5 +1,6 @@
 import os
 from abc import ABC, abstractmethod
+from typing import Any, List
 
 
 class Manager(ABC):
@@ -8,7 +9,7 @@ class Manager(ABC):
 
     @property
     @abstractmethod
-    def datasets(self):
+    def datasets(self) -> Any:
         pass
 
 
@@ -22,7 +23,7 @@ class NeurobagelManager(Manager):
         self.db = BagelDB(jsonld)
 
     @property
-    def datasets(self):
+    def datasets(self) -> List[str]:
         return os.listdir(self.db.root)
 
     def load_dataset(self, dataset: str, destination_path: str, light: bool = False):
