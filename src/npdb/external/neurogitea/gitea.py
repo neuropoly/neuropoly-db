@@ -3,15 +3,16 @@ import os
 import shlex
 import subprocess
 import tempfile
+import uuid
 from base64 import b64encode
-from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import gitea as gt_client
+from rich.progress import TaskID
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from npdb.cli.observers import MessageType, Observer, UpdateType
 from npdb.managers.model import Manager
 
 
@@ -35,6 +36,23 @@ class GiteaManager(Manager):
         )
         self.git_auth = b64encode(f"{user}:{token}".encode("utf-8")).decode("ascii")
         self.verbose: bool = False
+
+        self._observers = {k: [] for k in UpdateType}
+        self._task_id = TaskID(uuid.uuid1().int)
+
+    def add_progress_observer(self, observer: Observer):
+        self._observers[UpdateType.PROGRESS].append(observer)
+
+    def add_message_observer(self, observer: Observer):
+        self._observers[UpdateType.MESSAGE].append(observer)
+
+    def _notify_progress(self, description, task_id=None, *args, **kwargs):
+        for observer in self._observers[UpdateType.PROGRESS]:
+            observer.update(description, task_id, *args, **kwargs)
+
+    def _notify_message(self, message_type: MessageType, message: str):
+        for observer in self._observers[UpdateType.MESSAGE]:
+            observer.update(message_type, message)
 
     def git_http_config(self):
         config = {
@@ -97,8 +115,6 @@ class GiteaManager(Manager):
         cmd: list[str],
         env: dict,
         context: str,
-        output_callback: Callable[[str], None] | None = None,
-        progress_callback: Callable[[str, float, int, int], None] | None = None,
     ) -> None:
         """Run a git command, raising RuntimeError with full detail on failure.
 
@@ -130,37 +146,34 @@ class GiteaManager(Manager):
             )
             raise RuntimeError(f"{context} failed.\n{detail}") from e
 
-        if output_callback is not None:
-            for line in result.stdout.splitlines():
-                output_callback(line)
+        self._notify_message(MessageType.INFO, result.stdout)
 
-        if progress_callback is not None:
-            for line in result.stdout.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
-                    continue
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
 
-                if "percentdone" in event and "action" in event:
-                    action = event.get("action", {})
-                    file = action.get("file", "unknown")
-                    pct = float(event.get("percentdone", 0))
-                    bytes_done = int(event.get("bytesdone", 0))
-                    bytes_total = int(event.get("bytestotal", 0))
-                    progress_callback(file, pct, bytes_done, bytes_total)
-                elif event.get("success") is True and "file" in event:
-                    file = event.get("file", "unknown")
-                    progress_callback(file, 100.0, 0, 0)
+            if "percentdone" in event and "action" in event:
+                action = event.get("action", {})
+                file = action.get("file", "unknown")
+                bytes_done = int(event.get("bytesdone", 0))
+                bytes_total = int(event.get("bytestotal", 0))
+                self._notify_progress(
+                    f" {file}", total=bytes_total, completed=bytes_done
+                )
+            elif event.get("success") is True and "file" in event:
+                file = event.get("file", "unknown")
+                self._notify_progress(f" {file}", total=0, completed=0)
 
     def clone_sparse(
         self,
         repo_url: str,
         sparse_paths: list[str],
         dest: Path,
-        step_callback: Callable[[str, int, int], None] | None = None,
     ) -> None:
         """
         Shallow sparse clone fetching one or more directory paths in one shot.
@@ -187,7 +200,6 @@ class GiteaManager(Manager):
             sparse_paths: One or more directory paths inside the repo to check
                           out (e.g. ``["sub-amuAP", "sub-amuLJ"]``).
             dest: Local destination directory for the clone.
-            step_callback: Optional callback invoked with description before each git operation.
 
         Raises:
             RuntimeError: If any git sub-command fails.
@@ -226,9 +238,12 @@ class GiteaManager(Manager):
         if not (dest / ".git").exists():
             dest.mkdir(parents=True, exist_ok=True)
 
-            if step_callback:
-                step_callback(f"Cloning {dataset_name}...", 0, 4)
-
+            self._notify_progress(
+                f"Cloning {dataset_name}...",
+                task_id=self._task_id,
+                completed=0,
+                total=4,
+            )
             clone_cmd = git + ["clone", "--filter=blob:none", "--no-checkout"]
             # --depth=1 fetches only HEAD; omit it when a specific commit is
             # pinned so that the full history is available for checkout.
@@ -243,27 +258,36 @@ class GiteaManager(Manager):
             )
 
         # (Re-)configure sparse-checkout with the full set of paths.
-        if step_callback:
-            step_callback("Initializing sparse checkout...", 1, 4)
-
+        self._notify_progress(
+            f"Configuring sparse checkout for {dataset_name}...",
+            task_id=self._task_id,
+            completed=1,
+            total=4,
+        )
         self._run_git(
             git + ["-C", str(dest), "sparse-checkout", "init", "--cone"],
             env=env,
             context=f"sparse-checkout init in '{dest}'",
         )
 
-        if step_callback:
-            step_callback(f"Configuring paths: {', '.join(sparse_paths)}", 2, 4)
-
+        self._notify_progress(
+            f"Setting sparse paths for {dataset_name}...",
+            task_id=self._task_id,
+            completed=2,
+            total=4,
+        )
         self._run_git(
             git + ["-C", str(dest), "sparse-checkout", "set"] + sparse_paths,
             env=env,
             context=f"sparse-checkout set {sparse_paths} in '{dest}'",
         )
 
-        if step_callback:
-            step_callback("Checking out files...", 3, 4)
-
+        self._notify_progress(
+            f"Checking out {dataset_name}...",
+            task_id=self._task_id,
+            completed=3,
+            total=4,
+        )
         checkout_cmd = git + ["-C", str(dest), "checkout"]
         if pinned_ref is not None:
             checkout_cmd.append(pinned_ref)
@@ -274,8 +298,12 @@ class GiteaManager(Manager):
             context=f"checkout in '{dest}'",
         )
 
-        if step_callback:
-            step_callback("Sparse clone complete...", 4, 4)
+        self._notify_progress(
+            f"Sparse clone complete for {dataset_name}...",
+            task_id=self._task_id,
+            completed=4,
+            total=4,
+        )
 
     def get_main_branch_head_commit(self, repo_url: str):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -294,8 +322,6 @@ class GiteaManager(Manager):
         self,
         repo_dir: Path,
         paths: list[str] | None = None,
-        step_callback: Callable[[str, int, int], None] | None = None,
-        progress_callback: Callable[[str, float, int, int], None] | None = None,
     ) -> None:
         """
         Fetch git-annex file content for the checked-out sparse paths.
@@ -353,9 +379,12 @@ class GiteaManager(Manager):
         #    because the fetch is a plain git operation — no git-annex-shell
         #    needed — and HTTPS + token works here whereas SSH keys are
         #    required for the SSH transport.
-        if step_callback:
-            step_callback("Fetching git-annex metadata...", 0, 5)
-
+        self._notify_progress(
+            "Fetching git-annex metadata...",
+            task_id=self._task_id,
+            completed=0,
+            total=5,
+        )
         self._run_git(
             git
             + [
@@ -373,9 +402,12 @@ class GiteaManager(Manager):
         #    Gitea because content transfer uses git-annex-shell over SSH.
         #    Done after the git-annex branch fetch so that plain-git operations
         #    (which work over HTTPS) are not affected.
-        if step_callback:
-            step_callback("Configuring remote...", 1, 5)
-
+        self._notify_progress(
+            "Configuring remote for git-annex...",
+            task_id=self._task_id,
+            completed=1,
+            total=5,
+        )
         get_url_cmd = ["git", "-C", str(repo_dir), "remote", "get-url", "origin"]
         if self.verbose:
             print(f"+ {shlex.join(get_url_cmd)}", flush=True)
@@ -391,9 +423,12 @@ class GiteaManager(Manager):
             )
 
         # 3. Initialise git-annex in the local clone.
-        if step_callback:
-            step_callback("Initializing git-annex...", 2, 5)
-
+        self._notify_progress(
+            "Initializing git-annex...",
+            task_id=self._task_id,
+            completed=2,
+            total=5,
+        )
         self._run_git(
             ["git", "-C", str(repo_dir), "annex", "init"],
             env=env,
@@ -415,9 +450,12 @@ class GiteaManager(Manager):
         )
 
         # 5. Merge remote location logs into the local git-annex branch.
-        if step_callback:
-            step_callback("Merging remote location logs...", 3, 5)
-
+        self._notify_progress(
+            "Merging remote location logs...",
+            task_id=self._task_id,
+            completed=3,
+            total=5,
+        )
         self._run_git(
             ["git", "-C", str(repo_dir), "annex", "merge"],
             env=env,
@@ -425,19 +463,31 @@ class GiteaManager(Manager):
         )
 
         # 6. Download actual file content.
-        if step_callback:
-            step_callback("Downloading file content...", 4, 5)
-
-        cmd = ["git", "-C", str(repo_dir), "annex", "get"] + paths
-        if progress_callback:
-            cmd.extend(["--json", "--json-progress"])
+        self._notify_progress(
+            "Downloading file content...",
+            task_id=self._task_id,
+            completed=4,
+            total=5,
+        )
+        cmd = [
+            "git",
+            "-C",
+            str(repo_dir),
+            "annex",
+            "get",
+            "--json",
+            "--json-progress",
+        ] + paths
 
         self._run_git(
             cmd,
             env=env,
             context=f"git annex get {paths} in '{repo_dir}'",
-            progress_callback=progress_callback,
         )
 
-        if step_callback:
-            step_callback("Download complete.", 5, 5)
+        self._notify_progress(
+            "Download complete.",
+            task_id=self._task_id,
+            completed=5,
+            total=5,
+        )
