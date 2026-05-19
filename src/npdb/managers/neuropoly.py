@@ -339,7 +339,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
 
         filtered_rows: List[Dict] = []
         discarded: List[str] = []
-        fieldnames: list = []
+        fieldnames: List[str] = []
         with open(bids_tsv_path, "r", encoding="utf-8", newline="") as fh:
             reader = _csv.DictReader(fh, delimiter="\t")
             fieldnames = list(reader.fieldnames or [])
