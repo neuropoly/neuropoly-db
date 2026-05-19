@@ -5,6 +5,8 @@ Captures the lineage and confidence of each column mapping decision for
 auditability and retrospection, especially important for full-auto mode.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from enum import Enum
@@ -12,7 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from npdb.annotation import AnnotationMode
 
@@ -29,16 +31,9 @@ class ColumnProvenance(BaseModel):
     """Provenance metadata for a single column mapping."""
 
     column_name: str
-    source: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    source: MappingSource
 
-    @field_validator("source")
-    @classmethod
-    def _validate_source(cls, v: str) -> str:
-        valid = {s.value for s in MappingSource}
-        if v not in valid:
-            raise ValueError(f"source must be one of {sorted(valid)}, got {v!r}")
-        return v
+    confidence: float = Field(ge=0.0, le=1.0)
 
     variable: Optional[str] = Field(
         default=None, description="Mapped standardized variable"
@@ -64,16 +59,7 @@ class ProvenanceReport(BaseModel):
     """Complete provenance report for an annotation run."""
 
     run_id: str = Field(default_factory=lambda: str(uuid4()))
-    mode: str
-
-    @field_validator("mode")
-    @classmethod
-    def _validate_mode(cls, v: str) -> str:
-        valid = {m.value for m in AnnotationMode}
-        if v not in valid:
-            raise ValueError(f"mode must be one of {sorted(valid)}, got {v!r}")
-        return v
-
+    mode: AnnotationMode
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     dataset_name: Optional[str] = Field(default=None)
 

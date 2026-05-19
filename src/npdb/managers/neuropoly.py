@@ -176,21 +176,17 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         NeurobagelManager.__init__(self, output_dir)
         BagelMixin.__init__(self, self.db)
 
-    def convert_bids(
-        self,
-        dataset: str,
-        bids_dir: str,
-        phenotypes_tsv: str,
-        phenotypes_annotations: str,
-        dataset_description: dict,
-        warnings_out: Optional[Dict] = None,
-        extend_modalities: bool = False,
-        extensions_config_path: Optional[str] = None,
-        ai_client=None,
-        validate_schema: bool = True,
-    ):
-        import csv as _csv
+    # ------------------------------------------------------------------
+    # Private phase helpers
+    # ------------------------------------------------------------------
 
+    def _preprocess_phenotypes(
+        self,
+        pheno_tsv_path: Path,
+        pheno_ann_path: Path,
+        warnings_out: Optional[Dict],
+    ) -> List[str]:
+        """Phase 3: run all annotation pre-processing fixups on phenotype files."""
         from npdb.annotation.standardize import (
             auto_add_missing_value_sentinels,
             dedup_participant_ids,
@@ -200,31 +196,34 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             fix_single_column_tsv,
         )
 
-        # ── Phase 3: annotation pre-processing ─────────────────────────────
         preprocessing_warnings: List[str] = []
-        pheno_tsv_path = Path(phenotypes_tsv)
-        pheno_ann_path = Path(phenotypes_annotations)
-
         if pheno_tsv_path.exists() and pheno_ann_path.exists():
             preprocessing_warnings.extend(fix_single_column_tsv(pheno_tsv_path))
             preprocessing_warnings.extend(dedup_participant_ids(pheno_tsv_path))
             preprocessing_warnings.extend(fill_empty_id_rows(pheno_tsv_path))
-            preprocessing_warnings.extend(
-                fix_age_format(pheno_tsv_path, pheno_ann_path)
-            )
+            preprocessing_warnings.extend(fix_age_format(pheno_tsv_path, pheno_ann_path))
             preprocessing_warnings.extend(
                 auto_add_missing_value_sentinels(pheno_tsv_path, pheno_ann_path)
             )
-            preprocessing_warnings.extend(
-                fix_missing_levels(pheno_tsv_path, pheno_ann_path)
-            )
+            preprocessing_warnings.extend(fix_missing_levels(pheno_tsv_path, pheno_ann_path))
 
         if warnings_out is not None:
             warnings_out["preprocessing_warnings"] = preprocessing_warnings
+        return preprocessing_warnings
 
-        # ── Phase 4: pre-flight checks ──────────────────────────────────────
+    def _run_preflight(
+        self,
+        bids_dir: str,
+        extend_modalities: bool,
+        extensions_config_path: Optional[str],
+        ai_client,
+        preprocessing_warnings: List[str],
+        warnings_out: Optional[Dict],
+    ) -> tuple[Dict[str, str], List[str]]:
+        """Phase 4: run pre-flight BIDS suffix checks, optionally extending the vocab."""
         extra_suffix_map: Dict[str, str] = {}
-        _vocab_extension_pending: List[str] = []
+        vocab_extension_pending: List[str] = []
+
         if extend_modalities:
             from npdb.external.neurobagel.imaging_extensions import (
                 _NIDM_ALIASES,
@@ -249,9 +248,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             )
 
             # Proactively build and apply the full known vocab before any
-            # pre-flight check.  This ensures bagel is patched regardless of
-            # whether check_bids_suffixes raises (it won't for TIFF-only
-            # datasets or mixed datasets where ≥1 standard suffix is present).
+            # pre-flight check.
             _neuropoly_vocab = load_neuropoly_vocab(_vocab_path)
             for _abbr, (_iri, _name) in _neuropoly_vocab.items():
                 extra_suffix_map[_abbr] = _iri
@@ -259,9 +256,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                 extra_suffix_map.setdefault(_abbr, _iri)
             patch_bagel_suffix_map(extra_suffix_map)
 
-            # Second pass: discover any suffixes that are STILL unsupported
-            # (not in the neuropoly vocab or NIDM aliases) and resolve them
-            # via the extensions cache, LLM, or generic fallback.
+            # Second pass: discover any suffixes still unsupported and resolve them.
             try:
                 check_bids_suffixes(bids_dir, extra_suffix_map=extra_suffix_map)
             except PreflightError as _pf:
@@ -279,7 +274,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                     extra_suffix_map.update(_extra)
                     for w in _ext_warnings:
                         if w.startswith("vocab_extension_pending:"):
-                            _vocab_extension_pending.append(w)
+                            vocab_extension_pending.append(w)
                         else:
                             preprocessing_warnings.append(w)
                     patch_bagel_suffix_map(extra_suffix_map)
@@ -287,8 +282,144 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                         warnings_out["preprocessing_warnings"] = preprocessing_warnings
 
         check_bids_suffixes(bids_dir, extra_suffix_map=extra_suffix_map)
+        return extra_suffix_map, vocab_extension_pending
 
-        # Generate TSV from BIDS directory
+    def _validate_annotations_schema(self, pheno_ann_path: Path) -> None:
+        """Phase 5a: lightweight schema pre-validation of annotations JSON."""
+        with open(pheno_ann_path, "r", encoding="utf-8") as _fh:
+            _ann_schema = json.load(_fh)
+        _schema_errors: List[str] = []
+        for _col, _col_data in _ann_schema.items():
+            _ann = _col_data.get("Annotations", {})
+            if not _ann:
+                _schema_errors.append(
+                    f"Column '{_col}' is missing the 'Annotations' block."
+                )
+                continue
+            _is_about = _ann.get("IsAbout", {})
+            if not _is_about.get("TermURL"):
+                _schema_errors.append(
+                    f"Column '{_col}': Annotations.IsAbout.TermURL is missing or empty."
+                )
+        if _schema_errors:
+            raise BagelCLIError.from_result(
+                command="schema pre-validation",
+                exit_code=1,
+                output="\n".join(
+                    ["not a valid Neurobagel data dictionary — pre-validation failed:"]
+                    + _schema_errors
+                ),
+            )
+
+    def _align_and_run_bagel_bids(
+        self,
+        dataset: str,
+        bids_tsv_path: str,
+    ) -> List[str]:
+        """Phase 5b: case-insensitive subject alignment then bagel bids."""
+        import csv as _csv
+
+        jsonld_path = os.path.join(self.db.root, f"{dataset}.jsonld")
+        subject_alignment_warnings: List[str] = []
+
+        jsonld_subjects: Set[str] = set()
+        try:
+            with open(jsonld_path, "r", encoding="utf-8") as jf:
+                jsonld_data = json.load(jf)
+            for sample in jsonld_data.get("hasSamples", []):
+                label = sample.get("hasLabel", "").strip().lower()
+                if label:
+                    jsonld_subjects.add(label)
+        except (OSError, json.JSONDecodeError, KeyError):
+            pass
+
+        if not jsonld_subjects:
+            self.bagel_bids(dataset_name=dataset, bids_table=bids_tsv_path)
+            return subject_alignment_warnings
+
+        filtered_rows: List[Dict] = []
+        discarded: List[str] = []
+        fieldnames: list = []
+        with open(bids_tsv_path, "r", encoding="utf-8", newline="") as fh:
+            reader = _csv.DictReader(fh, delimiter="\t")
+            fieldnames = list(reader.fieldnames or [])
+            for row in reader:
+                pid = row.get("sub", "").strip().lower()
+                if pid in jsonld_subjects:
+                    filtered_rows.append(row)
+                else:
+                    discarded.append(row.get("sub", pid))
+
+        subject_alignment_warnings.extend(
+            f"Subject '{s}' in BIDS TSV absent from JSON-LD; excluded from bagel bids."
+            for s in discarded
+        )
+
+        if not filtered_rows:
+            subject_alignment_warnings.append(
+                "All BIDS TSV subjects are absent from the JSON-LD; skipping bagel bids."
+            )
+            return subject_alignment_warnings
+
+        with tempfile.NamedTemporaryFile(
+            suffix=".tsv", mode="w", delete=False, encoding="utf-8"
+        ) as filtered_tmp:
+            writer = _csv.DictWriter(
+                filtered_tmp,
+                fieldnames=fieldnames,
+                delimiter="\t",
+                lineterminator="\n",
+            )
+            writer.writeheader()
+            writer.writerows(filtered_rows)
+            filtered_tmp_path = filtered_tmp.name
+
+        try:
+            self.bagel_bids(dataset_name=dataset, bids_table=filtered_tmp_path)
+        finally:
+            try:
+                os.unlink(filtered_tmp_path)
+            except OSError:
+                pass
+
+        return subject_alignment_warnings
+
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
+    def convert_bids(
+        self,
+        dataset: str,
+        bids_dir: str,
+        phenotypes_tsv: str,
+        phenotypes_annotations: str,
+        dataset_description: dict,
+        warnings_out: Optional[Dict] = None,
+        extend_modalities: bool = False,
+        extensions_config_path: Optional[str] = None,
+        ai_client=None,
+        validate_schema: bool = True,
+    ):
+        pheno_tsv_path = Path(phenotypes_tsv)
+        pheno_ann_path = Path(phenotypes_annotations)
+
+        # Phase 3: annotation pre-processing
+        preprocessing_warnings = self._preprocess_phenotypes(
+            pheno_tsv_path, pheno_ann_path, warnings_out
+        )
+
+        # Phase 4: pre-flight checks
+        _, vocab_extension_pending = self._run_preflight(
+            bids_dir,
+            extend_modalities,
+            extensions_config_path,
+            ai_client,
+            preprocessing_warnings,
+            warnings_out,
+        )
+
+        # Phase 5: generate JSON-LD
         with tempfile.NamedTemporaryFile(
             suffix=".tsv", mode="w+", delete=False
         ) as tmp_file:
@@ -300,35 +431,9 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
 
                 self.bids2tsv(bids_directory=bids_dir, output_tsv=tmp_file.name)
 
-                # Generate JSON-LD from TSV and phenotypes description
-                # ── Phase 5a: schema pre-validation ──────────────────────────
+                # Phase 5a: schema pre-validation
                 if validate_schema and pheno_ann_path.exists():
-                    with open(pheno_ann_path, "r", encoding="utf-8") as _fh:
-                        _ann_schema = json.load(_fh)
-                    _schema_errors: List[str] = []
-                    for _col, _col_data in _ann_schema.items():
-                        _ann = _col_data.get("Annotations", {})
-                        if not _ann:
-                            _schema_errors.append(
-                                f"Column '{_col}' is missing the 'Annotations' block."
-                            )
-                            continue
-                        _is_about = _ann.get("IsAbout", {})
-                        if not _is_about.get("TermURL"):
-                            _schema_errors.append(
-                                f"Column '{_col}': Annotations.IsAbout.TermURL is missing or empty."
-                            )
-                    if _schema_errors:
-                        raise BagelCLIError.from_result(
-                            command="schema pre-validation",
-                            exit_code=1,
-                            output="\n".join(
-                                [
-                                    "not a valid Neurobagel data dictionary — pre-validation failed:"
-                                ]
-                                + _schema_errors
-                            ),
-                        )
+                    self._validate_annotations_schema(pheno_ann_path)
 
                 self.bagel_pheno(
                     dataset_name=dataset,
@@ -337,90 +442,15 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                     dataset_description=tmp_desc.name,
                 )
 
-                # ── Phase 5: case-insensitive subject alignment ──────────────
-                subject_alignment_warnings: List[str] = []
-                jsonld_path = os.path.join(self.db.root, f"{dataset}.jsonld")
-                bids_tsv_path = tmp_file.name
-
-                # Extract subjects present in the freshly-generated JSON-LD
-                jsonld_subjects: Set[str] = set()
-                try:
-                    with open(jsonld_path, "r", encoding="utf-8") as jf:
-                        jsonld_data = json.load(jf)
-                    for sample in jsonld_data.get("hasSamples", []):
-                        label = sample.get("hasLabel", "").strip().lower()
-                        if label:
-                            jsonld_subjects.add(label)
-                except (OSError, json.JSONDecodeError, KeyError):
-                    pass
-
-                if jsonld_subjects:
-                    # Build filtered BIDS TSV containing only JSON-LD subjects
-                    filtered_rows: List[Dict] = []
-                    discarded: List[str] = []
-                    with open(bids_tsv_path, "r", encoding="utf-8", newline="") as fh:
-                        reader = _csv.DictReader(fh, delimiter="\t")
-                        fieldnames = reader.fieldnames or []
-                        for row in reader:
-                            # bids2tsv outputs a "sub" column (not "participant_id")
-                            pid = row.get("sub", "").strip().lower()
-                            if pid in jsonld_subjects:
-                                filtered_rows.append(row)
-                            else:
-                                discarded.append(row.get("sub", pid))
-
-                    if discarded:
-                        subject_alignment_warnings.extend(
-                            [
-                                f"Subject '{s}' in BIDS TSV absent from JSON-LD; excluded from bagel bids."
-                                for s in discarded
-                            ]
-                        )
-
-                    if not filtered_rows:
-                        subject_alignment_warnings.append(
-                            "All BIDS TSV subjects are absent from the JSON-LD; skipping bagel bids."
-                        )
-                    else:
-                        # Write filtered BIDS TSV to a temp file
-                        with tempfile.NamedTemporaryFile(
-                            suffix=".tsv", mode="w", delete=False, encoding="utf-8"
-                        ) as filtered_tmp:
-                            writer = _csv.DictWriter(
-                                filtered_tmp,
-                                fieldnames=fieldnames,
-                                delimiter="\t",
-                                lineterminator="\n",
-                            )
-                            writer.writeheader()
-                            writer.writerows(filtered_rows)
-                            filtered_tmp_path = filtered_tmp.name
-
-                        try:
-                            self.bagel_bids(
-                                dataset_name=dataset,
-                                bids_table=filtered_tmp_path,
-                            )
-                        finally:
-                            try:
-                                os.unlink(filtered_tmp_path)
-                            except OSError:
-                                pass
-                else:
-                    # No JSON-LD subjects could be read — run bagel bids with original TSV
-                    self.bagel_bids(
-                        dataset_name=dataset,
-                        bids_table=tmp_file.name,
-                    )
+                # Phase 5b: subject alignment + bagel bids
+                subject_alignment_warnings = self._align_and_run_bagel_bids(
+                    dataset, tmp_file.name
+                )
 
                 if warnings_out is not None:
-                    warnings_out["subject_alignment_warnings"] = (
-                        subject_alignment_warnings
-                    )
-                    if _vocab_extension_pending:
-                        warnings_out["vocab_extension_pending"] = (
-                            _vocab_extension_pending
-                        )
+                    warnings_out["subject_alignment_warnings"] = subject_alignment_warnings
+                    if vocab_extension_pending:
+                        warnings_out["vocab_extension_pending"] = vocab_extension_pending
 
         # Clean up temp files
         try:

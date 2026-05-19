@@ -2,7 +2,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class AnnotationMode(str, Enum):
@@ -28,16 +28,7 @@ class AnnotationConfig(BaseModel):
     - Very slow/large files: 1200s (20 min)
     """
 
-    mode: str = Field(default="manual", description="Execution mode")
-
-    @field_validator("mode")
-    @classmethod
-    def _validate_mode(cls, v: str) -> str:
-        valid = {m.value for m in AnnotationMode}
-        if v not in valid:
-            raise ValueError(f"mode must be one of {sorted(valid)}, got {v!r}")
-        return v
-
+    mode: AnnotationMode = Field(default=AnnotationMode.MANUAL, description="Execution mode")
     headless: bool = Field(default=True, description="Run browser in headless mode")
     timeout: int = Field(
         default=300,

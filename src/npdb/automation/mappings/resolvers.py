@@ -31,6 +31,7 @@ class ResolvedMapping:
     source: str  # "static", "deterministic", "ai", or "unresolved"
     mapping_data: Dict[str, Any]
     rationale: str
+    canonical_key: Optional[str] = None  # canonical key in phenotype_mappings for renaming
 
 
 class MappingResolver:
@@ -104,6 +105,7 @@ class MappingResolver:
                 source="static",
                 mapping_data=mapping_data,
                 rationale="Exact match in static dictionary",
+                canonical_key=column_name,
             )
             self._resolved_cache[column_name] = resolved
             return resolved
@@ -127,6 +129,7 @@ class MappingResolver:
                     source="deterministic",
                     mapping_data=mapping_data,
                     rationale=f"Fuzzy match: '{column_name}' → '{mapping_key}' ({match_source}, score {confidence:.2f})",
+                    canonical_key=mapping_key,
                 )
                 self._resolved_cache[column_name] = resolved
                 return resolved

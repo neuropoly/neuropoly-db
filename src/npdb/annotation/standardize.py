@@ -295,27 +295,8 @@ def rename_tsv_headers(
 
 
 def _extract_canonical_name(mapping: ResolvedMapping) -> Optional[str]:
-    """
-    Extract the canonical mapping key name from a ResolvedMapping.
-
-    For static matches the column_name is already canonical.
-    For deterministic (fuzzy) matches the rationale contains the matched key.
-    """
-    if mapping.source == "static":
-        # Static match means column_name is already a key in phenotype_mappings
-        return mapping.column_name
-    if mapping.source == "deterministic":
-        # Rationale format: "Fuzzy match: 'col' → 'canonical_key' (...)"
-        rationale = mapping.rationale
-        arrow_idx = rationale.find("→")
-        if arrow_idx != -1:
-            rest = rationale[arrow_idx + 1 :].strip()
-            # Extract the quoted key after the arrow
-            if rest.startswith("'"):
-                end = rest.find("'", 1)
-                if end != -1:
-                    return rest[1:end]
-    return None
+    """Return the canonical mapping key for *mapping*, or ``None`` if unavailable."""
+    return mapping.canonical_key
 
 
 def add_missing_standard_columns(
@@ -669,9 +650,21 @@ def load_categorical_terms(
 _CATEGORICAL_TERMS_PATH = (
     Path(__file__).resolve().parents[3] / "config" / "categorical_terms.json"
 )
-_ALIAS_TO_PREFERRED, _PREFERRED_TO_TERM = load_categorical_terms(
-    _CATEGORICAL_TERMS_PATH
-)
+_categorical_terms_cache: Optional[
+    Tuple[Dict[str, str], Dict[str, Dict[str, str]]]
+] = None
+
+
+def _get_categorical_terms() -> Tuple[Dict[str, str], Dict[str, Dict[str, str]]]:
+    """Lazily load and cache categorical terms from config.
+
+    Deferred to first call so that importing this module never fails due to
+    a missing config file.
+    """
+    global _categorical_terms_cache
+    if _categorical_terms_cache is None:
+        _categorical_terms_cache = load_categorical_terms(_CATEGORICAL_TERMS_PATH)
+    return _categorical_terms_cache
 
 # Age format detection — ordered list of (neurobagel_term, pattern) tuples.
 # Multiple patterns may map to the same term; the first match wins per value.
@@ -1008,6 +1001,7 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> List[str]:
     Returns a list of warning strings.  The annotations file is modified
     in-place when any change is made.
     """
+    _alias_to_preferred, _preferred_to_term = _get_categorical_terms()
     warnings_list: List[str] = []
 
     if not annotations_path.exists() or not tsv_path.exists():
@@ -1041,8 +1035,8 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> List[str]:
         # ── Step 1: repair existing entries that lack TermURL / Label ─────
         for val, entry in list(nb_levels.items()):
             if isinstance(entry, dict) and "TermURL" not in entry:
-                preferred = _ALIAS_TO_PREFERRED.get(val.strip().lower())
-                term = _PREFERRED_TO_TERM.get(preferred) if preferred else None
+                preferred = _alias_to_preferred.get(val.strip().lower())
+                term = _preferred_to_term.get(preferred) if preferred else None
                 canonical_key = preferred if preferred else val
                 nb_levels.pop(val)
                 nb_levels[canonical_key] = (
@@ -1064,13 +1058,13 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> List[str]:
 
         # ── Step 2: add entries for values observed in TSV but not yet in Levels
         for val in set(col_values.get(col, [])):
-            preferred = _ALIAS_TO_PREFERRED.get(val.strip().lower())
+            preferred = _alias_to_preferred.get(val.strip().lower())
             canonical_key = preferred if preferred else val
             if canonical_key in nb_levels or val in missing_values:
                 continue
             if val.strip().lower() in na_lower or val.strip() == "":
                 continue
-            term = _PREFERRED_TO_TERM.get(preferred) if preferred else None
+            term = _preferred_to_term.get(preferred) if preferred else None
             nb_levels[canonical_key] = (
                 term
                 if term
