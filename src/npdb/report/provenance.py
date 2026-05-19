@@ -90,6 +90,18 @@ class ProvenanceReport(BaseModel):
     ai_threshold: Optional[float] = Field(default=None)
 
 
+def _bucket_confidence(dist: ConfidenceDistribution, conf: float) -> None:
+    """Place a single confidence score into the correct bucket of *dist* in-place."""
+    if conf >= 0.85:
+        dist.high.append(conf)
+    elif conf >= 0.7:
+        dist.medium.append(conf)
+    elif conf >= 0.5:
+        dist.low.append(conf)
+    else:
+        dist.unresolved += 1
+
+
 def compute_confidence_distribution(
     per_column: Dict[str, ColumnProvenance],
 ) -> ConfidenceDistribution:
@@ -106,21 +118,9 @@ def compute_confidence_distribution(
         ConfidenceDistribution with scores bucketed by range
     """
     dist = ConfidenceDistribution()
-
     for col_prov in per_column.values():
-        if col_prov.source == "manual":
-            continue
-
-        conf = col_prov.confidence
-        if conf >= 0.85:
-            dist.high.append(conf)
-        elif conf >= 0.7:
-            dist.medium.append(conf)
-        elif conf >= 0.5:
-            dist.low.append(conf)
-        else:
-            dist.unresolved += 1
-
+        if col_prov.source != MappingSource.MANUAL:
+            _bucket_confidence(dist, col_prov.confidence)
     return dist
 
 
@@ -137,6 +137,10 @@ def add_column_provenance(
 ) -> None:
     """
     Add or update column provenance in a report.
+
+    When *column_name* is new, the confidence distribution is updated
+    incrementally (O(1)).  When an existing entry is replaced the
+    distribution is recomputed from scratch to keep it consistent (rare).
 
     Args:
         report: ProvenanceReport to update
@@ -160,6 +164,7 @@ def add_column_provenance(
         ai_model_version=ai_model_version,
     )
 
+    is_update = column_name in report.per_column
     report.per_column[column_name] = col_prov
 
     # Update source counts
@@ -167,8 +172,14 @@ def add_column_provenance(
         report.mapping_source_counts.get(source, 0) + 1
     )
 
-    # Recompute confidence distribution
-    report.confidence_distribution = compute_confidence_distribution(report.per_column)
+    # Update confidence distribution — incrementally for new entries, full
+    # recompute only when an existing entry is replaced (uncommon).
+    if is_update:
+        report.confidence_distribution = compute_confidence_distribution(
+            report.per_column
+        )
+    elif col_prov.source != MappingSource.MANUAL:
+        _bucket_confidence(report.confidence_distribution, confidence)
 
 
 def add_warning(report: ProvenanceReport, warning: str) -> None:

@@ -20,6 +20,7 @@ Reference: https://neurobagel.org/user_guide/data_prep/#multiple-participant-or-
 """
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -73,24 +74,16 @@ def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMappi
     Returns:
         Dict mapping variable -> List[ColumnMapping] sorted by confidence (descending)
     """
-    groups: Dict[str, List[ColumnMapping]] = {}
+    groups: Dict[str, List[ColumnMapping]] = defaultdict(list)
 
     for col_name, mapping_info in annotations.items():
-        variable = mapping_info.get("variable", "unknown")
-        confidence = mapping_info.get("confidence", 0.0)
-        source = mapping_info.get("source", "unknown")
-        rationale = mapping_info.get("rationale", "")
-
-        if variable not in groups:
-            groups[variable] = []
-
-        groups[variable].append(
+        groups[mapping_info.get("variable", "unknown")].append(
             ColumnMapping(
                 column_name=col_name,
-                variable=variable,
-                confidence=confidence,
-                source=source,
-                rationale=rationale,
+                variable=mapping_info.get("variable", "unknown"),
+                confidence=mapping_info.get("confidence", 0.0),
+                source=mapping_info.get("source", "unknown"),
+                rationale=mapping_info.get("rationale", ""),
             )
         )
 
@@ -98,7 +91,7 @@ def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMappi
     for variable in groups:
         groups[variable].sort(key=lambda m: m.confidence, reverse=True)
 
-    return groups
+    return dict(groups)
 
 
 def resolve_duplicates(

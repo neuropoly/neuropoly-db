@@ -77,15 +77,8 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         with open(desc_path, "r") as f:
             description = json.load(f)
 
-        # Normalize name using the argument provided
         description["Name"] = dataset
 
-        # If the authors list is empty or missing, pull all collaborators as authors
-        # if not description.get("Authors"):
-        #     collaborators = repo.get_users_with_access()
-        #     description["Authors"] = [c.id for c in collaborators]
-
-        # If no keywords, add at least the dataset name
         if not description.get("Keywords"):
             description["Keywords"] = [dataset]
 
@@ -102,19 +95,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             "Refer to the access link provided with the repository."
         )
         description["AccessLink"] = "https://intranet.neuro.polymtl.ca/data/README.html"
-        # Document all access as resctricted for now
         description["AccessType"] = "restricted"
-        # Fetch repository maintainer as contact for access if not present
-        # if "AccessEmail" not in description:
-        #     users = repo.get_users_with_access()
-        #     maintainers = repo.get_collaborators(role="maintainer")
-        #     if maintainers.total > 0:
-        #         description["AccessEmail"] = maintainers[0].email
-        #     else:
-        #         # Find owner then
-        #         owners = repo.get_collaborators(role="owner")
-        #         if owners.total > 0:
-        #             description["AccessEmail"] = owners[0].email
 
         return description
 
@@ -142,12 +123,13 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         Returns:
             List of ``(success, label, message)`` for each unique repository.
         """
+        from collections import defaultdict
+
         # Group sparse paths by (repo_url, dataset_name) so each repo is
         # cloned exactly once, regardless of how many subjects it contains.
-        groups: dict[tuple[str, str], list[str]] = {}
+        groups: dict[tuple[str, str], list[str]] = defaultdict(list)
         for repo_url, sparse_path, dataset_name in subjects:
             key = (repo_url, dataset_name)
-            groups.setdefault(key, [])
             if sparse_path not in groups[key]:
                 groups[key].append(sparse_path)
 
@@ -201,11 +183,15 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             preprocessing_warnings.extend(fix_single_column_tsv(pheno_tsv_path))
             preprocessing_warnings.extend(dedup_participant_ids(pheno_tsv_path))
             preprocessing_warnings.extend(fill_empty_id_rows(pheno_tsv_path))
-            preprocessing_warnings.extend(fix_age_format(pheno_tsv_path, pheno_ann_path))
+            preprocessing_warnings.extend(
+                fix_age_format(pheno_tsv_path, pheno_ann_path)
+            )
             preprocessing_warnings.extend(
                 auto_add_missing_value_sentinels(pheno_tsv_path, pheno_ann_path)
             )
-            preprocessing_warnings.extend(fix_missing_levels(pheno_tsv_path, pheno_ann_path))
+            preprocessing_warnings.extend(
+                fix_missing_levels(pheno_tsv_path, pheno_ann_path)
+            )
 
         if warnings_out is not None:
             warnings_out["preprocessing_warnings"] = preprocessing_warnings
@@ -448,9 +434,13 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                 )
 
                 if warnings_out is not None:
-                    warnings_out["subject_alignment_warnings"] = subject_alignment_warnings
+                    warnings_out["subject_alignment_warnings"] = (
+                        subject_alignment_warnings
+                    )
                     if vocab_extension_pending:
-                        warnings_out["vocab_extension_pending"] = vocab_extension_pending
+                        warnings_out["vocab_extension_pending"] = (
+                            vocab_extension_pending
+                        )
 
         # Clean up temp files
         try:

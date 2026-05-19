@@ -5,14 +5,27 @@ Provides loader and precedence-based resolver for mapping column headers to
 Neurobagel standardized variables.
 """
 
+import copy
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+_DEFAULT_RESOURCE_PATH = (
+    Path(__file__).parent.parent.parent / "resources" / "phenotype_mappings.json"
+)
+
+# Module-level cache: avoid re-reading the same JSON file on every instantiation.
+_static_mappings_cache: Optional[Dict[str, Any]] = None
 
 
 def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]:
     """
     Load built-in static phenotype mappings.
+
+    The parsed JSON is cached after the first successful load from the default
+    path.  A deep copy is returned so callers cannot mutate the cached value.
+    Passing an explicit *resource_path* bypasses the cache so that callers can
+    override the bundled file in tests.
 
     Args:
         resource_path: Optional override path; defaults to bundled phenotype_mappings.json
@@ -20,20 +33,23 @@ def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]
     Returns:
         Dictionary of mappings with context and column definitions.
     """
-    if resource_path is None:
-        resource_path = (
-            Path(__file__).parent.parent.parent
-            / "resources"
-            / "phenotype_mappings.json"
-        )
+    global _static_mappings_cache
 
-    if not resource_path.exists():
-        raise FileNotFoundError(f"Phenotype mappings file not found: {resource_path}")
+    use_default = resource_path is None
+    if use_default and _static_mappings_cache is not None:
+        return copy.deepcopy(_static_mappings_cache)
 
-    with open(resource_path, "r") as f:
+    path = _DEFAULT_RESOURCE_PATH if use_default else resource_path
+    if not path.exists():
+        raise FileNotFoundError(f"Phenotype mappings file not found: {path}")
+
+    with open(path, "r") as f:
         data = json.load(f)
 
-    return data
+    if use_default:
+        _static_mappings_cache = data
+
+    return copy.deepcopy(data)
 
 
 def merge_mappings(

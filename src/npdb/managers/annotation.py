@@ -238,14 +238,15 @@ class BIDSStandardizer(Annotator):
                 header_map=hmap,
             )
 
-            if not dry_run:
-                # Validate and report warnings
-                if not keep_annotations:
-                    _, warnings = validate_bids_sidecar(sidecar)
-                    for w in warnings:
-                        print(f"  ⚠ {w}")
-                        self.provenance.warnings.append(w)
+            # Validate sidecar and report warnings (both dry-run and live)
+            if not keep_annotations:
+                _, warnings = validate_bids_sidecar(sidecar)
+                for w in warnings:
+                    print(f"  ⚠ {w}")
+                if not dry_run:
+                    self.provenance.warnings.extend(warnings)
 
+            if not dry_run:
                 # Write participants.json
                 json_path = bids_root / "participants.json"
                 with open(json_path, "w", encoding="utf-8") as f:
@@ -257,12 +258,6 @@ class BIDSStandardizer(Annotator):
                 provenance_path = bids_root / "participants_provenance.json"
                 save_provenance(self.provenance, provenance_path)
                 print(f"✓ Saved provenance: {provenance_path}")
-            else:
-                # Dry-run: still report validation warnings
-                if not keep_annotations:
-                    _, warnings = validate_bids_sidecar(sidecar)
-                    for w in warnings:
-                        print(f"  ⚠ {w}")
 
             return True
 
