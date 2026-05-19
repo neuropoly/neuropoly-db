@@ -520,12 +520,12 @@ def standardize_bids(
     without writing files.
     """
     try:
-        AnnotationMode(mode)
+        mode_enum = AnnotationMode(mode)
     except ValueError:
         typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
         raise typer.Exit(code=1)
 
-    if mode == AnnotationMode.MANUAL.value and (ai_provider or ai_model):
+    if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:

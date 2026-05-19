@@ -238,13 +238,14 @@ class BIDSStandardizer(Annotator):
                 header_map=hmap,
             )
 
-            # Validate sidecar and report warnings (both dry-run and live)
+            # Validate sidecar and report warnings (both dry-run and live).
+            # Provenance warnings are recorded regardless of dry-run mode so the
+            # audit trail reflects the same issues that were printed to the terminal.
             if not keep_annotations:
                 _, warnings = validate_bids_sidecar(sidecar)
                 for w in warnings:
                     print(f"  ⚠ {w}")
-                if not dry_run:
-                    self.provenance.warnings.extend(warnings)
+                self.provenance.warnings.extend(warnings)
 
             if not dry_run:
                 # Write participants.json

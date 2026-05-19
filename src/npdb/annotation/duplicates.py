@@ -91,7 +91,7 @@ def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMappi
     for variable in groups:
         groups[variable].sort(key=lambda m: m.confidence, reverse=True)
 
-    return dict(groups)
+    return groups
 
 
 def resolve_duplicates(
