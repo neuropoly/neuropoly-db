@@ -21,7 +21,7 @@ from npdb.annotation.standardize import (
 from npdb.annotation.strategies import AnnotationStrategyFactory, AnnotatorContext
 from npdb.annotation.utils import parse_tsv_columns
 from npdb.external.neurobagel.schema import convert_to_bagel_schema
-from npdb.report.provenance import save_provenance
+from npdb.report.provenance import ProvenanceReport
 
 
 class NeurobagelAnnotator(Annotator):
@@ -217,13 +217,17 @@ class BIDSStandardizer(Annotator):
             # In dry-run mode, the TSV was not modified by rename/add steps.
             # Compute the effective column list so generate_participants_json
             # produces output matching what would actually be written.
-            effective_columns = None
-            if dry_run:
-                # Apply header-map renames, then resolver renames, then added cols
-                effective_columns = [
-                    rename_map.get(pre_renames.get(c, c), pre_renames.get(c, c))
-                    for c in column_names
-                ] + (added or [])
+            effective_columns = (
+                (
+                    [
+                        rename_map.get(tmp := pre_renames.get(c, c), tmp)
+                        for c in column_names
+                    ]
+                    + (added or [])
+                )
+                if dry_run
+                else None
+            )
 
             # Step 5: Generate participants.json
             existing_json = bids_root / "participants.json"
@@ -257,7 +261,7 @@ class BIDSStandardizer(Annotator):
 
                 # Step 6: Save provenance
                 provenance_path = bids_root / "participants_provenance.json"
-                save_provenance(self.provenance, provenance_path)
+                self.provenance.save(provenance_path)
                 print(f"✓ Saved provenance: {provenance_path}")
 
             return True

@@ -7,10 +7,8 @@ which maps known Bagel error patterns to actionable user guidance.
 
 import re
 from dataclasses import dataclass, field
-from typing import List
 
 from rich.text import Text
-
 
 @dataclass
 class BagelCLIError(RuntimeError):
@@ -41,16 +39,13 @@ class BagelCLIError(RuntimeError):
             rich_output=Text.from_ansi(output),
         )
 
-
 # ---------------------------------------------------------------------------
 # Step helper — create a resolution step dict
 # ---------------------------------------------------------------------------
 
-
 def _step(action: str, detail: str, auto_fixable: bool = False) -> dict:
     """Return a resolution-step dict with action, detail, and auto_fixable flag."""
     return {"action": action, "detail": detail, "auto_fixable": auto_fixable}
-
 
 # ---------------------------------------------------------------------------
 # Error pattern registry
@@ -58,7 +53,7 @@ def _step(action: str, detail: str, auto_fixable: bool = False) -> dict:
 # fix_steps is now a list of dicts: {action, detail, auto_fixable}
 # ---------------------------------------------------------------------------
 
-_PATTERN_REGISTRY: List[tuple[re.Pattern, str, str, List[dict]]] = [
+_PATTERN_REGISTRY: list[tuple[re.Pattern, str, str, list[dict]]] = [
     (
         re.compile(r"missing from the phenotypic table", re.IGNORECASE),
         "Missing annotated columns",
@@ -338,8 +333,7 @@ _PATTERN_REGISTRY: List[tuple[re.Pattern, str, str, List[dict]]] = [
     ),
 ]
 
-
-def classify_bagel_error(plain_text: str) -> List[dict]:
+def classify_bagel_error(plain_text: str) -> list[dict]:
     """
     Match ``plain_text`` against known Bagel error patterns.
 

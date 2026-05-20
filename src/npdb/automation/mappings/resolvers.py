@@ -11,7 +11,7 @@ Resolver returns per-column mapping with source and confidence tracking.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from npdb.annotation.matching import ColumnMatcher
 from npdb.automation.mappings.solvers import (
@@ -21,7 +21,7 @@ from npdb.automation.mappings.solvers import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class ResolvedMapping:
     """Result of resolving a column header to a phenotype variable."""
 
@@ -29,9 +29,9 @@ class ResolvedMapping:
     mapped_variable: str
     confidence: float
     source: str  # "static", "deterministic", "ai", or "unresolved"
-    mapping_data: Dict[str, Any]
+    mapping_data: dict[str, Any]
     rationale: str
-    canonical_key: Optional[str] = None  # canonical key in phenotype_mappings for renaming
+    canonical_key: str | None = None  # canonical key in phenotype_mappings for renaming
 
 
 class MappingResolver:
@@ -46,7 +46,7 @@ class MappingResolver:
 
     def __init__(
         self,
-        user_dictionary_path: Optional[str | Path] = None,
+        user_dictionary_path: str | Path | None = None,
         exact_threshold: float = 1.0,
         fuzzy_threshold: float = 0.75,
     ):
@@ -74,7 +74,7 @@ class MappingResolver:
         self.fuzzy_threshold = fuzzy_threshold
 
         # Cache resolved mappings
-        self._resolved_cache: Dict[str, ResolvedMapping] = {}
+        self._resolved_cache: dict[str, ResolvedMapping] = {}
 
     def resolve_column(self, column_name: str) -> ResolvedMapping:
         """
@@ -146,7 +146,7 @@ class MappingResolver:
         self._resolved_cache[column_name] = resolved
         return resolved
 
-    def resolve_columns(self, column_names: List[str]) -> List[ResolvedMapping]:
+    def resolve_columns(self, column_names: list[str]) -> list[ResolvedMapping]:
         """
         Resolve multiple column headers in batch.
 
@@ -159,8 +159,8 @@ class MappingResolver:
         return [self.resolve_column(name) for name in column_names]
 
     def get_resolution_summary(
-        self, resolved_mappings: List[ResolvedMapping]
-    ) -> Dict[str, Any]:
+        self, resolved_mappings: list[ResolvedMapping]
+    ) -> dict[str, Any]:
         """
         Generate summary statistics on resolution quality.
 

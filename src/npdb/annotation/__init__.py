@@ -1,6 +1,5 @@
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,23 +27,25 @@ class AnnotationConfig(BaseModel):
     - Very slow/large files: 1200s (20 min)
     """
 
-    mode: AnnotationMode = Field(default=AnnotationMode.MANUAL, description="Execution mode")
+    mode: AnnotationMode = Field(
+        default=AnnotationMode.MANUAL, description="Execution mode"
+    )
     headless: bool = Field(default=True, description="Run browser in headless mode")
     timeout: int = Field(
         default=300,
         description="Timeout per automation step (seconds). Applies to each operation with retry.",
     )
-    artifacts_dir: Optional[Path] = Field(
+    artifacts_dir: Path | None = Field(
         default=None,
         description="Directory for screenshots/traces on failure. Auto-created if provided.",
     )
-    ai_provider: Optional[str] = Field(
+    ai_provider: str | None = Field(
         default=None, description="AI provider (e.g., 'ollama')"
     )
-    ai_model: Optional[str] = Field(
+    ai_model: str | None = Field(
         default=None, description="AI model name (e.g., 'neural-chat')"
     )
-    phenotype_dictionary: Optional[Path] = Field(
+    phenotype_dictionary: Path | None = Field(
         default=None, description="Optional user-supplied phenotype dictionary JSON"
     )
     dry_run: bool = Field(
@@ -54,7 +55,7 @@ class AnnotationConfig(BaseModel):
         default=False,
         description="Include Neurobagel Annotations block in participants.json output",
     )
-    header_map: Optional[Path] = Field(
+    header_map: Path | None = Field(
         default=None,
         description="JSON file mapping desired output headers to lists of input variants",
     )

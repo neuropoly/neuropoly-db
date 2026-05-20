@@ -1,8 +1,6 @@
 from pathlib import Path
-from typing import List, Set
 
-
-def parse_tsv_columns(tsv_path: Path) -> List[str]:
+def parse_tsv_columns(tsv_path: Path) -> list[str]:
     """
     Parse column names from a TSV file.
 
@@ -36,8 +34,7 @@ def parse_tsv_columns(tsv_path: Path) -> List[str]:
 
     return columns
 
-
-def get_unique_values(tsv_path: Path, column_name: str) -> Set[str]:
+def get_unique_values(tsv_path: Path, column_name: str) -> set[str]:
     """
     Extract unique values for a specific column from a TSV file.
 
@@ -62,7 +59,7 @@ def get_unique_values(tsv_path: Path, column_name: str) -> Set[str]:
         )
 
     column_index = columns.index(column_name)
-    unique_values: Set[str] = set()
+    unique_values: set[str] = set()
 
     try:
         with open(tsv_path, "r", encoding="utf-8") as f:

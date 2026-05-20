@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from npdb.annotation.standardize import (
+from npdb.annotation.autofix import (
     auto_add_missing_value_sentinels,
     dedup_participant_ids,
     fix_missing_levels,
@@ -24,6 +24,7 @@ from npdb.annotation.standardize import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_lines(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -51,6 +52,7 @@ def _write_annotations(path: Path, col: str, variable_type: str, levels: dict) -
 # ===========================================================================
 # fix_single_column_tsv
 # ===========================================================================
+
 
 class TestFixSingleColumnTsv:
     """Tests for fix_single_column_tsv()."""
@@ -182,6 +184,7 @@ class TestFixSingleColumnTsv:
 # dedup_participant_ids
 # ===========================================================================
 
+
 class TestDedupParticipantIds:
     """Tests for dedup_participant_ids()."""
 
@@ -262,8 +265,7 @@ class TestDedupParticipantIds:
 
     def test_no_op_when_no_participant_id_column(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
-        tsv.write_text("subject\tage\nsub-01\t25\nsub-01\t26\n",
-                       encoding="utf-8")
+        tsv.write_text("subject\tage\nsub-01\t25\nsub-01\t26\n", encoding="utf-8")
         result = dedup_participant_ids(tsv)
         assert result == []
         # File unchanged
@@ -308,20 +310,32 @@ class TestDedupParticipantIds:
 # auto_add_missing_value_sentinels
 # ===========================================================================
 
+
 class TestAutoAddMissingValueSentinels:
     """Tests for auto_add_missing_value_sentinels()."""
 
     # ── NA-like values added to MissingValues ──────────────────────────────
 
-    @pytest.mark.parametrize("na_value", [
-        "n/a", "N/A", "na", "NA", "", "-", "unknown", "?",
-    ])
+    @pytest.mark.parametrize(
+        "na_value",
+        [
+            "n/a",
+            "N/A",
+            "na",
+            "NA",
+            "",
+            "-",
+            "unknown",
+            "?",
+        ],
+    )
     def test_na_like_value_added(self, tmp_path, na_value):
         tsv = tmp_path / "participants.tsv"
         ann = tmp_path / "annotations.json"
         with open(tsv, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(
-                fh, fieldnames=["participant_id", "sex"], delimiter="\t")
+                fh, fieldnames=["participant_id", "sex"], delimiter="\t"
+            )
             writer.writeheader()
             writer.writerow({"participant_id": "sub-01", "sex": "M"})
             writer.writerow({"participant_id": "sub-02", "sex": na_value})
@@ -340,7 +354,8 @@ class TestAutoAddMissingValueSentinels:
         ann = tmp_path / "annotations.json"
         with open(tsv, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(
-                fh, fieldnames=["participant_id", "sex"], delimiter="\t")
+                fh, fieldnames=["participant_id", "sex"], delimiter="\t"
+            )
             writer.writeheader()
             writer.writerow({"participant_id": "sub-01", "sex": "M"})
             writer.writerow({"participant_id": "sub-02", "sex": "F"})
@@ -360,7 +375,8 @@ class TestAutoAddMissingValueSentinels:
         ann = tmp_path / "annotations.json"
         with open(tsv, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(
-                fh, fieldnames=["participant_id", "sex"], delimiter="\t")
+                fh, fieldnames=["participant_id", "sex"], delimiter="\t"
+            )
             writer.writeheader()
             writer.writerow({"participant_id": "sub-01", "sex": "M"})
             # trailing space
@@ -380,7 +396,8 @@ class TestAutoAddMissingValueSentinels:
         ann = tmp_path / "annotations.json"
         with open(tsv, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(
-                fh, fieldnames=["participant_id", "sex"], delimiter="\t")
+                fh, fieldnames=["participant_id", "sex"], delimiter="\t"
+            )
             writer.writeheader()
             writer.writerow({"participant_id": "sub-01", "sex": "M"})
             # unknown, not NA
@@ -400,7 +417,8 @@ class TestAutoAddMissingValueSentinels:
         ann = tmp_path / "annotations.json"
         with open(tsv, "w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(
-                fh, fieldnames=["participant_id", "age"], delimiter="\t")
+                fh, fieldnames=["participant_id", "age"], delimiter="\t"
+            )
             writer.writeheader()
             writer.writerow({"participant_id": "sub-01", "age": "n/a"})
         _write_annotations(ann, "age", "Continuous", {})
@@ -431,6 +449,7 @@ class TestAutoAddMissingValueSentinels:
 # load_categorical_terms
 # ===========================================================================
 
+
 class TestLoadCategoricalTerms:
     """Tests for load_categorical_terms()."""
 
@@ -439,18 +458,21 @@ class TestLoadCategoricalTerms:
 
     def test_valid_config_builds_correct_dicts(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {
-                "TermURL": "ncit:C94342",
-                "Label": "Healthy Control",
-                "aliases": ["control", "ctrl"],
+        self._write_config(
+            cfg,
+            {
+                "hc": {
+                    "TermURL": "ncit:C94342",
+                    "Label": "Healthy Control",
+                    "aliases": ["control", "ctrl"],
+                },
+                "pd": {
+                    "TermURL": "snomed:49049000",
+                    "Label": "Parkinson's disease",
+                    "aliases": [],
+                },
             },
-            "pd": {
-                "TermURL": "snomed:49049000",
-                "Label": "Parkinson's disease",
-                "aliases": [],
-            },
-        })
+        )
 
         alias_to_preferred, preferred_to_term = load_categorical_terms(cfg)
 
@@ -462,46 +484,71 @@ class TestLoadCategoricalTerms:
         assert alias_to_preferred["ctrl"] == "hc"
         # preferred_to_term carries TermURL and Label
         assert preferred_to_term["hc"] == {
-            "TermURL": "ncit:C94342", "Label": "Healthy Control"}
+            "TermURL": "ncit:C94342",
+            "Label": "Healthy Control",
+        }
         assert preferred_to_term["pd"]["TermURL"] == "snomed:49049000"
 
     def test_unknown_alias_returns_none_from_lookup(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {"TermURL": "ncit:C94342", "Label": "Healthy Control", "aliases": []},
-        })
+        self._write_config(
+            cfg,
+            {
+                "hc": {
+                    "TermURL": "ncit:C94342",
+                    "Label": "Healthy Control",
+                    "aliases": [],
+                },
+            },
+        )
         alias_to_preferred, _ = load_categorical_terms(cfg)
         assert alias_to_preferred.get("nonexistent") is None
 
     def test_missing_term_url_raises_value_error(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {"Label": "Healthy Control", "aliases": []},
-        })
+        self._write_config(
+            cfg,
+            {
+                "hc": {"Label": "Healthy Control", "aliases": []},
+            },
+        )
         with pytest.raises(ValueError, match="TermURL"):
             load_categorical_terms(cfg)
 
     def test_missing_label_raises_value_error(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {"TermURL": "ncit:C94342", "aliases": []},
-        })
+        self._write_config(
+            cfg,
+            {
+                "hc": {"TermURL": "ncit:C94342", "aliases": []},
+            },
+        )
         with pytest.raises(ValueError, match="Label"):
             load_categorical_terms(cfg)
 
     def test_missing_aliases_raises_value_error(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {"TermURL": "ncit:C94342", "Label": "Healthy Control"},
-        })
+        self._write_config(
+            cfg,
+            {
+                "hc": {"TermURL": "ncit:C94342", "Label": "Healthy Control"},
+            },
+        )
         with pytest.raises(ValueError, match="aliases"):
             load_categorical_terms(cfg)
 
     def test_non_list_aliases_raises_value_error(self, tmp_path):
         cfg = tmp_path / "terms.json"
-        self._write_config(cfg, {
-            "hc": {"TermURL": "ncit:C94342", "Label": "Healthy Control", "aliases": "control"},
-        })
+        self._write_config(
+            cfg,
+            {
+                "hc": {
+                    "TermURL": "ncit:C94342",
+                    "Label": "Healthy Control",
+                    "aliases": "control",
+                },
+            },
+        )
         with pytest.raises(ValueError, match="aliases"):
             load_categorical_terms(cfg)
 
@@ -509,6 +556,7 @@ class TestLoadCategoricalTerms:
 # ===========================================================================
 # fix_missing_levels
 # ===========================================================================
+
 
 def _write_categorical_annotations(path: Path, col: str, levels: dict) -> None:
     """Write an annotations file with a single Categorical column."""
@@ -527,8 +575,7 @@ def _write_categorical_annotations(path: Path, col: str, levels: dict) -> None:
 
 def _write_tsv(path: Path, col: str, values: list) -> None:
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(
-            fh, fieldnames=["participant_id", col], delimiter="\t")
+        writer = csv.DictWriter(fh, fieldnames=["participant_id", col], delimiter="\t")
         writer.writeheader()
         for i, v in enumerate(values, start=1):
             writer.writerow({"participant_id": f"sub-{i:02d}", col: v})
@@ -604,7 +651,8 @@ class TestFixMissingLevels:
         _write_tsv(tsv, "diagnosis", ["control"])
         # Pre-populate levels with an invalid entry (no TermURL)
         _write_categorical_annotations(
-            ann, "diagnosis", {"control": {"Description": "bad"}})
+            ann, "diagnosis", {"control": {"Description": "bad"}}
+        )
 
         warnings = fix_missing_levels(tsv, ann)
 
@@ -630,8 +678,7 @@ class TestFixMissingLevels:
 
     def test_returns_empty_when_annotations_missing(self, tmp_path):
         tsv = tmp_path / "participants.tsv"
-        tsv.write_text(
-            "participant_id\tdiagnosis\nsub-01\thc\n", encoding="utf-8")
+        tsv.write_text("participant_id\tdiagnosis\nsub-01\thc\n", encoding="utf-8")
         result = fix_missing_levels(tsv, tmp_path / "nope.json")
         assert result == []
 

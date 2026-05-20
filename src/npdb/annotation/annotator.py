@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from npdb.annotation import AnnotationConfig, AnnotationMode
 from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
 from npdb.report.observers import ProvenanceObserver, ResolutionObserver
 from npdb.report.provenance import ProvenanceReport
-
 
 class Annotator(ABC):
     """
@@ -17,7 +15,7 @@ class Annotator(ABC):
     """
 
     # Confidence thresholds by mode — keyed by AnnotationMode for type safety
-    _CONFIDENCE_THRESHOLDS: Dict[AnnotationMode, float] = {
+    _CONFIDENCE_THRESHOLDS: dict[AnnotationMode, float] = {
         AnnotationMode.MANUAL: 0.0,
         AnnotationMode.ASSIST: 0.0,
         AnnotationMode.AUTO: 0.7,
@@ -29,7 +27,7 @@ class Annotator(ABC):
         self._validate_config()
         self.resolver = self._init_resolver(config)
         self.provenance = self._init_provenance(config)
-        self._observers: List[ResolutionObserver] = []
+        self._observers: list[ResolutionObserver] = []
         self.add_observer(ProvenanceObserver(self.provenance))
 
     def _init_resolver(self, config: AnnotationConfig) -> MappingResolver:
@@ -65,8 +63,8 @@ class Annotator(ABC):
 
     def resolve_and_track(
         self,
-        column_names: List[str],
-    ) -> Tuple[Dict[str, dict], List[ResolvedMapping]]:
+        column_names: list[str],
+    ) -> tuple[dict[str, dict], list[ResolvedMapping]]:
         """
         Resolve columns and track provenance via registered observers.
 
@@ -78,7 +76,7 @@ class Annotator(ABC):
         threshold = self._get_confidence_threshold()
         resolved = self.resolver.resolve_columns(column_names)
 
-        annotations_dict: Dict[str, dict] = {}
+        annotations_dict: dict[str, dict] = {}
         for mapping in resolved:
             if mapping.source == "unresolved":
                 continue

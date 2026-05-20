@@ -84,7 +84,7 @@ class TestStepNavigator:
 
     def test_get_steps_in_order(self):
         """Test steps are returned in correct sequence."""
-        steps = StepNavigator.get_steps_in_order()
+        steps = StepNavigator.ORDERED_STEPS
 
         expected = [
             AnnotationStep.UPLOAD,
@@ -98,7 +98,7 @@ class TestStepNavigator:
 
     def test_step_config_completeness(self):
         """Test that all steps have complete config."""
-        for step in StepNavigator.get_steps_in_order():
+        for step in StepNavigator.ORDERED_STEPS:
             info = StepNavigator.get_step_info(step)
 
             assert info is not None
@@ -109,7 +109,7 @@ class TestStepNavigator:
 
     def test_fallback_selectors_coverage(self):
         """Test fallback selectors exist for all steps."""
-        for step in StepNavigator.get_steps_in_order():
+        for step in StepNavigator.ORDERED_STEPS:
             assert step in StepNavigator.FALLBACK_SELECTORS
             assert StepNavigator.FALLBACK_SELECTORS[step] is not None
 

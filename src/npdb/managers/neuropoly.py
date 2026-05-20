@@ -1,9 +1,10 @@
+import contextlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Optional, Set
 
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
 from npdb.external.neurobagel.errors import BagelCLIError
@@ -35,22 +36,16 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
 
         # Cache-dir mode: reuse an existing clone via fetch, or do a fresh clone.
         if cache_dir:
-            cached = os.path.join(cache_dir, dataset)
-            if os.path.isdir(os.path.join(cached, ".git")):
-                command = ["git", "-C", cached, "fetch", "--depth=1"]
-                self._run_git(
-                    command,
-                    env,
-                    context="fetch cached",
-                )
+            cached = Path(cache_dir) / dataset
+            if (cached / ".git").is_dir():
+                command = ["git", "-C", str(cached), "fetch", "--depth=1"]
+                self._run_git(command, env, context="fetch cached")
                 # Symlink / copy into local_path so the rest of the pipeline
                 # continues to point at the expected directory.
-                if not os.path.exists(local_path):
-                    import shutil
-
-                    shutil.copytree(cached, local_path, symlinks=True)
+                if not Path(local_path).exists():
+                    shutil.copytree(str(cached), local_path, symlinks=True)
                 return
-            target = cached
+            target = str(cached)
         else:
             target = local_path
 
@@ -63,9 +58,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
 
         # When using cache_dir and the clone target differs from local_path,
         # copy into local_path so callers see the expected path.
-        if cache_dir and target != local_path and not os.path.exists(local_path):
-            import shutil
-
+        if cache_dir and target != local_path and not Path(local_path).exists():
             shutil.copytree(target, local_path, symlinks=True)
 
     def extend_description(self, dataset: str, local_clone: str):
@@ -73,7 +66,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         Extend the dataset_description.json file using NeuroBagel standard.
         See : https://neurobagel.org/user_guide/dataset_description/#editable-template
         """
-        desc_path = os.path.join(local_clone, "dataset_description.json")
+        desc_path = Path(local_clone) / "dataset_description.json"
         with open(desc_path, "r") as f:
             description = json.load(f)
 
@@ -121,7 +114,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
             use_annex: When ``True``, run ``git annex get`` after each clone.
 
         Returns:
-            List of ``(success, label, message)`` for each unique repository.
+            list of ``(success, label, message)`` for each unique repository.
         """
         from collections import defaultdict
 
@@ -166,10 +159,10 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         self,
         pheno_tsv_path: Path,
         pheno_ann_path: Path,
-        warnings_out: Optional[Dict],
-    ) -> List[str]:
+        warnings_out: dict | None,
+    ) -> list[str]:
         """Phase 3: run all annotation pre-processing fixups on phenotype files."""
-        from npdb.annotation.standardize import (
+        from npdb.annotation.autofix import (
             auto_add_missing_value_sentinels,
             dedup_participant_ids,
             fill_empty_id_rows,
@@ -178,7 +171,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             fix_single_column_tsv,
         )
 
-        preprocessing_warnings: List[str] = []
+        preprocessing_warnings: list[str] = []
         if pheno_tsv_path.exists() and pheno_ann_path.exists():
             preprocessing_warnings.extend(fix_single_column_tsv(pheno_tsv_path))
             preprocessing_warnings.extend(dedup_participant_ids(pheno_tsv_path))
@@ -201,14 +194,14 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         self,
         bids_dir: str,
         extend_modalities: bool,
-        extensions_config_path: Optional[str],
+        extensions_config_path: str | None,
         ai_client,
-        preprocessing_warnings: List[str],
-        warnings_out: Optional[Dict],
-    ) -> tuple[Dict[str, str], List[str]]:
+        preprocessing_warnings: list[str],
+        warnings_out: dict | None,
+    ) -> tuple[dict[str, str], list[str]]:
         """Phase 4: run pre-flight BIDS suffix checks, optionally extending the vocab."""
-        extra_suffix_map: Dict[str, str] = {}
-        vocab_extension_pending: List[str] = []
+        extra_suffix_map: dict[str, str] = {}
+        vocab_extension_pending: list[str] = []
 
         if extend_modalities:
             from npdb.external.neurobagel.imaging_extensions import (
@@ -274,7 +267,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         """Phase 5a: lightweight schema pre-validation of annotations JSON."""
         with open(pheno_ann_path, "r", encoding="utf-8") as _fh:
             _ann_schema = json.load(_fh)
-        _schema_errors: List[str] = []
+        _schema_errors: list[str] = []
         for _col, _col_data in _ann_schema.items():
             _ann = _col_data.get("Annotations", {})
             if not _ann:
@@ -301,14 +294,14 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         self,
         dataset: str,
         bids_tsv_path: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Phase 5b: case-insensitive subject alignment then bagel bids."""
         import csv as _csv
 
-        jsonld_path = os.path.join(self.db.root, f"{dataset}.jsonld")
-        subject_alignment_warnings: List[str] = []
+        jsonld_path = str(Path(self.db.root) / f"{dataset}.jsonld")
+        subject_alignment_warnings: list[str] = []
 
-        jsonld_subjects: Set[str] = set()
+        jsonld_subjects: set[str] = set()
         try:
             with open(jsonld_path, "r", encoding="utf-8") as jf:
                 jsonld_data = json.load(jf)
@@ -323,9 +316,9 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             self.bagel_bids(dataset_name=dataset, bids_table=bids_tsv_path)
             return subject_alignment_warnings
 
-        filtered_rows: List[Dict] = []
-        discarded: List[str] = []
-        fieldnames: List[str] = []
+        filtered_rows: list[dict] = []
+        discarded: list[str] = []
+        fieldnames: list[str] = []
         with open(bids_tsv_path, "r", encoding="utf-8", newline="") as fh:
             reader = _csv.DictReader(fh, delimiter="\t")
             fieldnames = list(reader.fieldnames or [])
@@ -363,10 +356,8 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         try:
             self.bagel_bids(dataset_name=dataset, bids_table=filtered_tmp_path)
         finally:
-            try:
-                os.unlink(filtered_tmp_path)
-            except OSError:
-                pass
+            with contextlib.suppress(OSError):
+                Path(filtered_tmp_path).unlink()
 
         return subject_alignment_warnings
 
@@ -381,9 +372,9 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         phenotypes_tsv: str,
         phenotypes_annotations: str,
         dataset_description: dict,
-        warnings_out: Optional[Dict] = None,
+        warnings_out: dict | None = None,
         extend_modalities: bool = False,
-        extensions_config_path: Optional[str] = None,
+        extensions_config_path: str | None = None,
         ai_client=None,
         validate_schema: bool = True,
     ):
@@ -443,11 +434,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                         )
 
         # Clean up temp files
-        try:
-            os.unlink(tmp_file.name)
-        except OSError:
-            pass
-        try:
-            os.unlink(tmp_desc.name)
-        except OSError:
-            pass
+        with contextlib.suppress(OSError):
+            Path(tmp_file.name).unlink()
+        with contextlib.suppress(OSError):
+            Path(tmp_desc.name).unlink()

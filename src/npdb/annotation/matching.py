@@ -5,9 +5,18 @@ Uses rapidfuzz for scoring column headers against known phenotype variable names
 Provides confidence-calibrated matching for exact, fuzzy, and no-match cases.
 """
 
-from typing import Dict, List, Optional, Tuple
+import functools
+from typing import NamedTuple
 
 from rapidfuzz import fuzz, process
+
+
+class MatchResult(NamedTuple):
+    """Result of a header-match attempt."""
+
+    matched: str
+    confidence: float
+    source: str  # "exact" or "fuzzy"
 
 
 class PhenotypeMatcher:
@@ -27,6 +36,7 @@ class PhenotypeMatcher:
     }
 
     @staticmethod
+    @functools.cache
     def normalize_header(header: str) -> str:
         """
         Normalize column header for matching.
@@ -42,7 +52,7 @@ class PhenotypeMatcher:
         return normalized
 
     @staticmethod
-    def exact_match(header: str, candidates: List[str]) -> Optional[Tuple[str, float]]:
+    def exact_match(header: str, candidates: list[str]) -> tuple[str, float] | None:
         """
         Check for exact match (case-insensitive, whitespace-normalized).
 
@@ -64,8 +74,8 @@ class PhenotypeMatcher:
 
     @staticmethod
     def fuzzy_match(
-        header: str, candidates: List[str], score_cutoff: float = 75.0
-    ) -> Optional[Tuple[str, float]]:
+        header: str, candidates: list[str], score_cutoff: float = 75.0
+    ) -> tuple[str, float] | None:
         """
         Find best fuzzy match using token-based scoring.
 
@@ -110,10 +120,10 @@ class PhenotypeMatcher:
     @staticmethod
     def match_header(
         header: str,
-        candidates: List[str],
+        candidates: list[str],
         exact_threshold: float = 1.0,
         fuzzy_threshold: float = 0.75,
-    ) -> Optional[Tuple[str, float, str]]:
+    ) -> MatchResult | None:
         """
         Match column header with two-tier strategy: exact → fuzzy.
 
@@ -124,17 +134,17 @@ class PhenotypeMatcher:
             fuzzy_threshold: Confidence threshold for fuzzy match (default 0.75).
 
         Returns:
-            (match, confidence, source) where source is "exact" or "fuzzy", or None.
+            MatchResult(matched, confidence, source) where source is "exact" or "fuzzy", or None.
         """
         # Attempt exact match
         exact_result = PhenotypeMatcher.exact_match(header, candidates)
         if exact_result and exact_result[1] >= exact_threshold:
-            return (exact_result[0], exact_result[1], "exact")
+            return MatchResult(exact_result[0], exact_result[1], "exact")
 
         # Attempt fuzzy match
         fuzzy_result = PhenotypeMatcher.fuzzy_match(header, candidates)
         if fuzzy_result and fuzzy_result[1] >= fuzzy_threshold:
-            return (fuzzy_result[0], fuzzy_result[1], "fuzzy")
+            return MatchResult(fuzzy_result[0], fuzzy_result[1], "fuzzy")
 
         # No match found
         return None
@@ -147,7 +157,7 @@ class ColumnMatcher:
     Uses a registry of known mappings and applies fuzzy matching as a fallback.
     """
 
-    def __init__(self, mappings_registry: Dict[str, Dict]):
+    def __init__(self, mappings_registry: dict[str, dict]):
         """
         Initialize matcher with a registry of known phenotype mappings.
 
@@ -160,11 +170,12 @@ class ColumnMatcher:
         # When the same name/alias appears under multiple mapping keys,
         # prefer the key with higher confidence (default 1.0), then
         # alphabetically first on ties.
-        self.all_known_names: List[str] = []
-        self.name_to_mapping_key: Dict[str, str] = {}
+        self.all_known_names: list[str] = []
+        self.name_to_mapping_key: dict[str, str] = {}
 
         # Track (confidence, key) per normalized name so we can pick the best
-        _name_priority: Dict[str, Tuple[float, str]] = {}
+        _name_priority: dict[str, tuple[float, str]] = {}
+        seen_normalized: set[str] = set()
 
         for key, mapping_data in self.mappings_registry.items():
             conf = mapping_data.get("confidence", 1.0)
@@ -177,19 +188,14 @@ class ColumnMatcher:
                 if existing is None or (-conf, key) < (-existing[0], existing[1]):
                     _name_priority[normalized] = (conf, key)
                     self.name_to_mapping_key[name] = key
-
-        # Deduplicate all_known_names while preserving order
-        seen_normalized: set = set()
-        for key, mapping_data in self.mappings_registry.items():
-            for name in [key] + mapping_data.get("aliases", []):
-                normalized = PhenotypeMatcher.normalize_header(name)
+                # Deduplicate all_known_names while preserving order
                 if normalized not in seen_normalized:
                     seen_normalized.add(normalized)
                     self.all_known_names.append(name)
 
     def match_column(
         self, header: str, exact_threshold: float = 1.0, fuzzy_threshold: float = 0.75
-    ) -> Optional[Tuple[str, float, str]]:
+    ) -> MatchResult | None:
         """
         Match a column header to a known phenotype mapping.
 
@@ -199,7 +205,7 @@ class ColumnMatcher:
             fuzzy_threshold: Confidence threshold for fuzzy match.
 
         Returns:
-            (mapping_key, confidence, source) or None if no match found.
+            MatchResult(mapping_key, confidence, source) or None if no match found.
         """
         match_result = PhenotypeMatcher.match_header(
             header,
@@ -211,11 +217,11 @@ class ColumnMatcher:
         if match_result:
             matched_name, confidence, source = match_result
             mapping_key = self.name_to_mapping_key[matched_name]
-            return (mapping_key, confidence, source)
+            return MatchResult(mapping_key, confidence, source)
 
         return None
 
-    def get_mapping_data(self, mapping_key: str) -> Optional[Dict]:
+    def get_mapping_data(self, mapping_key: str) -> dict | None:
         """
         Retrieve full mapping metadata for a matched key.
 

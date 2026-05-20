@@ -369,7 +369,9 @@ def download(
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
     try:
+        typer.echo("Initializing Gitea manager...")
         gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
+        typer.echo("Gitea manager initialized successfully.")
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)

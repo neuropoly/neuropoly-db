@@ -8,17 +8,17 @@ Neurobagel standardized variables.
 import copy
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 _DEFAULT_RESOURCE_PATH = (
     Path(__file__).parent.parent.parent / "resources" / "phenotype_mappings.json"
 )
 
 # Module-level cache: avoid re-reading the same JSON file on every instantiation.
-_static_mappings_cache: Optional[Dict[str, Any]] = None
+_static_mappings_cache: dict[str, Any] | None = None
 
 
-def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]:
+def load_static_mappings(resource_path: Path | None = None) -> dict[str, Any]:
     """
     Load built-in static phenotype mappings.
 
@@ -53,8 +53,8 @@ def load_static_mappings(resource_path: Optional[Path] = None) -> Dict[str, Any]
 
 
 def merge_mappings(
-    builtin: Dict[str, Any], user_mappings: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+    builtin: dict[str, Any], user_mappings: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """
     Merge user-supplied mappings with built-in mappings.
 
@@ -81,7 +81,7 @@ def merge_mappings(
     return merged
 
 
-def load_user_mappings(path: str | Path) -> Dict[str, Any]:
+def load_user_mappings(path: str | Path) -> dict[str, Any]:
     """
     Load user-supplied phenotype mappings from JSON file.
 
@@ -95,7 +95,7 @@ def load_user_mappings(path: str | Path) -> Dict[str, Any]:
         FileNotFoundError: If file does not exist
         json.JSONDecodeError: If file is invalid JSON
     """
-    path = Path(path) if isinstance(path, str) else path
+    path = Path(path)
 
     if not path.exists():
         raise FileNotFoundError(f"User mappings file not found: {path}")

@@ -17,11 +17,7 @@ from npdb.annotation import AnnotationConfig
 from npdb.annotation.utils import parse_tsv_columns
 from npdb.automation.mappings.resolvers import MappingResolver
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
-from npdb.report.provenance import (
-    ProvenanceReport,
-    add_column_provenance,
-    save_provenance,
-)
+from npdb.report.provenance import ProvenanceReport
 
 
 @dataclass
@@ -33,6 +29,43 @@ class AnnotatorContext:
     provenance: ProvenanceReport
     # async (tsv_path, output_dir, annotations_dict) -> None
     save_outputs: Callable[..., Awaitable[None]]
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers shared by multiple strategies
+# ---------------------------------------------------------------------------
+
+
+def _to_annotations_dict(resolved: list) -> dict:
+    """Convert a list of ResolvedMappings to the annotations output dict."""
+    return {
+        mapping.column_name: {
+            "variable": mapping.mapped_variable,
+            "source": mapping.source,
+            "confidence": mapping.confidence,
+            "rationale": mapping.rationale,
+        }
+        for mapping in resolved
+        if mapping.source != "unresolved"
+    }
+
+
+def _partition_resolved(
+    resolved: list, threshold: float | None
+) -> tuple[list, list, list]:
+    """Partition resolved mappings into (accepted, rejected, unresolved) in one pass.
+
+    Static-source mappings always go into *accepted* regardless of threshold.
+    """
+    accepted, rejected, unresolved = [], [], []
+    for m in resolved:
+        if m.source == "unresolved":
+            unresolved.append(m)
+        elif threshold is None or m.confidence >= threshold or m.source == "static":
+            accepted.append(m)
+        else:
+            rejected.append(m)
+    return accepted, rejected, unresolved
 
 
 class AnnotationStrategy(ABC):
@@ -160,8 +193,7 @@ class AssistStrategy(AnnotationStrategy):
                 for mapping in resolved:
                     if mapping.source == "unresolved":
                         continue
-                    add_column_provenance(
-                        ctx.provenance,
+                    ctx.provenance.add_column_provenance(
                         column_name=mapping.column_name,
                         source=mapping.source,
                         confidence=mapping.confidence,
@@ -175,23 +207,14 @@ class AssistStrategy(AnnotationStrategy):
                     # file polling instead of a static timeout.
                     await asyncio.sleep(ctx.config.timeout)
 
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in resolved
-                    if mapping.source != "unresolved"
-                }
+                annotations_dict = _to_annotations_dict(resolved)
 
                 await ctx.save_outputs(
                     participants_tsv_path, output_dir, annotations_dict
                 )
 
                 provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(ctx.provenance, provenance_path)
+                ctx.provenance.save(provenance_path)
                 print(f"✓ Saved provenance: {provenance_path}")
 
                 if browser_upload_failed:
@@ -221,16 +244,7 @@ class AssistStrategy(AnnotationStrategy):
                     ctx.resolver.resolve_columns(column_names) if column_names else []
                 )
 
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in resolved
-                    if mapping.source != "unresolved"
-                }
+                annotations_dict = _to_annotations_dict(resolved)
 
                 if annotations_dict:
                     await ctx.save_outputs(
@@ -240,7 +254,7 @@ class AssistStrategy(AnnotationStrategy):
                         f"Partial failure: {str(e)}; saved offline resolution"
                     )
                     provenance_path = output_dir / "phenotypes_provenance.json"
-                    save_provenance(ctx.provenance, provenance_path)
+                    ctx.provenance.save(provenance_path)
                     print(f"✓ Emergency save completed")
                     return False
 
@@ -320,25 +334,9 @@ class _ScriptedStrategy(AnnotationStrategy):
                 resolved = ctx.resolver.resolve_columns(column_names)
                 threshold = self._CONFIDENCE_THRESHOLD
 
-                accepted = [
-                    m
-                    for m in resolved
-                    if m.source != "unresolved"
-                    and (
-                        threshold is None
-                        or m.confidence >= threshold
-                        or m.source == "static"
-                    )
-                ]
-                rejected = [
-                    m
-                    for m in resolved
-                    if m.source != "unresolved"
-                    and threshold is not None
-                    and m.confidence < threshold
-                    and m.source != "static"
-                ]
-                unresolved = [m for m in resolved if m.source == "unresolved"]
+                accepted, rejected, unresolved = _partition_resolved(
+                    resolved, threshold
+                )
 
                 print(
                     f"✓ {self._MODE_LABEL} mode: {len(accepted)} accepted, "
@@ -347,8 +345,7 @@ class _ScriptedStrategy(AnnotationStrategy):
                 )
 
                 for mapping in accepted:
-                    add_column_provenance(
-                        ctx.provenance,
+                    ctx.provenance.add_column_provenance(
                         column_name=mapping.column_name,
                         source=mapping.source,
                         confidence=mapping.confidence,
@@ -369,22 +366,14 @@ class _ScriptedStrategy(AnnotationStrategy):
                 self._add_mode_warnings(ctx)
 
                 current_step = "output_generation"
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in accepted
-                }
+                annotations_dict = _to_annotations_dict(accepted)
 
                 await ctx.save_outputs(
                     participants_tsv_path, output_dir, annotations_dict
                 )
 
                 provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(ctx.provenance, provenance_path)
+                ctx.provenance.save(provenance_path)
                 print(f"✓ {self._MODE_LABEL} mode completed successfully")
                 print(f"✓ Provenance saved: {provenance_path}")
 
