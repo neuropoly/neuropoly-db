@@ -20,9 +20,10 @@ Reference: https://neurobagel.org/user_guide/data_prep/#multiple-participant-or-
 """
 
 import json
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 # Identifier variables that can have alternates per Neurobagel spec
 IDENTIFIER_VARIABLES = {
@@ -42,55 +43,23 @@ class ColumnMapping:
     rationale: str
 
 
-def load_annotations(json_path: Path) -> Dict[str, Any]:
-    """Load phenotypes_annotations.json."""
-    with open(json_path, "r") as f:
-        return json.load(f)
-
-
-def save_annotations(json_path: Path, data: Dict[str, Any]) -> None:
-    """Save phenotypes_annotations.json."""
-    with open(json_path, "w") as f:
-        json.dump(data, f, indent=2)
-
-
-def load_tsv_lines(tsv_path: Path) -> List[str]:
-    """Load all TSV lines including header."""
-    with open(tsv_path, "r", encoding="utf-8") as f:
-        return f.readlines()
-
-
-def save_tsv(tsv_path: Path, lines: List[str]) -> None:
-    """Save TSV lines."""
-    with open(tsv_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
-
-
-def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMapping]]:
+def group_by_variable(annotations: dict[str, Any]) -> dict[str, list[ColumnMapping]]:
     """
     Group columns by their mapped variable.
 
     Returns:
-        Dict mapping variable -> List[ColumnMapping] sorted by confidence (descending)
+        Dict mapping variable -> list[ColumnMapping] sorted by confidence (descending)
     """
-    groups: Dict[str, List[ColumnMapping]] = {}
+    groups: dict[str, list[ColumnMapping]] = defaultdict(list)
 
     for col_name, mapping_info in annotations.items():
-        variable = mapping_info.get("variable", "unknown")
-        confidence = mapping_info.get("confidence", 0.0)
-        source = mapping_info.get("source", "unknown")
-        rationale = mapping_info.get("rationale", "")
-
-        if variable not in groups:
-            groups[variable] = []
-
-        groups[variable].append(
+        groups[mapping_info.get("variable", "unknown")].append(
             ColumnMapping(
                 column_name=col_name,
-                variable=variable,
-                confidence=confidence,
-                source=source,
-                rationale=rationale,
+                variable=mapping_info.get("variable", "unknown"),
+                confidence=mapping_info.get("confidence", 0.0),
+                source=mapping_info.get("source", "unknown"),
+                rationale=mapping_info.get("rationale", ""),
             )
         )
 
@@ -102,8 +71,8 @@ def group_by_variable(annotations: Dict[str, Any]) -> Dict[str, List[ColumnMappi
 
 
 def resolve_duplicates(
-    annotations: Dict[str, Any],
-) -> Tuple[Dict[str, Any], Dict[str, str], List[str]]:
+    annotations: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, str], list[str]]:
     """
     Resolve duplicate field mappings per Neurobagel specifications.
 
@@ -124,8 +93,8 @@ def resolve_duplicates(
         - List of columns to drop from TSV (duplicates beyond second rank)
     """
     groups = group_by_variable(annotations)
-    renames: Dict[str, str] = {}  # old_name -> new_name (for alternates)
-    drops: List[str] = []  # Columns to remove from TSV entirely
+    renames: dict[str, str] = {}  # old_name -> new_name (for alternates)
+    drops: list[str] = []  # Columns to remove from TSV entirely
 
     # Track which annotations to remove
     to_remove = []
@@ -190,7 +159,7 @@ def resolve_duplicates(
     return annotations, renames, drops
 
 
-def update_tsv(tsv_path: Path, renames: Dict[str, str], drops: List[str]) -> None:
+def update_tsv(tsv_path: Path, renames: dict[str, str], drops: list[str]) -> None:
     """
     Update TSV file: rename alternate ID columns and remove duplicate columns.
 
@@ -202,7 +171,7 @@ def update_tsv(tsv_path: Path, renames: Dict[str, str], drops: List[str]) -> Non
     if not renames and not drops:
         return  # No changes needed
 
-    lines = load_tsv_lines(tsv_path)
+    lines = tsv_path.read_text(encoding="utf-8").splitlines(keepends=True)
     if not lines:
         return
 
@@ -240,7 +209,7 @@ def update_tsv(tsv_path: Path, renames: Dict[str, str], drops: List[str]) -> Non
         kept_parts = [parts[i] if i < len(parts) else "" for i in keep_indices]
         updated_lines.append("\t".join(kept_parts) + "\n")
 
-    save_tsv(tsv_path, updated_lines)
+    tsv_path.write_text("".join(updated_lines), encoding="utf-8")
 
     if renames:
         print(f"✓ TSV updated: {len(renames)} alternate column(s) renamed")
@@ -269,7 +238,7 @@ def resolve_phenotype_duplicates(
         print(f"\n→ Post-processing duplicate fields...")
 
     # Load annotations
-    annotations = load_annotations(phenotypes_annotations_path)
+    annotations = json.loads(phenotypes_annotations_path.read_text())
 
     # Resolve duplicates
     updated_annotations, renames, drops = resolve_duplicates(annotations)
@@ -278,7 +247,7 @@ def resolve_phenotype_duplicates(
     update_tsv(phenotypes_tsv_path, renames, drops)
 
     # Update JSON annotations
-    save_annotations(phenotypes_annotations_path, updated_annotations)
+    phenotypes_annotations_path.write_text(json.dumps(updated_annotations, indent=2))
 
     if verbose:
         if renames or drops:

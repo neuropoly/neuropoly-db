@@ -54,12 +54,13 @@ class GiteaManager(Manager):
         for observer in self._observers[UpdateType.MESSAGE]:
             observer.update(message_type, message)
 
-    def git_http_config(self):
-        config = {
-            "extraHeader": f"Authorization: Basic {self.git_auth}",
-            "sslVerify": str(self.client.requests.verify).lower(),
-        }
-        return [c for k, v in config.items() for c in ["-c", f"http.{k}={v}"]]
+    def git_http_config(self) -> list[str]:
+        return [
+            "-c",
+            f"http.extraHeader=Authorization: Basic {self.git_auth}",
+            "-c",
+            f"http.sslVerify={str(self.client.requests.verify).lower()}",
+        ]
 
     def _to_ssh_url(self, http_url: str) -> str:
         """Convert a Gitea HTTP(S) or SSH repository URL to SSH form.

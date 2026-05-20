@@ -7,7 +7,6 @@ Steps: upload → column annotation → value annotation → export.
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class AnnotationStep(Enum):
@@ -79,7 +78,7 @@ class StepNavigator:
     }
 
     @staticmethod
-    def get_step_info(step: AnnotationStep) -> Optional[StepInfo]:
+    def get_step_info(step: AnnotationStep) -> StepInfo | None:
         """
         Get metadata for a given step.
 
@@ -91,20 +90,12 @@ class StepNavigator:
         """
         return StepNavigator.STEPS_CONFIG.get(step)
 
-    @staticmethod
-    def get_steps_in_order() -> list[AnnotationStep]:
-        """
-        Get steps in workflow order.
-
-        Returns:
-            List of AnnotationStep in sequence.
-        """
-        return [
-            AnnotationStep.UPLOAD,
-            AnnotationStep.COLUMN_ANNOTATION,
-            AnnotationStep.VALUE_ANNOTATION,
-            AnnotationStep.EXPORT,
-        ]
+    ORDERED_STEPS: list[AnnotationStep] = [
+        AnnotationStep.UPLOAD,
+        AnnotationStep.COLUMN_ANNOTATION,
+        AnnotationStep.VALUE_ANNOTATION,
+        AnnotationStep.EXPORT,
+    ]
 
 
 class AnnotationUIPatterns:

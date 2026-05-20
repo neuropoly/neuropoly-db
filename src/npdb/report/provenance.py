@@ -5,14 +5,16 @@ Captures the lineage and confidence of each column mapping decision for
 auditability and retrospection, especially important for full-auto mode.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
+
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from npdb.annotation import AnnotationMode
 
@@ -29,24 +31,17 @@ class ColumnProvenance(BaseModel):
     """Provenance metadata for a single column mapping."""
 
     column_name: str
-    source: str
+    source: MappingSource
+
     confidence: float = Field(ge=0.0, le=1.0)
 
-    @field_validator("source")
-    @classmethod
-    def _validate_source(cls, v: str) -> str:
-        valid = {s.value for s in MappingSource}
-        if v not in valid:
-            raise ValueError(f"source must be one of {sorted(valid)}, got {v!r}")
-        return v
-
-    variable: Optional[str] = Field(
+    variable: str | None = Field(
         default=None, description="Mapped standardized variable"
     )
-    format: Optional[str] = Field(default=None, description="For continuous variables")
+    format: str | None = Field(default=None, description="For continuous variables")
     rationale: str = Field(..., description="Explanation of the mapping decision")
-    ai_model: Optional[str] = Field(default=None, description="LLM model if source=ai")
-    ai_model_version: Optional[str] = Field(
+    ai_model: str | None = Field(default=None, description="LLM model if source=ai")
+    ai_model_version: str | None = Field(
         default=None, description="Model version if source=ai"
     )
 
@@ -54,9 +49,9 @@ class ColumnProvenance(BaseModel):
 class ConfidenceDistribution(BaseModel):
     """Distribution of confidence scores across mappings."""
 
-    high: List[float] = Field(default=[], description="Scores in [0.85, 1.0]")
-    medium: List[float] = Field(default=[], description="Scores in [0.7, 0.84]")
-    low: List[float] = Field(default=[], description="Scores in [0.5, 0.69]")
+    high: list[float] = Field(default=[], description="Scores in [0.85, 1.0]")
+    medium: list[float] = Field(default=[], description="Scores in [0.7, 0.84]")
+    low: list[float] = Field(default=[], description="Scores in [0.5, 0.69]")
     unresolved: int = Field(default=0, description="Count of unresolved columns")
 
 
@@ -64,21 +59,12 @@ class ProvenanceReport(BaseModel):
     """Complete provenance report for an annotation run."""
 
     run_id: str = Field(default_factory=lambda: str(uuid4()))
-    mode: str
-
-    @field_validator("mode")
-    @classmethod
-    def _validate_mode(cls, v: str) -> str:
-        valid = {m.value for m in AnnotationMode}
-        if v not in valid:
-            raise ValueError(f"mode must be one of {sorted(valid)}, got {v!r}")
-        return v
-
+    mode: AnnotationMode
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    dataset_name: Optional[str] = Field(default=None)
+    dataset_name: str | None = Field(default=None)
 
     # Mapping source summary
-    mapping_source_counts: Dict[str, int] = Field(
+    mapping_source_counts: dict[str, int] = Field(
         default_factory=lambda: {"static": 0, "deterministic": 0, "ai": 0, "manual": 0}
     )
 
@@ -88,24 +74,97 @@ class ProvenanceReport(BaseModel):
     )
 
     # Per-column provenance
-    per_column: Dict[str, ColumnProvenance] = Field(
+    per_column: dict[str, ColumnProvenance] = Field(
         default_factory=dict, description="Mapping provenance for each column"
     )
 
     # Warnings and notes
-    warnings: List[str] = Field(
+    warnings: list[str] = Field(
         default_factory=list,
         description="Warnings or issues encountered during annotation",
     )
 
     # AI configuration (if applicable)
-    ai_provider: Optional[str] = Field(default=None)
-    ai_model: Optional[str] = Field(default=None)
-    ai_threshold: Optional[float] = Field(default=None)
+    ai_provider: str | None = Field(default=None)
+    ai_model: str | None = Field(default=None)
+    ai_threshold: float | None = Field(default=None)
+
+    # -----------------------------------------------------------------------
+    # Instance methods
+    # -----------------------------------------------------------------------
+
+    def add_column_provenance(
+        self,
+        column_name: str,
+        source: str,
+        confidence: float,
+        variable: str | None = None,
+        format: str | None = None,
+        rationale: str = "No rationale provided",
+        ai_model: str | None = None,
+        ai_model_version: str | None = None,
+    ) -> None:
+        """Add or update column provenance (see module-level function for docs)."""
+        col_prov = ColumnProvenance(
+            column_name=column_name,
+            source=source,
+            confidence=confidence,
+            variable=variable,
+            format=format,
+            rationale=rationale,
+            ai_model=ai_model,
+            ai_model_version=ai_model_version,
+        )
+
+        is_update = column_name in self.per_column
+        self.per_column[column_name] = col_prov
+
+        self.mapping_source_counts[source] = (
+            self.mapping_source_counts.get(source, 0) + 1
+        )
+
+        if is_update:
+            self.confidence_distribution = compute_confidence_distribution(
+                self.per_column
+            )
+        elif col_prov.source != MappingSource.MANUAL:
+            _bucket_confidence(self.confidence_distribution, confidence)
+
+    def add_warning(self, warning: str) -> None:
+        """Append *warning* to the report's warning list (deduplicating)."""
+        if warning not in self.warnings:
+            self.warnings.append(warning)
+
+    def save(self, output_path: Path) -> None:
+        """Save the report to *output_path* as formatted JSON."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w") as f:
+            json.dump(self.model_dump(mode="json"), f, indent=2, default=str)
+
+    @classmethod
+    def from_file(cls, path: Path) -> "ProvenanceReport":
+        """Load and reconstruct a :class:`ProvenanceReport` from a JSON file."""
+        if not path.exists():
+            raise FileNotFoundError(f"Provenance file not found: {path}")
+        with open(path, "r") as f:
+            data = json.load(f)
+        return cls(**data)
+
+
+def _bucket_confidence(dist: ConfidenceDistribution, conf: float) -> None:
+    """Place a single confidence score into the correct bucket of *dist* in-place."""
+    if conf >= 0.85:
+        dist.high.append(conf)
+    elif conf >= 0.7:
+        dist.medium.append(conf)
+    elif conf >= 0.5:
+        dist.low.append(conf)
+    else:
+        dist.unresolved += 1
 
 
 def compute_confidence_distribution(
-    per_column: Dict[str, ColumnProvenance],
+    per_column: dict[str, ColumnProvenance],
 ) -> ConfidenceDistribution:
     """
     Compute confidence distribution from per-column mappings.
@@ -120,114 +179,7 @@ def compute_confidence_distribution(
         ConfidenceDistribution with scores bucketed by range
     """
     dist = ConfidenceDistribution()
-
     for col_prov in per_column.values():
-        if col_prov.source == "manual":
-            continue
-
-        conf = col_prov.confidence
-        if conf >= 0.85:
-            dist.high.append(conf)
-        elif conf >= 0.7:
-            dist.medium.append(conf)
-        elif conf >= 0.5:
-            dist.low.append(conf)
-        else:
-            dist.unresolved += 1
-
+        if col_prov.source != MappingSource.MANUAL:
+            _bucket_confidence(dist, col_prov.confidence)
     return dist
-
-
-def add_column_provenance(
-    report: ProvenanceReport,
-    column_name: str,
-    source: str,
-    confidence: float,
-    variable: Optional[str] = None,
-    format: Optional[str] = None,
-    rationale: str = "No rationale provided",
-    ai_model: Optional[str] = None,
-    ai_model_version: Optional[str] = None,
-) -> None:
-    """
-    Add or update column provenance in a report.
-
-    Args:
-        report: ProvenanceReport to update
-        column_name: Name of the column
-        source: Mapping source
-        confidence: Confidence score [0, 1]
-        variable: Mapped Neurobagel variable
-        format: Format specification (for continuous)
-        rationale: Explanation of the mapping
-        ai_model: LLM model name (if source=ai)
-        ai_model_version: LLM version (if source=ai)
-    """
-    col_prov = ColumnProvenance(
-        column_name=column_name,
-        source=source,
-        confidence=confidence,
-        variable=variable,
-        format=format,
-        rationale=rationale,
-        ai_model=ai_model,
-        ai_model_version=ai_model_version,
-    )
-
-    report.per_column[column_name] = col_prov
-
-    # Update source counts
-    report.mapping_source_counts[source] = (
-        report.mapping_source_counts.get(source, 0) + 1
-    )
-
-    # Recompute confidence distribution
-    report.confidence_distribution = compute_confidence_distribution(report.per_column)
-
-
-def add_warning(report: ProvenanceReport, warning: str) -> None:
-    """
-    Add a warning message to the provenance report.
-
-    Args:
-        report: ProvenanceReport to update
-        warning: Warning message
-    """
-    if warning not in report.warnings:
-        report.warnings.append(warning)
-
-
-def save_provenance(report: ProvenanceReport, output_path: Path) -> None:
-    """
-    Save provenance report to JSON file.
-
-    Args:
-        report: ProvenanceReport to save
-        output_path: Path to output file (typically phenotypes_provenance.json)
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_path, "w") as f:
-        json.dump(report.model_dump(mode="json"), f, indent=2, default=str)
-
-
-def load_provenance(path: Path) -> ProvenanceReport:
-    """
-    Load provenance report from JSON file.
-
-    Args:
-        path: Path to provenance JSON file
-
-    Returns:
-        ProvenanceReport loaded from file
-
-    Raises:
-        FileNotFoundError: If file does not exist
-    """
-    if not path.exists():
-        raise FileNotFoundError(f"Provenance file not found: {path}")
-
-    with open(path, "r") as f:
-        data = json.load(f)
-
-    return ProvenanceReport(**data)

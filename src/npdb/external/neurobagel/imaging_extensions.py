@@ -23,7 +23,7 @@ import json
 import re
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # nidm:-aliased fallbacks for MRI variants that map to existing standard terms.
@@ -32,7 +32,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # Values: (nidm IRI, short description)
 # ---------------------------------------------------------------------------
 
-_NIDM_ALIASES: Dict[str, Tuple[str, str]] = {
+_NIDM_ALIASES: dict[str, tuple[str, str]] = {
     # MP2RAGE family
     "UNIT1": (
         "nidm:T1Weighted",
@@ -71,7 +71,7 @@ _NIDM_ALIASES: Dict[str, Tuple[str, str]] = {
 # Backward-compatibility alias: callers that imported STATIC_FALLBACKS directly
 # still work.  The nb: entries are now sourced from neuropoly_imaging_modalities.json
 # but we keep the dict populated for tests that import it by name.
-_NB_FALLBACKS: Dict[str, Tuple[str, str]] = {
+_NB_FALLBACKS: dict[str, tuple[str, str]] = {
     "BF": ("nb:BrightFieldMicroscopy", "Bright-field optical microscopy image."),
     "DF": ("nb:DarkFieldMicroscopy", "Dark-field optical microscopy image."),
     "PC": ("nb:PhaseContrastMicroscopy", "Phase-contrast optical microscopy image."),
@@ -103,15 +103,14 @@ _NB_FALLBACKS: Dict[str, Tuple[str, str]] = {
 }
 
 # Public alias kept for backward compatibility (tests import this by name)
-STATIC_FALLBACKS: Dict[str, Tuple[str, str]] = {**_NB_FALLBACKS, **_NIDM_ALIASES}
-
+STATIC_FALLBACKS: dict[str, tuple[str, str]] = _NB_FALLBACKS | _NIDM_ALIASES
 
 # ---------------------------------------------------------------------------
 # Extensions file helpers
 # ---------------------------------------------------------------------------
 
 
-def load_neuropoly_vocab(path: Path) -> Dict[str, Tuple[str, str]]:
+def load_neuropoly_vocab(path: Path) -> dict[str, tuple[str, str]]:
     """
     Load ``config/neuropoly_imaging_modalities.json`` and return a lookup
     dict keyed by abbreviation: ``{abbreviation: ("nb:Id", name)}``.
@@ -121,24 +120,25 @@ def load_neuropoly_vocab(path: Path) -> Dict[str, Tuple[str, str]]:
     if not path.exists():
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as fh:
-            blocks = json.load(fh)
-        result: Dict[str, Tuple[str, str]] = {}
-        for block in blocks:
-            prefix = block.get("namespace_prefix", "")
-            for term in block.get("terms", []):
-                abbr = term.get("abbreviation", "")
-                term_id = term.get("id", "")
-                name = term.get("name", "")
-                if abbr and term_id and prefix:
-                    iri = f"{prefix}:{term_id}"
-                    result[abbr] = (iri, name)
-        return result
+        blocks = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            term["abbreviation"]: (
+                f"{block['namespace_prefix']}:{term['id']}",
+                term["name"],
+            )
+            for block in blocks
+            for term in block.get("terms", [])
+            if (
+                term.get("abbreviation")
+                and term.get("id")
+                and block.get("namespace_prefix")
+            )
+        }
     except Exception:
         return {}
 
 
-def load_extensions(path: Path) -> Dict[str, Any]:
+def load_extensions(path: Path) -> dict[str, Any]:
     """
     Load the local imaging extensions file.
 
@@ -150,7 +150,7 @@ def load_extensions(path: Path) -> Dict[str, Any]:
         return json.load(fh)
 
 
-def save_extensions(data: Dict[str, Any], path: Path) -> None:
+def save_extensions(data: dict[str, Any], path: Path) -> None:
     """Atomically save *data* to *path*."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -170,7 +170,26 @@ def save_extensions(data: Dict[str, Any], path: Path) -> None:
 _IRI_VALID = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*:[a-zA-Z][a-zA-Z0-9_]+$")
 
 
-def _sanitize_iri(raw: str) -> Optional[str]:
+def _cache_suffix(
+    existing: dict,
+    extensions: dict,
+    suffix: str,
+    iri: str,
+    description: str,
+    source: str,
+) -> tuple[str, bool, str]:
+    """Write *suffix → entry* into *existing*, update *extensions*, and return the triple."""
+    existing[suffix] = {
+        "iri": iri,
+        "description": description,
+        "source": source,
+        "added": str(date.today()),
+    }
+    extensions["extensions"] = existing
+    return iri, True, description
+
+
+def _sanitize_iri(raw: str) -> str | None:
     """Return *raw* if it looks like a valid prefixed IRI, else None."""
     raw = raw.strip()
     if _IRI_VALID.match(raw):
@@ -178,7 +197,7 @@ def _sanitize_iri(raw: str) -> Optional[str]:
     return None
 
 
-def _llm_resolve(suffix: str, ai_client: Any) -> Optional[Tuple[str, str]]:
+def _llm_resolve(suffix: str, ai_client: Any) -> tuple[str, str] | None:
     """
     Ask the AI client to map *suffix* to a Neurobagel Image IRI.
 
@@ -228,10 +247,10 @@ def _llm_resolve(suffix: str, ai_client: Any) -> Optional[Tuple[str, str]]:
 
 def resolve_suffix(
     suffix: str,
-    extensions: Dict[str, Any],
+    extensions: dict[str, Any],
     ai_client: Any = None,
-    neuropoly_vocab_path: Optional[Path] = None,
-) -> Tuple[str, bool, str]:
+    neuropoly_vocab_path: Path | None = None,
+) -> tuple[str, bool, str]:
     """
     Find or create a Neurobagel Image IRI for *suffix*.
 
@@ -260,51 +279,29 @@ def resolve_suffix(
     )
     if suffix in neuropoly_vocab:
         iri, description = neuropoly_vocab[suffix]
-        existing[suffix] = {
-            "iri": iri,
-            "description": description,
-            "source": "neuropoly_vocab",
-            "added": str(date.today()),
-        }
-        extensions["extensions"] = existing
-        return iri, True, description
+        return _cache_suffix(
+            existing, extensions, suffix, iri, description, "neuropoly_vocab"
+        )
 
     # 3. nidm: aliases (hardcoded)
     if suffix in _NIDM_ALIASES:
         iri, description = _NIDM_ALIASES[suffix]
-        existing[suffix] = {
-            "iri": iri,
-            "description": description,
-            "source": "static_fallback",
-            "added": str(date.today()),
-        }
-        extensions["extensions"] = existing
-        return iri, True, description
+        return _cache_suffix(
+            existing, extensions, suffix, iri, description, "static_fallback"
+        )
 
     # Backward compat: nb: fallbacks not in vocab file
     if suffix in _NB_FALLBACKS:
         iri, description = _NB_FALLBACKS[suffix]
-        existing[suffix] = {
-            "iri": iri,
-            "description": description,
-            "source": "static_fallback",
-            "added": str(date.today()),
-        }
-        extensions["extensions"] = existing
-        return iri, True, description
+        return _cache_suffix(
+            existing, extensions, suffix, iri, description, "static_fallback"
+        )
 
     # 4. LLM
     llm_result = _llm_resolve(suffix, ai_client)
     if llm_result:
         iri, description = llm_result
-        existing[suffix] = {
-            "iri": iri,
-            "description": description,
-            "source": "llm",
-            "added": str(date.today()),
-        }
-        extensions["extensions"] = existing
-        return iri, True, description
+        return _cache_suffix(existing, extensions, suffix, iri, description, "llm")
 
     # 5. Generic fallback — safe camel-case IRI
     safe = re.sub(r"[^a-zA-Z0-9]", "", suffix)
@@ -314,14 +311,9 @@ def resolve_suffix(
         safe = safe[0].upper() + safe[1:]
     iri = f"nb:{safe}Image"
     description = f"Custom imaging modality with BIDS suffix '{suffix}'."
-    existing[suffix] = {
-        "iri": iri,
-        "description": description,
-        "source": "generic_fallback",
-        "added": str(date.today()),
-    }
-    extensions["extensions"] = existing
-    return iri, True, description
+    return _cache_suffix(
+        existing, extensions, suffix, iri, description, "generic_fallback"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +321,7 @@ def resolve_suffix(
 # ---------------------------------------------------------------------------
 
 
-def patch_bagel_suffix_map(extra: Dict[str, str]) -> None:
+def patch_bagel_suffix_map(extra: dict[str, str]) -> None:
     """
     Monkey-patch bagel to recognise *extra* suffixes at all three filtering
     stages inside ``bids2tsv``:
@@ -358,7 +350,7 @@ def patch_bagel_suffix_map(extra: Dict[str, str]) -> None:
     # ── Stage 3: Neurobagel IRI mapping ──────────────────────────────────
     _orig_mapping = _bu.get_bids_suffix_to_std_term_mapping
 
-    def _patched_get_mapping() -> Dict[str, str]:
+    def _patched_get_mapping() -> dict[str, str]:
         mapping = _orig_mapping()
         mapping.update(extra)
         return mapping
@@ -383,11 +375,11 @@ def patch_bagel_suffix_map(extra: Dict[str, str]) -> None:
 
 
 def build_extra_mapping(
-    suffixes: List[str],
+    suffixes: list[str],
     extensions_path: Path,
     ai_client: Any = None,
-    neuropoly_vocab_path: Optional[Path] = None,
-) -> Tuple[Dict[str, str], List[str]]:
+    neuropoly_vocab_path: Path | None = None,
+) -> tuple[dict[str, str], list[str]]:
     """
     Resolve each suffix in *suffixes* against the extensions file and return
     ``(extra_mapping, warnings)``.
@@ -398,8 +390,8 @@ def build_extra_mapping(
     ``neuropoly_imaging_modalities.json`` if not already present.
     """
     data = load_extensions(extensions_path)
-    extra: Dict[str, str] = {}
-    warnings: List[str] = []
+    extra: dict[str, str] = {}
+    warnings: list[str] = []
     changed = False
 
     for suffix in suffixes:
@@ -439,7 +431,7 @@ def _promote_to_neuropoly_vocab(
     iri: str,
     name: str,
     vocab_path: Path,
-    warnings: List[str],
+    warnings: list[str],
 ) -> None:
     """
     Add a new nb: term to *vocab_path* if it is not already present.
@@ -466,7 +458,7 @@ def _promote_to_neuropoly_vocab(
             blocks = []
 
         # Find the matching namespace block (or create one)
-        nb_block: Optional[Dict[str, Any]] = None
+        nb_block: dict[str, Any] | None = None
         for block in blocks:
             if block.get("namespace_prefix") == prefix:
                 nb_block = block

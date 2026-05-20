@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from npdb.annotation.standardize import (
+from npdb.annotation.autofix import (
     _AGE_FORMAT_PATTERNS,
     _AGE_NONSTANDARD_PATTERNS,
     _detect_age_format,

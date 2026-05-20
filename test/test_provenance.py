@@ -5,10 +5,6 @@ import pytest
 from npdb.report.provenance import (
     ColumnProvenance,
     ProvenanceReport,
-    add_column_provenance,
-    add_warning,
-    load_provenance,
-    save_provenance,
 )
 
 
@@ -72,8 +68,7 @@ class TestAddColumnProvenance:
     def test_add_static_column(self):
         """Test adding a static mapping to report."""
         report = ProvenanceReport(mode="auto")
-        add_column_provenance(
-            report,
+        report.add_column_provenance(
             column_name="age",
             source="static",
             confidence=0.95,
@@ -88,8 +83,7 @@ class TestAddColumnProvenance:
     def test_add_ai_column_with_threshold(self):
         """Test adding AI mapping and verifying confidence distribution."""
         report = ProvenanceReport(mode="full-auto")
-        add_column_provenance(
-            report,
+        report.add_column_provenance(
             column_name="diagnosis",
             source="ai",
             confidence=0.72,
@@ -106,15 +100,13 @@ class TestAddColumnProvenance:
         """Test adding multiple columns and verifying source counts."""
         report = ProvenanceReport(mode="auto")
 
-        add_column_provenance(
-            report, "id", "static", 1.0, "nb:ParticipantID", rationale="Static"
+        report.add_column_provenance(
+            "id", "static", 1.0, "nb:ParticipantID", rationale="Static"
         )
-        add_column_provenance(
-            report, "age", "deterministic", 0.82, "nb:Age", rationale="Fuzzy"
+        report.add_column_provenance(
+            "age", "deterministic", 0.82, "nb:Age", rationale="Fuzzy"
         )
-        add_column_provenance(
-            report, "diag", "ai", 0.65, "nb:Diagnosis", rationale="AI"
-        )
+        report.add_column_provenance("diag", "ai", 0.65, "nb:Diagnosis", rationale="AI")
 
         assert report.mapping_source_counts["static"] == 1
         assert report.mapping_source_counts["deterministic"] == 1
@@ -129,7 +121,7 @@ class TestAddWarning:
         report = ProvenanceReport(mode="full-auto")
         warning_msg = "Low confidence threshold used in full-auto mode"
 
-        add_warning(report, warning_msg)
+        report.add_warning(warning_msg)
         assert warning_msg in report.warnings
 
     def test_duplicate_warnings_not_added(self):
@@ -137,8 +129,8 @@ class TestAddWarning:
         report = ProvenanceReport(mode="full-auto")
         warning_msg = "Test warning"
 
-        add_warning(report, warning_msg)
-        add_warning(report, warning_msg)
+        report.add_warning(warning_msg)
+        report.add_warning(warning_msg)
 
         # Should only appear once
         assert report.warnings.count(warning_msg) == 1
@@ -153,20 +145,20 @@ class TestProvenanceSerialization:
 
         # Create and populate a report
         report = ProvenanceReport(mode="auto", dataset_name="test_dataset")
-        add_column_provenance(
-            report, "age", "static", 0.95, "nb:Age", rationale="Built-in"
+        report.add_column_provenance(
+            "age", "static", 0.95, "nb:Age", rationale="Built-in"
         )
-        add_column_provenance(
-            report, "diagnosis", "ai", 0.72, "nb:Diagnosis", rationale="AI inferred"
+        report.add_column_provenance(
+            "diagnosis", "ai", 0.72, "nb:Diagnosis", rationale="AI inferred"
         )
-        add_warning(report, "Test warning")
+        report.add_warning("Test warning")
 
         # Save
-        save_provenance(report, provenance_file)
+        report.save(provenance_file)
         assert provenance_file.exists()
 
         # Load
-        loaded = load_provenance(provenance_file)
+        loaded = ProvenanceReport.from_file(provenance_file)
         assert loaded.mode == "auto"
         assert loaded.dataset_name == "test_dataset"
         assert len(loaded.per_column) == 2
@@ -175,7 +167,7 @@ class TestProvenanceSerialization:
     def test_provenance_file_not_found(self, tmp_path):
         """Test error when loading non-existent provenance file."""
         with pytest.raises(FileNotFoundError):
-            load_provenance(tmp_path / "nonexistent.json")
+            ProvenanceReport.from_file(tmp_path / "nonexistent.json")
 
 
 # ---------------------------------------------------------------------------

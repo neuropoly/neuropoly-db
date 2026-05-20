@@ -15,10 +15,6 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
     volumes:
       # "." = repo root (project directory set by first compose file)
       - .:/workspaces/neuropoly-db:cached
@@ -27,6 +23,7 @@ services:
     command: sleep infinity
     depends_on:
       - proxy
+    network_mode: host
 
 volumes:
   venv-data:

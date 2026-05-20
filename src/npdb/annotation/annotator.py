@@ -1,14 +1,10 @@
-import uuid
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
 
-from npdb.annotation import AnnotationConfig
+from npdb.annotation import AnnotationConfig, AnnotationMode
 from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
 from npdb.report.observers import ProvenanceObserver, ResolutionObserver
 from npdb.report.provenance import ProvenanceReport
-
 
 class Annotator(ABC):
     """
@@ -18,12 +14,12 @@ class Annotator(ABC):
     output format (Neurobagel JSON-LD vs BIDS participants.json).
     """
 
-    # Confidence thresholds by mode
-    _CONFIDENCE_THRESHOLDS = {
-        "manual": 0.0,
-        "assist": 0.0,
-        "auto": 0.7,
-        "full-auto": 0.5,
+    # Confidence thresholds by mode — keyed by AnnotationMode for type safety
+    _CONFIDENCE_THRESHOLDS: dict[AnnotationMode, float] = {
+        AnnotationMode.MANUAL: 0.0,
+        AnnotationMode.ASSIST: 0.0,
+        AnnotationMode.AUTO: 0.7,
+        AnnotationMode.FULL_AUTO: 0.5,
     }
 
     def __init__(self, config: AnnotationConfig):
@@ -31,7 +27,7 @@ class Annotator(ABC):
         self._validate_config()
         self.resolver = self._init_resolver(config)
         self.provenance = self._init_provenance(config)
-        self._observers: List[ResolutionObserver] = []
+        self._observers: list[ResolutionObserver] = []
         self.add_observer(ProvenanceObserver(self.provenance))
 
     def _init_resolver(self, config: AnnotationConfig) -> MappingResolver:
@@ -40,19 +36,11 @@ class Annotator(ABC):
 
     def _init_provenance(self, config: AnnotationConfig) -> ProvenanceReport:
         """Create initial ProvenanceReport from config."""
-        return ProvenanceReport(
-            run_id=str(uuid.uuid4()),
-            mode=config.mode,
-            timestamp=datetime.now(timezone.utc),
-            dataset_name="",
-            mapping_source_counts={},
-            per_column={},
-            warnings=[],
-        )
+        return ProvenanceReport(mode=config.mode)
 
     def _validate_config(self) -> None:
         """Validate configuration for consistency. Override for extra checks."""
-        if self.config.mode == "manual" and self.config.ai_provider:
+        if self.config.mode == AnnotationMode.MANUAL and self.config.ai_provider:
             raise ValueError("AI provider not used in manual mode")
 
     def _get_confidence_threshold(self) -> float:
@@ -75,8 +63,8 @@ class Annotator(ABC):
 
     def resolve_and_track(
         self,
-        column_names: List[str],
-    ) -> Tuple[Dict[str, dict], List[ResolvedMapping]]:
+        column_names: list[str],
+    ) -> tuple[dict[str, dict], list[ResolvedMapping]]:
         """
         Resolve columns and track provenance via registered observers.
 
@@ -88,7 +76,7 @@ class Annotator(ABC):
         threshold = self._get_confidence_threshold()
         resolved = self.resolver.resolve_columns(column_names)
 
-        annotations_dict: Dict[str, dict] = {}
+        annotations_dict: dict[str, dict] = {}
         for mapping in resolved:
             if mapping.source == "unresolved":
                 continue

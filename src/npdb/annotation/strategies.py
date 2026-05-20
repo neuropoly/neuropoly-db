@@ -17,11 +17,7 @@ from npdb.annotation import AnnotationConfig
 from npdb.annotation.utils import parse_tsv_columns
 from npdb.automation.mappings.resolvers import MappingResolver
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
-from npdb.report.provenance import (
-    ProvenanceReport,
-    add_column_provenance,
-    save_provenance,
-)
+from npdb.report.provenance import ProvenanceReport
 
 
 @dataclass
@@ -33,6 +29,43 @@ class AnnotatorContext:
     provenance: ProvenanceReport
     # async (tsv_path, output_dir, annotations_dict) -> None
     save_outputs: Callable[..., Awaitable[None]]
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers shared by multiple strategies
+# ---------------------------------------------------------------------------
+
+
+def _to_annotations_dict(resolved: list) -> dict:
+    """Convert a list of ResolvedMappings to the annotations output dict."""
+    return {
+        mapping.column_name: {
+            "variable": mapping.mapped_variable,
+            "source": mapping.source,
+            "confidence": mapping.confidence,
+            "rationale": mapping.rationale,
+        }
+        for mapping in resolved
+        if mapping.source != "unresolved"
+    }
+
+
+def _partition_resolved(
+    resolved: list, threshold: float | None
+) -> tuple[list, list, list]:
+    """Partition resolved mappings into (accepted, rejected, unresolved) in one pass.
+
+    Static-source mappings always go into *accepted* regardless of threshold.
+    """
+    accepted, rejected, unresolved = [], [], []
+    for m in resolved:
+        if m.source == "unresolved":
+            unresolved.append(m)
+        elif threshold is None or m.confidence >= threshold or m.source == "static":
+            accepted.append(m)
+        else:
+            rejected.append(m)
+    return accepted, rejected, unresolved
 
 
 class AnnotationStrategy(ABC):
@@ -160,8 +193,7 @@ class AssistStrategy(AnnotationStrategy):
                 for mapping in resolved:
                     if mapping.source == "unresolved":
                         continue
-                    add_column_provenance(
-                        ctx.provenance,
+                    ctx.provenance.add_column_provenance(
                         column_name=mapping.column_name,
                         source=mapping.source,
                         confidence=mapping.confidence,
@@ -175,23 +207,14 @@ class AssistStrategy(AnnotationStrategy):
                     # file polling instead of a static timeout.
                     await asyncio.sleep(ctx.config.timeout)
 
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in resolved
-                    if mapping.source != "unresolved"
-                }
+                annotations_dict = _to_annotations_dict(resolved)
 
                 await ctx.save_outputs(
                     participants_tsv_path, output_dir, annotations_dict
                 )
 
                 provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(ctx.provenance, provenance_path)
+                ctx.provenance.save(provenance_path)
                 print(f"✓ Saved provenance: {provenance_path}")
 
                 if browser_upload_failed:
@@ -221,16 +244,7 @@ class AssistStrategy(AnnotationStrategy):
                     ctx.resolver.resolve_columns(column_names) if column_names else []
                 )
 
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in resolved
-                    if mapping.source != "unresolved"
-                }
+                annotations_dict = _to_annotations_dict(resolved)
 
                 if annotations_dict:
                     await ctx.save_outputs(
@@ -240,7 +254,7 @@ class AssistStrategy(AnnotationStrategy):
                         f"Partial failure: {str(e)}; saved offline resolution"
                     )
                     provenance_path = output_dir / "phenotypes_provenance.json"
-                    save_provenance(ctx.provenance, provenance_path)
+                    ctx.provenance.save(provenance_path)
                     print(f"✓ Emergency save completed")
                     return False
 
@@ -250,10 +264,21 @@ class AssistStrategy(AnnotationStrategy):
             return False
 
 
-class AutoStrategy(AnnotationStrategy):
+class _ScriptedStrategy(AnnotationStrategy):
     """
-    Auto mode: full scripted automation with bounded AI (confidence >= 0.7).
+    Shared implementation for scripted (auto / full-auto) annotation modes.
+
+    Subclasses declare their confidence threshold and mode-specific messages
+    via class attributes; the full execution pipeline is implemented once here.
     """
+
+    # Minimum confidence required to include a resolved mapping in output.
+    # ``None`` means "no threshold; include all resolved mappings".
+    _CONFIDENCE_THRESHOLD: float | None = 0.7
+    # Human-readable label used in log messages.
+    _MODE_LABEL: str = "Auto"
+    # Optional preamble lines printed before the browser launches.
+    _PREAMBLE: list[str] = []
 
     async def run(
         self,
@@ -261,6 +286,9 @@ class AutoStrategy(AnnotationStrategy):
         output_dir: Path,
         ctx: AnnotatorContext,
     ) -> bool:
+        for line in self._PREAMBLE:
+            print(line)
+
         current_step = "initialization"
         try:
             current_step = "browser_launch"
@@ -271,11 +299,11 @@ class AutoStrategy(AnnotationStrategy):
             ) as session:
                 current_step = "navigation"
                 await session.navigate_to()
-                print(f"✓ Auto mode: Opened annotation tool")
+                print(f"✓ {self._MODE_LABEL} mode: Opened annotation tool")
 
                 current_step = "get_started_click"
                 await session.click_get_started()
-                print(f"✓ Auto mode: Clicked 'Get Started' button")
+                print(f"✓ {self._MODE_LABEL} mode: Clicked 'Get Started' button")
 
                 current_step = "file_upload"
                 await session.upload_file(participants_tsv_path, file_type="tsv")
@@ -304,29 +332,20 @@ class AutoStrategy(AnnotationStrategy):
                     column_names = ["participant_id", "age", "sex"]
 
                 resolved = ctx.resolver.resolve_columns(column_names)
+                threshold = self._CONFIDENCE_THRESHOLD
 
-                high_confidence = [
-                    m
-                    for m in resolved
-                    if m.source != "unresolved"
-                    and (m.confidence >= 0.7 or m.source == "static")
-                ]
-                low_confidence = [
-                    m
-                    for m in resolved
-                    if m.source != "unresolved" and m.confidence < 0.7
-                ]
-                unresolved = [m for m in resolved if m.source == "unresolved"]
+                accepted, rejected, unresolved = _partition_resolved(
+                    resolved, threshold
+                )
 
                 print(
-                    f"✓ Auto mode: {len(high_confidence)} high-confidence, "
-                    f"{len(low_confidence)} low-confidence, "
+                    f"✓ {self._MODE_LABEL} mode: {len(accepted)} accepted, "
+                    f"{len(rejected)} below-threshold, "
                     f"{len(unresolved)} unresolved"
                 )
 
-                for mapping in high_confidence:
-                    add_column_provenance(
-                        ctx.provenance,
+                for mapping in accepted:
+                    ctx.provenance.add_column_provenance(
                         column_name=mapping.column_name,
                         source=mapping.source,
                         confidence=mapping.confidence,
@@ -334,163 +353,78 @@ class AutoStrategy(AnnotationStrategy):
                         rationale=mapping.rationale,
                     )
 
-                if low_confidence:
+                if rejected:
                     print(
-                        f"⚠ Warning: {len(low_confidence)} columns below "
-                        f"confidence threshold"
+                        f"⚠ Warning: {len(rejected)} columns below confidence threshold"
                     )
-                    for m in low_confidence:
+                    for m in rejected:
                         ctx.provenance.warnings.append(
                             f"Low confidence mapping for '{m.column_name}': "
                             f"{m.rationale}"
                         )
 
+                self._add_mode_warnings(ctx)
+
                 current_step = "output_generation"
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in high_confidence
-                }
+                annotations_dict = _to_annotations_dict(accepted)
 
                 await ctx.save_outputs(
                     participants_tsv_path, output_dir, annotations_dict
                 )
 
                 provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(ctx.provenance, provenance_path)
-                print(f"✓ Auto mode completed successfully")
-
-                return True
-
-        except Exception as e:
-            print(f"✗ Auto mode error at step '{current_step}': " f"{type(e).__name__}")
-            print(f"✗ Error details: {str(e)}")
-            if ctx.config.artifacts_dir:
-                print(f"✗ Check artifacts in: {ctx.config.artifacts_dir}")
-            ctx.provenance.warnings.append(
-                f"Auto mode failed at step '{current_step}': {str(e)}"
-            )
-            return False
-
-
-class FullAutoStrategy(AnnotationStrategy):
-    """
-    Full-auto mode: fully autonomous with lenient confidence thresholds (>= 0.5).
-
-    EXPERIMENTAL / UNSTABLE — review provenance sidecar before use.
-    """
-
-    async def run(
-        self,
-        participants_tsv_path: Path,
-        output_dir: Path,
-        ctx: AnnotatorContext,
-    ) -> bool:
-        current_step = "initialization"
-        try:
-            print("⚠️  EXPERIMENTAL/UNSTABLE: Full-auto mode activated")
-            print("⚠️  Using lenient confidence thresholds (>= 0.5)")
-            print("⚠️  Review provenance sidecar carefully before use")
-
-            current_step = "browser_launch"
-            async with NBAnnotationToolBrowserSession(
-                headless=ctx.config.headless,
-                timeout=ctx.config.timeout,
-                artifacts_dir=ctx.config.artifacts_dir,
-            ) as session:
-                current_step = "navigation"
-                await session.navigate_to()
-
-                current_step = "get_started_click"
-                await session.click_get_started()
-                print(f"✓ Clicked 'Get Started' button")
-
-                current_step = "file_upload"
-                await session.upload_file(participants_tsv_path, file_type="tsv")
-                print(f"✓ Uploaded {participants_tsv_path.name}")
-
-                if (
-                    ctx.config.phenotype_dictionary
-                    and ctx.config.phenotype_dictionary.exists()
-                ):
-                    await session.upload_file(
-                        ctx.config.phenotype_dictionary, file_type="json"
-                    )
-                    print(
-                        f"✓ Uploaded phenotype dictionary: "
-                        f"{ctx.config.phenotype_dictionary.name}"
-                    )
-
-                current_step = "column_resolution"
-                try:
-                    column_names = parse_tsv_columns(participants_tsv_path)
-                except Exception as e:
-                    print(
-                        f"⚠ Warning: Could not parse TSV columns: {e}. "
-                        f"Using placeholder columns."
-                    )
-                    column_names = ["participant_id", "age", "sex"]
-
-                resolved = ctx.resolver.resolve_columns(column_names)
-                print(f"✓ Resolved {len(resolved)} columns (lenient thresholds)")
-
-                for mapping in resolved:
-                    if mapping.source == "unresolved":
-                        continue
-                    add_column_provenance(
-                        ctx.provenance,
-                        column_name=mapping.column_name,
-                        source=mapping.source,
-                        confidence=mapping.confidence,
-                        variable=mapping.mapped_variable,
-                        rationale=mapping.rationale,
-                    )
-
-                ctx.provenance.warnings.append(
-                    "⚠️ FULL-AUTO MODE: All mappings are AI or fuzzy-assisted; "
-                    "review required"
-                )
-
-                current_step = "output_generation"
-                annotations_dict = {
-                    mapping.column_name: {
-                        "variable": mapping.mapped_variable,
-                        "source": mapping.source,
-                        "confidence": mapping.confidence,
-                        "rationale": mapping.rationale,
-                    }
-                    for mapping in resolved
-                    if mapping.source != "unresolved"
-                }
-
-                await ctx.save_outputs(
-                    participants_tsv_path, output_dir, annotations_dict
-                )
-
-                provenance_path = output_dir / "phenotypes_provenance.json"
-                save_provenance(ctx.provenance, provenance_path)
-
-                print("✓ Full-auto mode: Completed")
-                print(f"✓ Provenance saved (review at: {provenance_path})")
+                ctx.provenance.save(provenance_path)
+                print(f"✓ {self._MODE_LABEL} mode completed successfully")
+                print(f"✓ Provenance saved: {provenance_path}")
 
                 return True
 
         except Exception as e:
             print(
-                f"✗ Full-auto mode error at step '{current_step}': "
+                f"✗ {self._MODE_LABEL} mode error at step '{current_step}': "
                 f"{type(e).__name__}"
             )
             print(f"✗ Error details: {str(e)}")
             if ctx.config.artifacts_dir:
                 print(f"✗ Check artifacts in: {ctx.config.artifacts_dir}")
             ctx.provenance.warnings.append(
-                f"Full-auto mode failed at step '{current_step}': {str(e)}"
+                f"{self._MODE_LABEL} mode failed at step '{current_step}': {str(e)}"
             )
             return False
+
+    def _add_mode_warnings(self, ctx: AnnotatorContext) -> None:
+        """Hook for subclasses to inject mode-specific provenance warnings."""
+
+
+class AutoStrategy(_ScriptedStrategy):
+    """
+    Auto mode: full scripted automation with bounded AI (confidence >= 0.7).
+    """
+
+    _CONFIDENCE_THRESHOLD = 0.7
+    _MODE_LABEL = "Auto"
+
+
+class FullAutoStrategy(_ScriptedStrategy):
+    """
+    Full-auto mode: fully autonomous with lenient confidence thresholds (>= 0.5).
+
+    EXPERIMENTAL / UNSTABLE — review provenance sidecar before use.
+    """
+
+    _CONFIDENCE_THRESHOLD = 0.5
+    _MODE_LABEL = "Full-auto"
+    _PREAMBLE = [
+        "⚠️  EXPERIMENTAL/UNSTABLE: Full-auto mode activated",
+        "⚠️  Using lenient confidence thresholds (>= 0.5)",
+        "⚠️  Review provenance sidecar carefully before use",
+    ]
+
+    def _add_mode_warnings(self, ctx: AnnotatorContext) -> None:
+        ctx.provenance.warnings.append(
+            "⚠️ FULL-AUTO MODE: All mappings are AI or fuzzy-assisted; "
+            "review required"
+        )
 
 
 class AnnotationStrategyFactory:

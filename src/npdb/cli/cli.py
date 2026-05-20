@@ -16,6 +16,7 @@ from rich.progress import (
     TextColumn,
 )
 
+from npdb.annotation import AnnotationMode
 from npdb.annotation.standardize import load_header_map, validate_header_map_keys
 from npdb.automation.mappings.solvers import load_static_mappings
 from npdb.cli.facade import BIDSStandardizationFacade, DatasetConversionFacade
@@ -83,7 +84,7 @@ def gitea2bagel(
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
-        "manual",
+        AnnotationMode.MANUAL.value,
         help="Annotation mode: manual|assist|auto|full-auto",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
@@ -140,11 +141,13 @@ def gitea2bagel(
     * [cyan]auto[/cyan]: Fully automated with ML-based suggestions
     * [cyan]full-auto[/cyan]: Experimental unattended mode (requires review!)
     """
-    if mode not in ["manual", "assist", "auto", "full-auto"]:
+    try:
+        mode_enum = AnnotationMode(mode)
+    except ValueError:
         typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
         raise typer.Exit(code=1)
 
-    if mode == "manual" and (ai_provider or ai_model):
+    if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:
@@ -366,7 +369,9 @@ def download(
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
     try:
+        typer.echo("Initializing Gitea manager...")
         gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
+        typer.echo("Gitea manager initialized successfully.")
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
@@ -441,7 +446,7 @@ def standardize_bids(
         resolve_path=True,
     ),
     mode: str = typer.Option(
-        "manual",
+        AnnotationMode.MANUAL.value,
         help="Annotation mode: manual|assist|auto|full-auto",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
@@ -516,11 +521,13 @@ def standardize_bids(
     Edits the dataset in-place. Use [cyan]--dry-run[/cyan] to preview changes
     without writing files.
     """
-    if mode not in ["manual", "assist", "auto", "full-auto"]:
+    try:
+        mode_enum = AnnotationMode(mode)
+    except ValueError:
         typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
         raise typer.Exit(code=1)
 
-    if mode == "manual" and (ai_provider or ai_model):
+    if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:

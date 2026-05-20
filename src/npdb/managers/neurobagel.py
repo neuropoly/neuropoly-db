@@ -1,8 +1,9 @@
-import os
+from pathlib import Path
 
 from bagel.cli import bagel
 from typer.testing import CliRunner
 
+from npdb.external.neurobagel.errors import BagelCLIError
 from npdb.managers.model import BagelDB
 
 
@@ -37,12 +38,12 @@ class BagelMixin:
             "--dataset-description",
             dataset_description,
             "--output",
-            os.path.join(self.db.root, f"{dataset_name}.jsonld"),
+            str(Path(self.db.root) / f"{dataset_name}.jsonld"),
             "--overwrite",
         )
 
     def bagel_bids(self, dataset_name: str, bids_table: str):
-        jsonld_path = os.path.join(self.db.root, f"{dataset_name}.jsonld")
+        jsonld_path = str(Path(self.db.root) / f"{dataset_name}.jsonld")
         self._run_bagel_cli(
             "bids",
             "--jsonld-path",
@@ -57,7 +58,8 @@ class BagelMixin:
     def _run_bagel_cli(self, *args):
         result = self.cli.invoke(bagel, args)
         if result.exit_code != 0:
-            raise RuntimeError(
-                f"Bagel CLI failed with exit code {result.exit_code} "
-                f"and output: {result.output}"
+            raise BagelCLIError.from_result(
+                command=" ".join(str(a) for a in args),
+                exit_code=result.exit_code,
+                output=result.output,
             )

@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
 
 from npdb.external.neurobagel.schema import BAGEL_SUPPORTED_SUFFIXES
 
@@ -11,20 +10,20 @@ class PreflightError(RuntimeError):
         self,
         problem_name: str,
         description: str,
-        fix_steps: Optional[List[dict]] = None,
+        fix_steps: list[dict] | None = None,
         raw_snippet: str = "",
     ) -> None:
         super().__init__(description)
         self.problem_name = problem_name
         self.description = description
-        self.fix_steps: List[dict] = fix_steps or []
+        self.fix_steps: list[dict] = fix_steps or []
         self.raw_snippet = raw_snippet
 
 
 def check_bids_suffixes(
     bids_dir: str,
-    extra_suffix_map: Optional[Dict[str, str]] = None,
-) -> Tuple[Set[str], Set[str]]:
+    extra_suffix_map: dict[str, str] | None = None,
+) -> tuple[set[str], set[str]]:
     """
     Scan BIDS directory for NIfTI imaging files and classify their suffixes.
 
@@ -38,8 +37,8 @@ def check_bids_suffixes(
     """
     effective_supported = BAGEL_SUPPORTED_SUFFIXES | frozenset(extra_suffix_map or {})
     bids_path = Path(bids_dir)
-    supported: Set[str] = set()
-    unsupported: Set[str] = set()
+    supported: set[str] = set()
+    unsupported: set[str] = set()
 
     for nii in bids_path.glob("sub-*/**/*.nii*"):
         stem = nii.name
@@ -93,7 +92,7 @@ def check_bids_suffixes(
 
 def compare_participant_ids(
     pheno_tsv: str, bids_tsv: str
-) -> Tuple[List[str], List[str]]:
+) -> tuple[list[str], list[str]]:
     """
     Compare participant IDs in phenotypes TSV vs BIDS TSV (case-insensitive).
 
@@ -101,8 +100,8 @@ def compare_participant_ids(
     """
     import csv as _csv
 
-    def _read_ids(path: str) -> Set[str]:
-        ids: Set[str] = set()
+    def _read_ids(path: str) -> set[str]:
+        ids: set[str] = set()
         try:
             with open(path, "r", encoding="utf-8", newline="") as fh:
                 reader = _csv.DictReader(fh, delimiter="\t")
@@ -122,6 +121,6 @@ def compare_participant_ids(
     return in_bids_not_pheno, in_pheno_not_bids
 
 
-def check_missing_files(*paths: str) -> List[str]:
+def check_missing_files(*paths: str) -> list[str]:
     """Return a list of paths from *paths* that do not exist on disk."""
     return [p for p in paths if not Path(p).exists()]

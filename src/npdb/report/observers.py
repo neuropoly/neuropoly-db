@@ -5,7 +5,7 @@
 from typing import Protocol, runtime_checkable
 
 from npdb.automation.mappings.resolvers import ResolvedMapping
-from npdb.report.provenance import ProvenanceReport, add_column_provenance
+from npdb.report.provenance import ProvenanceReport
 
 
 @runtime_checkable
@@ -37,8 +37,7 @@ class ProvenanceObserver:
         self.provenance = provenance
 
     def on_resolved(self, column_name: str, mapping: ResolvedMapping) -> None:
-        add_column_provenance(
-            self.provenance,
+        self.provenance.add_column_provenance(
             column_name=mapping.column_name,
             source=mapping.source,
             confidence=mapping.confidence,

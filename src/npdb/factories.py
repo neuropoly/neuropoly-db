@@ -11,12 +11,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from npdb.annotation import AnnotationConfig
 from npdb.managers.neuropoly import DataNeuroPolyMTL
 from npdb.report import RunLedger
-
 
 class GiteaManagerFactory:
     """
@@ -63,7 +62,6 @@ class GiteaManagerFactory:
             ssl_verify=ssl_verify,
         )
 
-
 class AnnotationConfigFactory:
     """
     Creates :class:`~npdb.annotation.AnnotationConfig` from CLI arguments.
@@ -78,11 +76,11 @@ class AnnotationConfigFactory:
         mode: str,
         headless: bool = True,
         timeout: int = 300,
-        artifacts_dir: Optional[Path] = None,
-        ai_provider: Optional[str] = None,
-        ai_model: Optional[str] = None,
-        phenotype_dictionary: Optional[Path] = None,
-        header_map: Optional[Path] = None,
+        artifacts_dir: Path | None = None,
+        ai_provider: str | None = None,
+        ai_model: str | None = None,
+        phenotype_dictionary: Path | None = None,
+        header_map: Path | None = None,
         dry_run: bool = False,
         keep_annotations: bool = False,
         no_new_columns: bool = False,
@@ -104,7 +102,6 @@ class AnnotationConfigFactory:
             keep_annotations=keep_annotations,
             no_new_columns=no_new_columns,
         )
-
 
 class AIClientFactory:
     """
@@ -172,11 +169,10 @@ class AIClientFactory:
             f"Supported providers: ollama, openai, azure_openai"
         )
 
-
 class LedgerFactory:
     """Creates :class:`~npdb.ledger.RunLedger` instances."""
 
     @classmethod
-    def create(cls, path: Optional[Path] = None) -> RunLedger:
+    def create(cls, path: Path | None = None) -> RunLedger:
         """Return a new :class:`RunLedger`, optionally backed by *path*."""
         return RunLedger(path=path)

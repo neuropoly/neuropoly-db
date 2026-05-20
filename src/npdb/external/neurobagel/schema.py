@@ -24,7 +24,7 @@ This module converts our intermediate format to this schema.
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 VARIABLE_TERMS = {
     "nb:ParticipantID": {"TermURL": "nb:ParticipantID", "Label": "Participant ID"},
@@ -68,8 +68,8 @@ def expand_iri(iri: str) -> str:
 
 
 def convert_to_bagel_schema(
-    parsed_annotations: Dict[str, Any], phenotype_mappings: Dict[str, Any]
-) -> Dict[str, Any]:
+    parsed_annotations: dict[str, Any], phenotype_mappings: dict[str, Any]
+) -> dict[str, Any]:
     """
     Convert parsed annotations to Bagel-compliant data dictionary schema.
 
@@ -82,6 +82,13 @@ def convert_to_bagel_schema(
         Bagel-compliant dictionary with proper schema
     """
     bagel_dict = {}
+
+    # Pre-built reverse index: variable IRI → mapping data (built once)
+    variable_to_mapping = {
+        d["variable"]: d
+        for d in phenotype_mappings.get("mappings", {}).values()
+        if "variable" in d
+    }
 
     for column_name, annotation_info in parsed_annotations.items():
         variable = annotation_info.get("variable", "unknown")
@@ -103,20 +110,18 @@ def convert_to_bagel_schema(
         }
 
         # Determine variable type from mappings
-        # Try to find the mapping by searching through phenotype mappings
         variable_type = None
         levels = None
         format_term = None
 
-        for col_map_name, col_mapping in phenotype_mappings.get("mappings", {}).items():
-            if col_mapping.get("variable") == variable:
-                variable_type = col_mapping.get("variableType")
-                if variable_type == "Categorical" and "levels" in col_mapping:
-                    levels = col_mapping["levels"]
-                if variable_type == "Continuous" and "format" in col_mapping:
-                    format_iri = col_mapping["format"]
-                    format_term = FORMAT_TERMS.get(format_iri)
-                break
+        col_mapping = variable_to_mapping.get(variable)
+        if col_mapping:
+            variable_type = col_mapping.get("variableType")
+            if variable_type == "Categorical" and "levels" in col_mapping:
+                levels = col_mapping["levels"]
+            if variable_type == "Continuous" and "format" in col_mapping:
+                format_iri = col_mapping["format"]
+                format_term = FORMAT_TERMS.get(format_iri)
 
         # If we couldn't find it in phenotype_mappings, try to infer from the column_name
         if not variable_type:
@@ -170,8 +175,8 @@ def convert_to_bagel_schema(
 
 def save_as_bagel_schema(
     output_path: Path,
-    parsed_annotations: Dict[str, Any],
-    phenotype_mappings: Dict[str, Any],
+    parsed_annotations: dict[str, Any],
+    phenotype_mappings: dict[str, Any],
     verbose: bool = True,
 ) -> None:
     """
