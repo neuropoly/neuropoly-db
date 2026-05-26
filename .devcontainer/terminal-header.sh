@@ -9,29 +9,58 @@ if [[ -n "${NEUROPOLY_TERMINAL_HEADER_SHOWN:-}" ]]; then
 fi
 export NEUROPOLY_TERMINAL_HEADER_SHOWN=1
 
-PUBLIC_PROXY_URL="(open proxy:80 from VS Code Ports)"
+# ---------------------------------------------------------------------------
+# Resolve live host-bound ports from the running compose stack.
+# Falls back to the default values defined in docker-compose.yml / .env.
+# NOTE: This workspace container runs with network_mode: host, so it shares
+#       the Docker host's network namespace.  Docker bridge DNS names
+#       (api, graph, …) are NOT reachable here — use localhost:PORT instead.
+# ---------------------------------------------------------------------------
+_proxy_port=$(docker compose port proxy 80 2>/dev/null | cut -d: -f2)
+_proxy_port=${_proxy_port:-9000}
+_graph_port=$(docker compose port graph 7200 2>/dev/null | cut -d: -f2)
+_graph_port=${_graph_port:-7200}
+_api_port=$(docker compose port api 8000 2>/dev/null | cut -d: -f2)
+_api_port=${_api_port:-8000}
+_fapi_port=$(docker compose port federation 8000 2>/dev/null | cut -d: -f2)
+_fapi_port=${_fapi_port:-8080}
+
+# ---------------------------------------------------------------------------
+# VS Code forwarded URL.  Set automatically by both:
+#   - VS Code Remote - SSH  (SSH port forwarding over the SSH connection)
+#   - VS Code Tunnel        (dev-tunnel HTTPS URL)
+# ---------------------------------------------------------------------------
 if [[ -n "${VSCODE_PROXY_URI:-}" ]]; then
-  PUBLIC_PROXY_URL="${VSCODE_PROXY_URI//\{\{port\}\}/80}"
+  _vscode_proxy="${VSCODE_PROXY_URI//\{\{port\}\}/${_proxy_port}}"
+  _vscode_section="\
+   Proxy  (UI + APIs)   ${_vscode_proxy}
+   GraphDB admin        see VS Code Ports panel → forward  graph:7200"
+else
+  _vscode_section="\
+   Open the VS Code Ports panel and forward : proxy:80"
 fi
 
 cat <<EOF
 
 ======================================================================
- NeuroPoly Devcontainer - Neurobagel Endpoints
+ NeuroPoly Devcontainer — Neurobagel Access Guide
 ======================================================================
- Browser entrypoint (via VS Code port forwarding):
-   ${PUBLIC_PROXY_URL}
 
- Internal service DNS (inside containers only):
-   http://api:8000
-   http://federation:8000
-   http://query_federation:5173
-   http://graph:7200
+ ── In this devcontainer terminal ───────────────────────────────────
+   Proxy  (UI + APIs)   http://localhost:${_proxy_port}
+   GraphDB admin        http://localhost:${_graph_port}
+   Node API  (direct)   http://localhost:${_api_port}
+   Federation (direct)  http://localhost:${_fapi_port}
 
- Notes:
- - The proxy routes API paths (/nodes, /query, /diagnoses, etc.)
-   to the federation API; everything else serves the query UI.
- - Use VS Code Ports panel to forward proxy:80 and graph:7200.
+ ── Via VS Code Ports panel (Remote-SSH or Tunnel) ──────────────────
+${_vscode_section}
+
+ ── From the host machine running Docker ────────────────────────────
+   Proxy  (UI + APIs)   http://localhost:${_proxy_port}
+   GraphDB admin        http://localhost:${_graph_port}
+
+ ── From a remote machine connecting to the Docker host ─────────────
+${_vscode_section}
 ======================================================================
 
 EOF
