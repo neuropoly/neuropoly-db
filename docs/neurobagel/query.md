@@ -47,7 +47,7 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 > [!WARNING]
 > The download procedure uses `git-annex`. Your **git provider** must be setup for `ssh` authentication, and your **SSH keys** must be properly configured on your machine. **For the NeuroPoly NeuroGitea instance, refer to [this setup guide](https://intranet.neuro.polymtl.ca/data/git-datasets.html#initial-setup).** 
 
-The exported query results contains an `AccessLink` column that, when possible, will be filled with an URL to download the imaging data associated with each session. **For datasets indexed on `git`, this is not possible.** Instead, use the `npdb download` command line tool with the `--git` option (additionally use the `--git-annex` option if necessary) :
+The exported query results contains an `AccessLink` column that will be filled with an URL to download the imaging data associated with each subject/session. **For datasets indexed on `git-annex` (as opposed to HTTP for datasets hosted on OpenNeuro, AWS, etc.), the `AccessLink` column is irrelevant.** Instead, use the `npdb download` command line tool with the `--git` option (additionally use the `--git-annex` option if necessary) :
 
 ```bash
 uv run npdb download --git --git-annex <query-results.tsv>
