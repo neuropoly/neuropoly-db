@@ -15,6 +15,8 @@ This is about the `npdb` software installation to be able to download the data o
    uv venv .venv
    ``` 
 
+   > If you see "A virtual environment already exists at `.venv`. Do you want to replace it?", say "yes".
+   
    > The above command _might fail if some virtual environment has already been configured in the provided directory (.venv)_. If you experience issues, **delete the content** under the virtual environment's directory and **re-run the command**.
 
 3. Synchronize the virtual environment with the CLI dependencies :
