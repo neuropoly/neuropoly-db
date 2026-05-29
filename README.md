@@ -9,9 +9,16 @@ This repository hosts a collection of tools to interact with **metadata containe
 
 ### [NeuroBagel node installation](./docs/neurobagel/user_install.md)
 
+This step needs to be done in order to list all available datasets at NeuroPoly. If new datasets come in, this step needs to be done again. Currently, the node needs to be installed locally. Eventually, users won't need to do that as the node will be installed on a server at NeuroPoly. 
+
 ### [NeuroPoly-DB CLI installation](./docs/npdb/install.md)
 
+This step installs the tool that is used to package and download datasets. You only need to do this step once.
+
 ### [Query and download datasets](./docs/neurobagel/query.md)
+
+This step explains how to download data that are selected on the neurobagel web interface.
+
 
 ## Developer guide
 
