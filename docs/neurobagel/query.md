@@ -42,7 +42,7 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 > Setup your [NeuroGitea](https://data.neuro.polymtl.ca) account for automated access, following [these instructions](../neurogitea/account.md).
 
 > [!IMPORTANT]
-> Install the `npdb` command line tool, following [these instructions](../npdb/install.md).
+> Ensure that you have installed `npdb` ([see instructions](../npdb/install.md)). To verify installation, run: `uv run npdb`
 
 > [!WARNING]
 > The download procedure uses `git-annex`. Your **git provider** must be setup for `ssh` authentication, and your **SSH keys** must be properly configured on your machine. **For the NeuroPoly NeuroGitea instance, refer to [this setup guide](https://intranet.neuro.polymtl.ca/data/git-datasets.html#initial-setup).** 
