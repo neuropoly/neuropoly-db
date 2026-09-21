@@ -21,10 +21,10 @@ class TestGraphUpdater:
         # Allow for both devcontainer and standalone defaults
         assert updater.graph_host in ["graphdb", "graph"]
         assert updater.graph_port == 7200
-        assert updater.graph_db == "repositories/my_db"
+        assert updater.graph_db == "repositories/neuropoly"
         assert updater.base_url in [
-            "http://graphdb:7200/repositories/my_db",
-            "http://graph:7200/repositories/my_db",
+            "http://graphdb:7200/repositories/neuropoly",
+            "http://graph:7200/repositories/neuropoly",
         ]
 
     def test_init_custom_values(self):

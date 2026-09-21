@@ -5,9 +5,11 @@
 
 name: neuropoly_nb_dev
 networks:
+  default:
+    name: neuropoly_nb_default
   proxy-net:
     external: true
-    name: neuropoly_nb_dev_default
+    name: neuropoly_nb_proxy
 secrets:
   db_admin_password:
     file: ./neurobagel-recipes/secrets/NB_GRAPH_ADMIN_PASSWORD.txt
@@ -20,6 +22,9 @@ services:
     depends_on:
       init_data:
         condition: service_completed_successfully
+        required: true
+      graph:
+        condition: service_healthy
         required: true
     entrypoint:
       - /usr/src/api_entrypoint.sh
@@ -41,7 +46,7 @@ services:
       VIRTUAL_PATH: ${NB_NAPI_BASE_PATH:-/}
       VIRTUAL_PORT: 8000
       LETSENCRYPT_HOST: ${NB_NAPI_DOMAIN}
-    image: neurobagel/api:${NB_NAPI_TAG:-latest}
+    image: docker.io/neurobagel/api:${NB_NAPI_TAG:-latest}
     networks:
       default: null
     ports: []
@@ -84,9 +89,10 @@ services:
       VIRTUAL_PATH: ${NB_FAPI_BASE_PATH:-/}
       VIRTUAL_PORT: 8000
       LETSENCRYPT_HOST: ${NB_FAPI_DOMAIN}
-    image: neurobagel/federation_api:${NB_FAPI_TAG:-latest}
+    image: docker.io/neurobagel/federation_api:${NB_FAPI_TAG:-latest}
     networks:
       default: null
+      proxy-net: null
     ports: []
     profiles:
       - "portal"
@@ -109,6 +115,9 @@ services:
         condition: service_started
         required: true
     image: neuropoly-db-dev-gateway:local
+    environment:
+      NB_GATEWAY_BASE_PATH: ${NB_GATEWAY_BASE_PATH:-/bagel}
+      NB_DNS_RESOLVERS: ${NB_DNS_RESOLVERS:-10.89.0.1 10.89.1.1}
     networks:
       default: null
       proxy-net: null
@@ -134,12 +143,21 @@ services:
       NB_GRAPH_MEMORY: ${NB_GRAPH_MEMORY:-2G}
       NB_GRAPH_PORT: 7200
       NB_GRAPH_USERNAME: ${NB_GRAPH_USERNAME}
-    image: ontotext/graphdb:10.8.12
+      GDB_JAVA_OPTS: "-Dgraphdb.health.minimal.free.storage.enabled=false -Dgraphdb.health.minimal.free.storage.asyncCheck=false"
+    image: docker.io/ontotext/graphdb:10.8.12
     networks:
       default: null
     ports: []
     profiles:
       - "node"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /usr/src/neurobagel/scripts/graph_healthcheck.sh
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 90s
     secrets:
       - source: db_admin_password
         target: /run/secrets/db_admin_password
@@ -194,6 +212,7 @@ services:
     environment:
       OAUTH2_PROXY_CLIENT_ID: ${NB_GATEWAY_CLIENT_ID:-}
       OAUTH2_PROXY_CLIENT_SECRET: ${NB_GATEWAY_CLIENT_SECRET:-}
+      OAUTH2_PROXY_COOKIE_PATH: ${NB_GATEWAY_BASE_PATH:-/bagel}
       OAUTH2_PROXY_COOKIE_SAMESITE: lax
       OAUTH2_PROXY_COOKIE_SECRET: ${NB_GATEWAY_COOKIE_SECRET:-}
       OAUTH2_PROXY_EMAIL_DOMAINS: ${NB_GATEWAY_EMAIL_DOMAINS:-*}
@@ -202,7 +221,8 @@ services:
       OAUTH2_PROXY_GITHUB_USERS: ${NB_GATEWAY_GITHUB_USERS:-}
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
       OAUTH2_PROXY_PROVIDER: github
-      OAUTH2_PROXY_REDIRECT_URL: ${NB_GATEWAY_REDIRECT_URL:-https://localhost:${NB_GATEWAY_PORT_HOST:-9010}/oauth2/callback}
+      OAUTH2_PROXY_PROXY_PREFIX: ${NB_GATEWAY_BASE_PATH:-/bagel}/oauth2
+      OAUTH2_PROXY_REDIRECT_URL: ${NB_GATEWAY_REDIRECT_URL:-https://localhost:${NB_GATEWAY_PORT_HOST:-9010}${NB_GATEWAY_BASE_PATH:-/bagel}/oauth2/callback}
       OAUTH2_PROXY_REVERSE_PROXY: "true"
       OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
       OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS: "true"
@@ -224,24 +244,28 @@ services:
         condition: service_started
         required: true
     image: neuropoly-db-dev-proxy:local
+    environment:
+      NB_GATEWAY_BASE_PATH: ${NB_GATEWAY_BASE_PATH:-/bagel}
+      NB_DNS_RESOLVERS: ${NB_DNS_RESOLVERS:-10.89.0.1 10.89.1.1}
     networks:
       proxy-net: null
     profiles:
       - "portal"
   query_federation:
     environment:
-      NB_API_QUERY_URL: ${NB_GATEWAY_PUBLIC_ORIGIN:-https://localhost:${NB_GATEWAY_PORT_HOST:-9010}}${NB_FAPI_BASE_PATH:-}
+      NB_API_QUERY_URL: ${NB_API_QUERY_URL:-${NB_GATEWAY_PUBLIC_ORIGIN:-https://localhost:${NB_GATEWAY_PORT_HOST:-9010}}${NB_GATEWAY_BASE_PATH:-/bagel}}
       NB_ENABLE_AUTH: ${NB_ENABLE_AUTH:-false}
-      NB_QUERY_APP_BASE_PATH: ${NB_QUERY_APP_BASE_PATH:-/}
+      NB_QUERY_APP_BASE_PATH: ${NB_QUERY_APP_BASE_PATH:-}
       NB_QUERY_CLIENT_ID: ${NB_QUERY_CLIENT_ID}
       NB_QUERY_HEADER_SCRIPT: ${NB_QUERY_HEADER_SCRIPT}
       VIRTUAL_HOST: ${NB_QUERY_DOMAIN}
       VIRTUAL_PATH: ${NB_QUERY_APP_BASE_PATH:-/}
       VIRTUAL_PORT: 5173
       LETSENCRYPT_HOST: ${NB_QUERY_DOMAIN}
-    image: neurobagel/query_tool:${NB_QUERY_TAG:-latest}
+    image: docker.io/neurobagel/query_tool:${NB_QUERY_TAG:-latest}
     networks:
       default: null
+      proxy-net: null
     ports: []
     profiles:
       - "portal"

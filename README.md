@@ -122,6 +122,7 @@ uv sync --active --quiet --all-extras
   Complete and structured deployment of a local [NeuroBagel](https://github.com/neurobagel) node, extended with NeuroPoly-specific imaging modality vocabulary :
 
   - [NeuroBagel deployment](./docs/neurobagel/install.md)
+  - [NeuroBagel networking architecture](./docs/neurobagel/networking.md)
   - [NeuroBagel extensions](./docs/neurobagel/extensions.md)
   - [NeuroBagel management](./docs/neurobagel/manage.md)
 

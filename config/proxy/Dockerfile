@@ -1,4 +1,5 @@
-FROM nginx:alpine
+FROM docker.io/library/nginx:alpine
 
-# Copy the local conf.d into the image so nginx has the expected server config
-COPY conf.d/default.conf /etc/nginx/conf.d/default.conf
+# Copy proxy config as a runtime template so compose env vars can inject
+# values like NB_GATEWAY_BASE_PATH through envsubst.
+COPY conf.d/default.conf /etc/nginx/templates/default.conf.template

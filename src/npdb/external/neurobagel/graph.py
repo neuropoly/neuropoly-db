@@ -23,7 +23,7 @@ class GraphUpdater:
         self,
         graph_host: str = "graph",
         graph_port: int = 7200,
-        graph_db: str = "repositories/my_db",
+        graph_db: str = "repositories/neuropoly",
         username: Optional[str] = None,
         password: Optional[str] = None,
     ):
@@ -37,7 +37,7 @@ class GraphUpdater:
         graph_port : int
             GraphDB HTTP port (default: 7200)
         graph_db : str
-            GraphDB repository path (default: "repositories/my_db")
+            GraphDB repository path (default: "repositories/neuropoly")
         username : str, optional
             GraphDB username (required for authenticated access)
         password : str, optional

@@ -2,6 +2,8 @@
 
 NeuroBagel maintains a [recipe repository](https://github.com/neurobagel/neurobagel-recipes) filled with Docker Compose recipes to deploy both local and remote, development and production-ready NeuroBagel nodes. This repository extends the stock NeuroBagel node deployment recipes to **ease the development deployment** and provide an **extra devcontainer development environment**, working out-of-the-box with **VSCode** and **Github Codespaces**.
 
+For a full request-path and network topology walkthrough (gateway, proxy, apps, and auth), see [NeuroBagel networking architecture](./networking.md).
+
 ## Production deployment
 
 Refer to the [NeuroBagel documentation](https://neurobagel.org/user_guide/production_deployment) instead of the instructions below.
