@@ -14,8 +14,18 @@ from pathlib import Path
 from typing import Any
 
 from npdb.annotation import AnnotationConfig
+from npdb.annotation.modes import AnnotationMode
+from npdb.managers.figshare import FigshareProviderManager
+from npdb.managers.git import GitProviderManager
+from npdb.managers.kaggle import KaggleProviderManager
+from npdb.managers.mendeley import MendeleyProviderManager
+from npdb.managers.midrc import MIDRCProviderManager
+from npdb.managers.model import ProviderName
 from npdb.managers.neuropoly import DataNeuroPolyMTL
+from npdb.managers.openneuro import OpenNeuroProviderManager
+from npdb.managers.zenodo import ZenodoProviderManager
 from npdb.report import RunLedger
+
 
 class GiteaManagerFactory:
     """
@@ -62,6 +72,69 @@ class GiteaManagerFactory:
             ssl_verify=ssl_verify,
         )
 
+
+class ProviderManagerFactory:
+    """Creates provider-backed dataset managers from CLI/env configuration."""
+
+    @staticmethod
+    def create(
+        provider: str | ProviderName,
+        *,
+        cache_dir: str | Path | None = None,
+        credentials_path: str | Path | None = None,
+        token: str | None = None,
+        endpoint: str | None = None,
+    ):
+        try:
+            provider_name = (
+                provider
+                if isinstance(provider, ProviderName)
+                else ProviderName(str(provider).lower())
+            )
+        except (TypeError, ValueError) as exc:
+            supported = ", ".join(item.value for item in ProviderName)
+            raise ValueError(
+                f"Unsupported provider '{provider}'. Supported providers: {supported}."
+            ) from exc
+
+        if provider_name == ProviderName.GIT:
+            return GitProviderManager(
+                repo_url="",
+                user=os.environ.get("NP_GIT_USER"),
+                token=os.environ.get("NP_GIT_TOKEN"),
+                cache_dir=cache_dir,
+            )
+        if provider_name == ProviderName.KAGGLE:
+            return KaggleProviderManager(cache_dir=cache_dir)
+        if provider_name == ProviderName.MENDELEY:
+            return MendeleyProviderManager(
+                access_token=token or os.environ.get("NP_MENDELEY_ACCESS_TOKEN")
+            )
+        if provider_name == ProviderName.MIDRC:
+            return MIDRCProviderManager(
+                credentials_path=(
+                    str(credentials_path)
+                    if credentials_path
+                    else os.environ.get("NP_MIDRC_CREDENTIALS")
+                ),
+                endpoint=endpoint
+                or os.environ.get("NP_MIDRC_ENDPOINT", "https://data.midrc.org"),
+            )
+        if provider_name == ProviderName.OPENNEURO:
+            return OpenNeuroProviderManager(cache_dir=cache_dir)
+        if provider_name == ProviderName.ZENODO:
+            return ZenodoProviderManager(
+                token=token or os.environ.get("NP_ZENODO_TOKEN"), cache_dir=cache_dir
+            )
+        if provider_name == ProviderName.FIGSHARE:
+            return FigshareProviderManager(
+                token=token or os.environ.get("NP_FIGSHARE_TOKEN")
+            )
+        raise ValueError(
+            f"Unsupported provider '{provider}'. Supported providers: {', '.join(item.value for item in ProviderName)}."
+        )
+
+
 class AnnotationConfigFactory:
     """
     Creates :class:`~npdb.annotation.AnnotationConfig` from CLI arguments.
@@ -73,7 +146,7 @@ class AnnotationConfigFactory:
     def create_from_cli_args(
         cls,
         *,
-        mode: str,
+        mode: str | AnnotationMode,
         headless: bool = True,
         timeout: int = 300,
         artifacts_dir: Path | None = None,
@@ -89,8 +162,9 @@ class AnnotationConfigFactory:
         Build an :class:`AnnotationConfig` from keyword arguments that mirror
         the CLI option names.
         """
+        mode_value = AnnotationMode(mode) if isinstance(mode, str) else mode
         return AnnotationConfig(
-            mode=mode,
+            mode=mode_value,
             headless=headless,
             timeout=timeout,
             artifacts_dir=artifacts_dir,
@@ -102,6 +176,7 @@ class AnnotationConfigFactory:
             keep_annotations=keep_annotations,
             no_new_columns=no_new_columns,
         )
+
 
 class AIClientFactory:
     """
@@ -127,6 +202,10 @@ class AIClientFactory:
             ImportError: if the required provider library is not installed.
         """
         provider_lower = provider.lower()
+        if not model:
+            raise ValueError(
+                f"AI provider '{provider}' requires a non-empty model name."
+            )
 
         if provider_lower == "ollama":
             try:
@@ -168,6 +247,7 @@ class AIClientFactory:
             f"Unsupported AI provider '{provider}'. "
             f"Supported providers: ollama, openai, azure_openai"
         )
+
 
 class LedgerFactory:
     """Creates :class:`~npdb.ledger.RunLedger` instances."""

@@ -38,6 +38,15 @@ The exported query results is saved in a **T**ab-**S**eparated-**V**alue (**TSV*
 
 #### Prerequisites
 
+> [!WARNING]
+> Before using the download workflow, install the `all` dependency group if you have not done so already. This will install all possible download backends that could be included in your Neurobagel query result:
+>
+> ```bash
+> uv sync --active --group all
+> ```
+>
+> This is required for the client access used by the dataset download commands.
+
 > [!IMPORTANT]
 > Setup your [NeuroGitea](https://data.neuro.polymtl.ca) account for automated access, following [these instructions](../../../neurogitea/account.md#neurogitea-account-setup).
 

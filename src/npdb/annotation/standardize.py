@@ -11,25 +11,16 @@ Provides:
 """
 
 import json
-import re
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
 from npdb.annotation.autofix import (
-    _NA_PATTERNS,
-    _AGE_FORMAT_PATTERNS,
-    _AGE_NONSTANDARD_PATTERNS,
-    _detect_age_format,
-    _get_categorical_terms,
-    _is_plain_float,
     auto_add_missing_value_sentinels,
     dedup_participant_ids,
     fill_empty_id_rows,
     fix_age_format,
     fix_missing_levels,
     fix_single_column_tsv,
-    load_categorical_terms,
 )
 from npdb.automation.mappings.resolvers import ResolvedMapping
 from npdb.external.neurobagel.schema import expand_iri
@@ -69,6 +60,24 @@ _VARIABLE_LONG_NAMES = {
 _VARIABLE_UNITS = {
     "age": "year",
 }
+
+
+def normalize_participants_tsv(
+    tsv_path: Path,
+    annotations_path: Path | None = None,
+) -> list[str]:
+    """Run the canonical TSV cleanup routines from the autofix module."""
+    warnings: list[str] = []
+    warnings.extend(fix_single_column_tsv(tsv_path))
+    warnings.extend(fill_empty_id_rows(tsv_path))
+    warnings.extend(dedup_participant_ids(tsv_path))
+
+    if annotations_path is not None and annotations_path.exists():
+        warnings.extend(fix_age_format(tsv_path, annotations_path))
+        warnings.extend(auto_add_missing_value_sentinels(tsv_path, annotations_path))
+        warnings.extend(fix_missing_levels(tsv_path, annotations_path))
+
+    return warnings
 
 
 def load_header_map(path: Path) -> dict[str, dict[str, Any]]:
@@ -266,7 +275,7 @@ def rename_tsv_headers(
     tsv_path: Path,
     resolved_mappings: list[ResolvedMapping],
     dry_run: bool = False,
-    protected_columns: set[str | None] = None,
+    protected_columns: set[str] | None = None,
 ) -> dict[str, str]:
     """
     Rename TSV column headers based on resolved mappings.
@@ -315,7 +324,7 @@ def add_missing_standard_columns(
     tsv_path: Path,
     mappings_registry: dict[str, Any],
     dry_run: bool = False,
-    extra_covered_variables: set[str | None] = None,
+    extra_covered_variables: set[str] | None = None,
 ) -> list[str]:
     """
     Add missing standard columns (from phenotype_mappings) to participants.tsv.
@@ -396,18 +405,18 @@ def add_missing_standard_columns(
 def _resolve_column_mapping_data(
     col: str,
     mappings_dict: dict[str, Any],
-    resolved_by_col: dict,
+    resolved_by_col: dict[str, Any],
     header_map: dict[str, dict[str, Any]] | None,
 ) -> dict[str, Any]:
     """Three-step lookup for the phenotype mapping entry of *col*."""
-    mapping_data = mappings_dict.get(col, {})
+    mapping_data: dict[str, Any] = mappings_dict.get(col, {}) or {}
     if not mapping_data and col in resolved_by_col:
-        mapping_data = resolved_by_col[col].mapping_data
+        mapping_data = resolved_by_col[col].mapping_data or {}
     if not mapping_data and header_map and col in header_map:
         hm_var = header_map[col].get("variable")
         if hm_var:
             for _mdata in mappings_dict.values():
-                if _mdata.get("variable") == hm_var:
+                if isinstance(_mdata, dict) and _mdata.get("variable") == hm_var:
                     mapping_data = _mdata
                     break
     return mapping_data
@@ -470,8 +479,8 @@ def generate_participants_json(
     existing_json_path: Path | None = None,
     keep_annotations: bool = False,
     dry_run: bool = False,
-    column_names: list[str | None] = None,
-    header_map: dict[str, dict[str, Any | None]] = None,
+    column_names: list[str] | None = None,
+    header_map: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Generate a BIDS-compliant participants.json sidecar.
@@ -524,6 +533,7 @@ def generate_participants_json(
         mapping_data = _resolve_column_mapping_data(
             col, mappings_dict, resolved_by_col, header_map
         )
+        mapping_data = mapping_data or {}
 
         # LongName
         if col in _VARIABLE_LONG_NAMES:

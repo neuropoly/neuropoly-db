@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+import npdb.annotation.autofix as autofix_module
+import npdb.annotation.standardize as standardize_module
 from npdb.annotation.autofix import (
     auto_add_missing_value_sentinels,
     dedup_participant_ids,
@@ -20,6 +22,37 @@ from npdb.annotation.autofix import (
     fix_single_column_tsv,
     load_categorical_terms,
 )
+
+# ---------------------------------------------------------------------------
+# Benchmark contract: data-cleanup helpers live in autofix, not in standardize
+# ---------------------------------------------------------------------------
+
+
+def test_autofix_helpers_are_defined_in_autofix_module():
+    """The data-cleanup helpers should be implemented in the autofix module."""
+    for name in (
+        "auto_add_missing_value_sentinels",
+        "dedup_participant_ids",
+        "fix_missing_levels",
+        "fix_single_column_tsv",
+        "load_categorical_terms",
+    ):
+        assert getattr(autofix_module, name).__module__ == "npdb.annotation.autofix"
+        assert getattr(autofix_module, name) is getattr(autofix_module, name)
+
+
+def test_standardize_uses_autofix_cleanup_helpers():
+    """Standardization should delegate to the canonical autofix routines."""
+    for name in (
+        "fix_single_column_tsv",
+        "dedup_participant_ids",
+        "fill_empty_id_rows",
+        "fix_missing_levels",
+        "auto_add_missing_value_sentinels",
+        "fix_age_format",
+    ):
+        assert getattr(standardize_module, name) is getattr(autofix_module, name)
+
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -14,7 +14,10 @@ from npdb.factories import (
     AnnotationConfigFactory,
     GiteaManagerFactory,
     LedgerFactory,
+    ProviderManagerFactory,
 )
+from npdb.managers.kaggle import KaggleProviderManager
+from npdb.managers.model import ProviderName
 from npdb.report import RunLedger
 
 # ── GiteaManagerFactory ────────────────────────────────────────────
@@ -170,6 +173,57 @@ class TestAIClientFactory:
 
 
 # ── LedgerFactory ─────────────────────────────────────────────────
+
+
+class TestProviderManagerFactory:
+    def test_creates_kaggle_manager_with_cache_dir(self, tmp_path):
+        manager = ProviderManagerFactory.create("kaggle", cache_dir=tmp_path)
+        assert isinstance(manager, KaggleProviderManager)
+        assert manager.cache_dir == tmp_path
+        assert isinstance(manager.provider_name, ProviderName)
+        assert manager.provider_name == ProviderName.KAGGLE
+
+    def test_provider_name_enum_is_used_for_provider_selection(self):
+        manager = ProviderManagerFactory.create(ProviderName.OPENNEURO)
+        assert isinstance(manager.provider_name, ProviderName)
+        assert manager.provider_name == ProviderName.OPENNEURO
+        assert ProviderName("openneuro") == ProviderName.OPENNEURO
+
+    def test_creates_midrc_manager_from_env(self, tmp_path):
+        creds = tmp_path / "credentials.json"
+        creds.write_text("{}", encoding="utf-8")
+        with patch.dict(
+            os.environ,
+            {
+                "NP_MIDRC_CREDENTIALS": str(creds),
+                "NP_MIDRC_ENDPOINT": "https://data.midrc.org",
+            },
+            clear=False,
+        ):
+            manager = ProviderManagerFactory.create("midrc")
+        assert manager.credentials_path == str(creds)
+        assert manager.endpoint == "https://data.midrc.org"
+
+    def test_creates_figshare_and_zenodo_tokens_from_env(self):
+        with patch.dict(
+            os.environ,
+            {"NP_ZENODO_TOKEN": "zenodo-token", "NP_FIGSHARE_TOKEN": "figshare-token"},
+            clear=False,
+        ):
+            zenodo = ProviderManagerFactory.create("zenodo")
+            figshare = ProviderManagerFactory.create("figshare")
+        assert zenodo.token == "zenodo-token"
+        assert figshare.token == "figshare-token"
+
+    def test_cache_error_mentions_large_download_and_env_var(self):
+        manager = KaggleProviderManager(cache_dir=None)
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                manager.ensure_cache_dir(required=True)
+        msg = str(exc_info.value)
+        assert "cache" in msg.lower()
+        assert "NP_NPDB_CACHE_DIR" in msg
+        assert "large" in msg.lower()
 
 
 class TestLedgerFactory:

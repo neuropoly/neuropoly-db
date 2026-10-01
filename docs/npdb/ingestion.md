@@ -53,6 +53,15 @@ Use `npdb convert bagel gitea` when the dataset must be resolved from a NeuroGit
 
 ### Prerequisites
 
+> [!WARNING]
+> Before setting up your NeuroGitea access or running dataset ingestion, install the required uv dependency group if it is not already available:
+>
+> ```bash
+> uv sync --active --group gitea
+> ```
+>
+> This group provides the Gitea client library used by the ingestion commands.
+
 > [!IMPORTANT]
 > Follow [these instructions](../neurogitea/account.md) to setup your [NeuroGitea](https://data.neuro.polymtl.ca) account (token and ssh keys) for automated access.
 

@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import gitea as gt_client
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -17,7 +19,7 @@ class OrganizationMixin:
         return gt_client.Organization.request(client, organization)
 
     @property
-    def datasets(self):
+    def datasets(self) -> Sequence[object]:
         return self._fetch_repositories()
 
     @_RETRY

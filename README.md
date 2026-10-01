@@ -7,11 +7,20 @@ This repository hosts a collection of tools to interact with **metadata containe
 - Automatic conversion of BIDS datasets to [NeuroBagel](https://neurobagel.org)
 - Automated download from [NeuroBagel](https://neurobagel.org) queries
   - Support `http(s)`, `git` and `git-annex` protocols
+    - Works with [Gitea](https://gitea.com) and [Forgejo](https://forgejo.org) out-of-the-box
+  - Soon to be released specialized support for :
+    - [Kaggle](https://www.kaggle.com)
+    - [Mendeley Data](https://data.mendeley.com)
+    - [MIDRC](https://midrc.org)
+    - [OpenNeuro](https://openneuro.org)
+    - [Zenodo](https://zenodo.org)
+    - [Figshare](https://figshare.com) (partially supported via `http(s)` protocol)
 
 ## Contents
 
 - [`npdb` command line tool](#npdb-command-line-tool)
   - [Prerequisites](#prerequisites)
+  - [Provider managers and auth](#provider-managers-and-auth)
   - [Installation](#installation)
   - [Usage guides](#usage-guides)
   - [Commands](#commands)
@@ -25,7 +34,7 @@ The **N**euro**P**oly **D**atabase **B**rowser is a python command line tool tha
 
 - [Standardization of BIDS datasets](#npdb-standardize-bids-options-bids_dir) to a common NeuroPoly vocabulary and structure.
 - [Download of datasets from NeuroGitea](#npdb-download-options-query-resultstsv) using NeuroBagel queries.
-- [Conversion of local BIDS datasets — or datasets fetched from NeuroGitea/Forgejo — to NeuroBagel](#npdb-convert-bagel-local-options-input_dir-online_url-output) format for ingestion in a NeuroBagel graph database.
+- [Conversion of BIDS datasets to NeuroBagel](#npdb-convert-bagel-local-options-input_dir-online_url-output) format for ingestion in a NeuroBagel graph database.
 
 All `npdb` commands are **interactive by default** and require user input to proceed. However, most of them also offer **assisted** and **automated** modes to reduce (even replace) user interaction and speed up the process. Refer to the [commands descriptions](#commands) below for more details.
 
@@ -66,12 +75,39 @@ All `npdb` commands are **interactive by default** and require user input to pro
    uv sync --active
    ```
 
-3. (Optional) If you intend on using the **assisted or automated modes** for BIDS standardization and conversion to NeuroBagel (see commands below), you need to **install additional dependencies**. Run the following commands to install them :
+   > [!IMPORTANT]
+   > The project uses uv dependency groups for optional installs. Use the correct group before running commands that depend on it:
+   >
+   > - Core CLI: `uv sync --active`
+   > - Development tools: `uv sync --active --group dev`
+   > - All optional integrations: `uv sync --active --group all`
+   > - Provider-specific groups: `uv sync --active --group git gitea openneuro ...`
+
+3. (Optional) If you intend on using the **assisted or automated modes** for BIDS standardization and conversion to NeuroBagel (see commands below), you need to **install the automation extra**. Run the following commands to install it :
 
     ```bash
-    uv sync --active --quiet --extra annotation-automation
+    uv sync --active --extra annotation-automation
     uv run playwright install --with-deps chromium
     ```
+
+   > [!WARNING]
+   > The `annotation-automation` extra is required for the assisted and automated workflows used by `npdb standardize bids` and `npdb convert bagel` commands. Install it with `uv sync --active --extra annotation-automation` before running those commands.
+
+### Provider managers and auth
+
+The following provider-specific `npdb convert bagel` commands are supported as provider managers and wrappers around the same conversion pipeline used by the NeuroGitea flow:
+
+- `npdb convert bagel git <repo_url> <output>`
+- `npdb convert bagel kaggle <dataset_handle> <output>`
+- `npdb convert bagel mendeley <dataset_id> <output>`
+- `npdb convert bagel midrc <manifest.json> <output>`
+- `npdb convert bagel openneuro <dataset_id> <output>`
+- `npdb convert bagel zenodo <record_id_or_doi> <output>`
+- `npdb convert bagel figshare <article_id_or_doi> <output>`
+
+For providers that require credentials or a large local cache, the repository docs and the CLI help describe the exact env vars and setup steps. For example, Kaggle and archive-only Zenodo downloads require `--cache-dir` or `NP_NPDB_CACHE_DIR`; the CLI will stop with a clear error if it is missing because the download can be large.
+
+See the provider guide: [docs/npdb/provider_managers.md](./docs/npdb/provider_managers.md).
 
 ### Usage guides
 
@@ -124,11 +160,15 @@ All `npdb` commands are **interactive by default** and require user input to pro
 
 #### Developer installation
 
-First, run the [installation procedure above](#installation). Then, install the full development environment using :
+First, run the [installation procedure above](#installation). Then, install the development and integration groups required for local work using :
 
 ```bash
-uv sync --active --quiet --all-extras
+uv sync --active --group dev
+uv sync --active --group all
 ```
+
+> [!WARNING]
+> The `dev` group installs test and lint tools needed for development work, while the `all` group installs the provider integrations (`git`, `gitea`, `kaggle`, `mendeley`, `openneuro`, `zenodo`). Install the required group before running commands that rely on those packages.
 
 #### Components
 

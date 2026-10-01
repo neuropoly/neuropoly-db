@@ -60,6 +60,15 @@ class DownloadHandler:
             download = await download_info.value
             download_path = Path(await download.path())
 
+            if (
+                expected_filename is not None
+                and download_path.name != expected_filename
+            ):
+                raise RuntimeError(
+                    f"Downloaded file '{download_path.name}' does not match "
+                    f"expected filename '{expected_filename}'."
+                )
+
             # Wait for file to be fully written
             await self._wait_for_file_complete(download_path)
 

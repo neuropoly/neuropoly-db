@@ -107,7 +107,7 @@ class AnnotationUIBuilder:
         levels = mapping_data.get("levels", {})
         annotations = []
 
-        for value_idx, raw_value in enumerate(unique_values):
+        for _, raw_value in enumerate(unique_values):
             term_mapping = levels.get(raw_value, {})
 
             annotations.append(
@@ -240,10 +240,19 @@ class FormFillerActions:
         """
         from npdb.annotation.automation import AnnotationUIPatterns as UI
 
+        resolved_filename = (
+            f"{dataset_name}_phenotypes_annotations.json"
+            if dataset_name
+            else expected_filename
+        )
+        if timeout <= 0:
+            raise ValueError("timeout must be positive for export downloads.")
+
         try:
             # Click export button
             await browser_session.click(UI.DOWNLOAD_BUTTON)
             print(f"✓ Clicked export button")
+            print(f"✓ Waiting for export file: {resolved_filename}")
 
             # Wait for download with Playwright's download event handling
             # Note: The actual download path is managed by BrowserSession.wait_for_download()

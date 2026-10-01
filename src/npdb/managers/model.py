@@ -5,14 +5,25 @@ import tempfile
 import threading
 from abc import ABC, abstractmethod
 from base64 import b64encode
+from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, Callable, List
+from typing import Any, Callable, ClassVar, List, Sequence
 from urllib.parse import urlparse
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from npdb.cli.observers import DownloadObserver
+
+
+class ProviderName(str, Enum):
+    GIT = "git"
+    KAGGLE = "kaggle"
+    MENDELEY = "mendeley"
+    MIDRC = "midrc"
+    OPENNEURO = "openneuro"
+    ZENODO = "zenodo"
+    FIGSHARE = "figshare"
 
 
 class Manager(ABC):
@@ -21,7 +32,7 @@ class Manager(ABC):
 
     @property
     @abstractmethod
-    def datasets(self) -> Any:
+    def datasets(self) -> Sequence[Any]:
         pass
 
     def add_download_observer(self, observer: DownloadObserver) -> None:
@@ -38,6 +49,61 @@ class Manager(ABC):
         for obs in self._download_observers:
             obs.on_file_complete(repo, file)
 
+    def _notify_repo_step(
+        self, repo: str, step: str, step_num: int, total_steps: int
+    ) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_step(repo, step, step_num, total_steps)
+
+    def _notify_repo_done(self, repo: str, success: bool) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_done(repo, success)
+
+    def _notify_repo_error(self, repo: str, message: str) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_error(repo, message)
+
+
+class ProviderManager(Manager):
+    provider_name: ClassVar[ProviderName] = ProviderName.GIT
+    requires_cache = False
+    access_type = "public"
+
+    def __init__(self, cache_dir: str | Path | None = None, **_: Any):
+        super().__init__()
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+
+    @property
+    def datasets(self) -> Sequence[Any]:
+        return []
+
+    def ensure_cache_dir(self, *, required: bool | None = None) -> Path | None:
+        if required is None:
+            required = self.requires_cache
+        if required:
+            if self.cache_dir is None:
+                cache = os.environ.get("NP_NPDB_CACHE_DIR")
+                if cache:
+                    self.cache_dir = Path(cache)
+            if self.cache_dir is None:
+                raise ValueError(
+                    "A cache directory is required for this provider. "
+                    "Pass --cache-dir or set NP_NPDB_CACHE_DIR. "
+                    "This download may be large."
+                )
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            return self.cache_dir
+        return self.cache_dir
+
+    def describe(self, identifier: str) -> tuple[str, str]:
+        return identifier, self.access_type
+
+    def fetch(self, identifier: str, output_dir: str | Path, **kwargs: Any) -> Path:
+        _ = identifier
+        _ = output_dir
+        _ = kwargs
+        raise NotImplementedError
+
 
 class GitManager(Manager):
     def __init__(self, user: str, token: str, ssl_verify: bool = True):
@@ -45,6 +111,10 @@ class GitManager(Manager):
         self._user = user
         self._token = token
         self._ssl_verify = ssl_verify
+
+    @property
+    def datasets(self) -> Sequence[Any]:
+        return []
 
     def git_http_config(self) -> list[str]:
         git_auth = b64encode(f"{self._user}:{self._token}".encode("utf-8")).decode(
@@ -208,20 +278,6 @@ class GitManager(Manager):
         )
 
         self._notify_repo_step(repo_name, "Sparse checkout complete", 4, 4)
-
-    def _notify_repo_step(
-        self, repo: str, step: str, step_num: int, total_steps: int
-    ) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_step(repo, step, step_num, total_steps)
-
-    def _notify_repo_done(self, repo: str, success: bool) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_done(repo, success)
-
-    def _notify_repo_error(self, repo: str, message: str) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_error(repo, message)
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True
