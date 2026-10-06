@@ -4,34 +4,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-import typer
-
-
-def show_help(ctx: typer.Context, value: bool):
-    if value:
-        typer.echo(ctx.get_help())
-        raise typer.Exit()
-
-
-OPTION_GROUP_NAMES = {
-    "input": "Input Options",
-    "output": "Output Options",
-    "behavior": "Behavior Options",
-    "automation": "Automation Options",
-    "ai": "AI Options",
-    "troubleshooting": "Troubleshooting",
-}
-
-
-def help_option():
-    return typer.Option(
-        False,
-        "--help",
-        "-h",
-        callback=show_help,
-        help="Show this message and exit.",
-        rich_help_panel=OPTION_GROUP_NAMES["troubleshooting"],
-    )
 
 
 def read_tsv(tsv_path: Path) -> list[dict]:
@@ -130,4 +102,7 @@ def extend_bids_description(
     description["AccessLink"] = description["RepositoryURL"]
     description["AccessType"] = access_type
 
+    with desc_path.open("w", encoding="utf-8") as stream:
+        json.dump(description, stream, indent=2)
+        stream.write("\n")
     return description

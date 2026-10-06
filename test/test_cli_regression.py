@@ -53,6 +53,23 @@ class TestCLIStructure:
         assert result.exit_code == 0
         assert "bagel" in result.stdout
 
+    def test_bagel_help_lists_provider_commands(self):
+        """Test that all provider-backed convert/bagel commands are exposed."""
+        result = runner.invoke(npdb, ["convert", "bagel", "--help"])
+        assert result.exit_code == 0
+        for command in [
+            "local",
+            "gitea",
+            "git",
+            "kaggle",
+            "mendeley",
+            "midrc",
+            "openneuro",
+            "zenodo",
+            "figshare",
+        ]:
+            assert command in result.stdout
+
     def test_gitea_help(self):
         """Test that the nested gitea help works."""
         result = runner.invoke(npdb, GITEA_COMMAND + ["--help"])

@@ -519,7 +519,23 @@ class NBAnnotationToolBrowserSession:
                         if download.suggested_filename:
                             output_path = download_dir / download.suggested_filename
                             downloaded_path.replace(output_path)
+                            if (
+                                expected_filename is not None
+                                and output_path.name != expected_filename
+                            ):
+                                raise RuntimeError(
+                                    f"Downloaded file '{output_path.name}' does not match "
+                                    f"expected filename '{expected_filename}'."
+                                )
                             return output_path
+                        if (
+                            expected_filename is not None
+                            and downloaded_path.name != expected_filename
+                        ):
+                            raise RuntimeError(
+                                f"Downloaded file '{downloaded_path.name}' does not match "
+                                f"expected filename '{expected_filename}'."
+                            )
                         return downloaded_path
 
                     except asyncio.TimeoutError:
@@ -614,7 +630,11 @@ class NBAnnotationToolBrowserSession:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit with cleanup."""
+        _ = exc_tb
         if exc_type:
-            await self.capture_failure_artifacts(f"exception_{exc_type.__name__}")
+            reason = f"exception_{exc_type.__name__}"
+            if exc_val is not None:
+                reason = f"{reason}_{exc_val.__class__.__name__}"
+            await self.capture_failure_artifacts(reason)
         await self.cleanup()
         return False

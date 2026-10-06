@@ -15,13 +15,13 @@ from npdb.annotation.standardize import (
     generate_participants_json,
     header_map_variables,
     load_header_map,
+    normalize_participants_tsv,
     rename_tsv_headers,
     validate_bids_sidecar,
 )
 from npdb.annotation.strategies import AnnotationStrategyFactory, AnnotatorContext
 from npdb.annotation.utils import parse_tsv_columns
 from npdb.external.neurobagel.schema import convert_to_bagel_schema
-from npdb.report.provenance import ProvenanceReport
 
 
 class NeurobagelAnnotator(Annotator):
@@ -40,7 +40,7 @@ class NeurobagelAnnotator(Annotator):
 
     async def _save_outputs(
         self,
-        participants_tsv_path: Path,
+        input_path: Path,
         output_dir: Path,
         annotations_dict: dict,
     ) -> None:
@@ -59,7 +59,7 @@ class NeurobagelAnnotator(Annotator):
             annotations_dict: Mapping annotations as dictionary (flat format)
         """
         phenotypes_tsv_path = output_dir / "phenotypes.tsv"
-        shutil.copy2(participants_tsv_path, phenotypes_tsv_path)
+        shutil.copy2(input_path, phenotypes_tsv_path)
         print(f"✓ Saved phenotypes.tsv: {phenotypes_tsv_path}")
 
         # Step 1: Save flat-format annotations to JSON
@@ -93,30 +93,36 @@ class NeurobagelAnnotator(Annotator):
 
     async def execute(
         self,
-        participants_tsv_path: Path,
-        output_dir: Path,
+        input_path: Path | None = None,
+        output_dir: Path | None = None,
+        *,
+        participants_tsv_path: Path | None = None,
     ) -> bool:
         """
         Execute annotation automation according to configured mode.
 
-        Args:
-            participants_tsv_path: Path to participants.tsv file
-            output_dir: Output directory for phenotypes files
-
-        Returns:
-            True on success, False on failure.
+        Supports both the refactored keyword `input_path` and the legacy
+        `participants_tsv_path` name used by the test suite and older call sites.
         """
-        if not participants_tsv_path.exists():
-            raise FileNotFoundError(
-                f"Participants TSV not found: {participants_tsv_path}"
+        resolved_input_path = input_path or participants_tsv_path
+        if resolved_input_path is None:
+            raise TypeError(
+                "Either input_path or participants_tsv_path must be provided."
             )
+        if not resolved_input_path.exists():
+            raise FileNotFoundError(
+                f"Participants TSV not found: {resolved_input_path}"
+            )
+
+        if output_dir is None:
+            raise TypeError("output_dir is required.")
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Apply user-supplied header translation map before any annotation mode
         if self.config.header_map:
             hmap = load_header_map(self.config.header_map)
-            pre_renames = apply_header_map(participants_tsv_path, hmap)
+            pre_renames = apply_header_map(resolved_input_path, hmap)
             if pre_renames:
                 print(f"✓ Header map applied: renamed {len(pre_renames)} columns")
                 for old, new in pre_renames.items():
@@ -129,7 +135,7 @@ class NeurobagelAnnotator(Annotator):
             save_outputs=self._save_outputs,
         )
         strategy = AnnotationStrategyFactory.create(self.config)
-        return await strategy.run(participants_tsv_path, output_dir, ctx)
+        return await strategy.run(resolved_input_path, output_dir, ctx)
 
 
 class BIDSStandardizer(Annotator):
@@ -145,18 +151,26 @@ class BIDSStandardizer(Annotator):
     6. Save provenance report
     """
 
-    async def execute(self, input_path: Path, output_dir: Path | None = None) -> bool:
+    async def execute(
+        self,
+        input_path: Path | None = None,
+        output_dir: Path | None = None,
+        *,
+        participants_tsv_path: Path | None = None,
+    ) -> bool:
         """
         Execute BIDS standardization on a dataset.
 
-        Args:
-            input_path: Path to BIDS dataset root (must contain participants.tsv).
-            output_dir: Unused for BIDS (edits in-place). Kept for interface compat.
-
-        Returns:
-            True if successful, False on failure.
+        Supports both the refactored keyword `input_path` and the legacy
+        `participants_tsv_path` alias used by existing callers and tests.
         """
-        bids_root = input_path
+        resolved_input_path = input_path or participants_tsv_path
+        if resolved_input_path is None:
+            raise TypeError(
+                "Either input_path or participants_tsv_path must be provided."
+            )
+
+        bids_root = resolved_input_path
         tsv_path = bids_root / "participants.tsv"
 
         if not tsv_path.exists():
@@ -182,7 +196,13 @@ class BIDSStandardizer(Annotator):
                     for old, new in pre_renames.items():
                         print(f"  {old} → {new}")
 
-            # Step 1: Parse columns
+            # Step 1: Normalize canonical TSV cleanup via autofix delegates
+            cleanup_warnings = normalize_participants_tsv(tsv_path)
+            if cleanup_warnings:
+                print("✓ Applied autofix cleanup:")
+                for warning in cleanup_warnings:
+                    print(f"  - {warning}")
+
             column_names = parse_tsv_columns(tsv_path)
             print(f"✓ Parsed {len(column_names)} columns from participants.tsv")
 
@@ -278,4 +298,7 @@ class BIDSStandardizer(Annotator):
         annotations_dict: dict,
     ) -> None:
         """Not used directly — execute() handles output internally."""
-        pass
+        _ = input_path
+        _ = output_dir
+        _ = annotations_dict
+        return None

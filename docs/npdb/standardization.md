@@ -20,15 +20,15 @@ npdb standardize bids <bids_root_directory> \
 
 Standardization edits the dataset in place. Use `--dry-run` to preview changes.
 
-> [!IMPORTANT]
-> The automated modes (`auto` and `full-auto`) require additional dependencies to be installed. Run :
+> [!WARNING]
+> The automated modes (`auto` and `full-auto`) require the automation extra and must be installed before running the command. Install it with:
 >
 > ```bash
-> uv sync --active --quiet --extra annotation-automation
+> uv sync --active --extra annotation-automation
 > uv run playwright install --with-deps chromium
 > ```
->
-> [!WARNING]
+
+> [!IMPORTANT]
 > The automated modes (`auto` and `full-auto`) use **state-of-the-art language models** to replace human intervention in all parts of the standardization process. **There is no guarantee that the generated output will be correct. Always check the generated output for potential errors**.
 
 ## Custom header mapping

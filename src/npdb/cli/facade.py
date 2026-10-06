@@ -84,7 +84,7 @@ class DatasetConversionFacade:
         annotator.add_observer(LedgerObserver(self._run_ledger))
 
         success = await annotator.execute(
-            participants_tsv_path=participants_tsv_path,
+            input_path=participants_tsv_path,
             output_dir=output,
         )
 

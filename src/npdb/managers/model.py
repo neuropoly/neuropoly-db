@@ -5,14 +5,25 @@ import tempfile
 import threading
 from abc import ABC, abstractmethod
 from base64 import b64encode
+from enum import Enum
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, Callable, List
+from typing import Any, Callable, ClassVar, List, Sequence
 from urllib.parse import urlparse
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from npdb.cli.observers import DownloadObserver
+
+
+class ProviderName(str, Enum):
+    GIT = "git"
+    KAGGLE = "kaggle"
+    MENDELEY = "mendeley"
+    MIDRC = "midrc"
+    OPENNEURO = "openneuro"
+    ZENODO = "zenodo"
+    FIGSHARE = "figshare"
 
 
 class Manager(ABC):
@@ -21,7 +32,7 @@ class Manager(ABC):
 
     @property
     @abstractmethod
-    def datasets(self) -> Any:
+    def datasets(self) -> Sequence[Any]:
         pass
 
     def add_download_observer(self, observer: DownloadObserver) -> None:
@@ -38,6 +49,74 @@ class Manager(ABC):
         for obs in self._download_observers:
             obs.on_file_complete(repo, file)
 
+    def _notify_repo_step(
+        self, repo: str, step: str, step_num: int, total_steps: int
+    ) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_step(repo, step, step_num, total_steps)
+
+    def _notify_repo_done(self, repo: str, success: bool) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_done(repo, success)
+
+    def _notify_repo_error(self, repo: str, message: str) -> None:
+        for obs in self._download_observers:
+            obs.on_repo_error(repo, message)
+
+
+class ProviderManager(Manager):
+    provider_name: ClassVar[ProviderName] = ProviderName.GIT
+    requires_cache = False
+    access_type = "public"
+
+    def __init__(self, cache_dir: str | Path | None = None, **_: Any):
+        super().__init__()
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+
+    @property
+    def datasets(self) -> Sequence[Any]:
+        return []
+
+    def ensure_cache_dir(self, *, required: bool | None = None) -> Path | None:
+        if required is None:
+            required = self.requires_cache
+        if required:
+            if self.cache_dir is None:
+                cache = os.environ.get("NP_NPDB_CACHE_DIR")
+                if cache:
+                    self.cache_dir = Path(cache)
+            if self.cache_dir is None:
+                raise ValueError(
+                    "A cache directory is required for this provider. "
+                    "Pass --cache-dir or set NP_NPDB_CACHE_DIR. "
+                    "This download may be large."
+                )
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            return self.cache_dir
+        return self.cache_dir
+
+    def describe(self, identifier: str) -> tuple[str, str]:
+        return identifier, self.access_type
+
+    def unpack(self, fetched: str | Path) -> Path:
+        from npdb.managers.preparation import unpack_provider_archives
+
+        return unpack_provider_archives(fetched)
+
+    def prepare(self, root: str | Path) -> Path:
+        from npdb.managers.preparation import prepare_provider_dataset
+
+        return prepare_provider_dataset(Path(root))
+
+    def prepare_fetched(self, fetched: str | Path) -> Path:
+        return self.prepare(self.unpack(fetched))
+
+    def fetch(self, identifier: str, output_dir: str | Path, **kwargs: Any) -> Path:
+        _ = identifier
+        _ = output_dir
+        _ = kwargs
+        raise NotImplementedError
+
 
 class GitManager(Manager):
     def __init__(self, user: str, token: str, ssl_verify: bool = True):
@@ -45,6 +124,10 @@ class GitManager(Manager):
         self._user = user
         self._token = token
         self._ssl_verify = ssl_verify
+
+    @property
+    def datasets(self) -> Sequence[Any]:
+        return []
 
     def git_http_config(self) -> list[str]:
         git_auth = b64encode(f"{self._user}:{self._token}".encode("utf-8")).decode(
@@ -91,6 +174,30 @@ class GitManager(Manager):
 
             return stdout.strip()
 
+    @staticmethod
+    def parse_repo_url(repo_url: str) -> tuple[str, str, str | None]:
+        """Split a repo URL into ``(clone_url, repo_name, pinned_ref)``.
+
+        A ``/tree/<ref>`` suffix is stripped from the URL and returned as the
+        pinned ref (``None`` when absent).
+        """
+        parsed_repo = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
+        base = f"{parsed_repo.scheme}://{parsed_repo.netloc}"
+        full_path = parsed_repo.path.rstrip("/")
+        tree_marker = "/tree/"
+        tree_idx = full_path.find(tree_marker)
+
+        if tree_idx != -1:
+            pinned_ref: str | None = full_path[tree_idx + len(tree_marker) :]
+            repo_path = full_path[:tree_idx]
+        else:
+            pinned_ref = None
+            repo_path = full_path
+
+        repo_path = repo_path.removesuffix(".git")
+        repo_name = repo_path.split("/")[-1] if repo_path else "repository"
+        return f"{base}{repo_path}.git", repo_name, pinned_ref
+
     def clone_sparse(
         self,
         repo_url: str,
@@ -135,26 +242,9 @@ class GitManager(Manager):
         # repo_url may include a Gitea /tree/<ref> suffix
         # (e.g. ".../whole-spine/tree/0491c0b3...").  Strip it to obtain the
         # actual repository path and remember the pinned ref separately.
-        parsed_repo = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
-        base = f"{parsed_repo.scheme}://{parsed_repo.netloc}"
-        full_path = parsed_repo.path.rstrip("/")
-        tree_marker = "/tree/"
-        tree_idx = full_path.find(tree_marker)
-
-        if tree_idx != -1:
-            pinned_ref: str | None = full_path[tree_idx + len(tree_marker) :]
-            repo_path = full_path[:tree_idx]
-        else:
-            pinned_ref = None
-            repo_path = full_path
-
-        repo_path = repo_path.removesuffix(".git")
-        git_url = f"{base}{repo_path}.git"
+        git_url, repo_name, pinned_ref = self.parse_repo_url(repo_url)
         env = self.git_env()
         git = ["git"] + self.git_http_config()
-
-        # Extract repository name from repo_url path
-        repo_name = repo_path.split("/")[-1] if repo_path else "repository"
 
         # Clone only if the destination is not already a git repo.
         if not (dest / ".git").exists():
@@ -208,20 +298,6 @@ class GitManager(Manager):
         )
 
         self._notify_repo_step(repo_name, "Sparse checkout complete", 4, 4)
-
-    def _notify_repo_step(
-        self, repo: str, step: str, step_num: int, total_steps: int
-    ) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_step(repo, step, step_num, total_steps)
-
-    def _notify_repo_done(self, repo: str, success: bool) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_done(repo, success)
-
-    def _notify_repo_error(self, repo: str, message: str) -> None:
-        for obs in self._download_observers:
-            obs.on_repo_error(repo, message)
 
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True

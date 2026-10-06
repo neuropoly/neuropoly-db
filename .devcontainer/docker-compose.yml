@@ -11,7 +11,10 @@
 
 services:
   workspace:
-    image: mcr.microsoft.com/devcontainers/python:3.12-bookworm
+    image: neuropoly-db-workspace:local
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
     cap_add:
       - NET_ADMIN
       - SYS_MODULE

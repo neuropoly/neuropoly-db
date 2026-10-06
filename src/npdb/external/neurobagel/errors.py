@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from rich.text import Text
 
+
 @dataclass
 class BagelCLIError(RuntimeError):
     """
@@ -39,13 +40,16 @@ class BagelCLIError(RuntimeError):
             rich_output=Text.from_ansi(output),
         )
 
+
 # ---------------------------------------------------------------------------
 # Step helper — create a resolution step dict
 # ---------------------------------------------------------------------------
 
+
 def _step(action: str, detail: str, auto_fixable: bool = False) -> dict:
     """Return a resolution-step dict with action, detail, and auto_fixable flag."""
     return {"action": action, "detail": detail, "auto_fixable": auto_fixable}
+
 
 # ---------------------------------------------------------------------------
 # Error pattern registry
@@ -333,6 +337,7 @@ _PATTERN_REGISTRY: list[tuple[re.Pattern, str, str, list[dict]]] = [
     ),
 ]
 
+
 def classify_bagel_error(plain_text: str) -> list[dict]:
     """
     Match ``plain_text`` against known Bagel error patterns.
@@ -387,7 +392,7 @@ def classify_bagel_error(plain_text: str) -> list[dict]:
                     ),
                     _step(
                         "Validate the BIDS dataset",
-                        "Run: bids-validator <bids_dir>\n"
+                        "Run: bids-validator-rust <bids_dir>\n"
                         "Fix all reported errors before re-running gitea2bagel. "
                         "Common issues: missing required files, invalid file naming, "
                         "or malformed JSON sidecars.",

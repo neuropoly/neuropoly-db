@@ -107,7 +107,7 @@ class PhenotypeMatcher:
         if result is None:
             return None
 
-        best_match, best_score, idx = result
+        _, best_score, idx = result
 
         # Normalize score from [score_cutoff, 100] to [0.75, 0.9]
         # This reserves [0.9, 1.0] for exact matches and [0.5, 0.75) for AI suggestions

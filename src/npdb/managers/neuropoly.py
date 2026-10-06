@@ -106,7 +106,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
 
         # Group sparse paths by (repo_url, dataset_name) so each repo is
         # cloned exactly once, regardless of how many subjects it contains.
-        groups: dict[tuple[str, str], list[str]] = defaultdict(list)
+        groups: defaultdict[tuple[str, str], list[str]] = defaultdict(list)
         for repo_url, sparse_path, dataset_name in subjects:
             key = (repo_url, dataset_name)
             if sparse_path not in groups[key]:
@@ -166,7 +166,7 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         warnings_out: dict | None,
     ) -> list[str]:
         """Phase 3: run all annotation pre-processing fixups on phenotype files."""
-        from npdb.annotation.autofix import (
+        from npdb.annotation.standardize import (
             auto_add_missing_value_sentinels,
             dedup_participant_ids,
             fill_empty_id_rows,
