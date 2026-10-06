@@ -20,6 +20,7 @@ from npdb.cli.helpers import (
     repo_has_git_annex,
 )
 from npdb.factories import GiteaManagerFactory, ProviderManagerFactory
+from npdb.managers.git import GitProviderManager
 from npdb.managers.midrc import MIDRCProviderManager
 from npdb.managers.model import ProviderName
 
@@ -297,6 +298,8 @@ def _provider_call(
         else identifier.replace("/", "_")
     )
     dataset_id = dataset_id.replace(".", "_")
+    if isinstance(manager, GitProviderManager):
+        dataset_id = manager.dataset_id(identifier).replace("/", "_")
     if isinstance(manager, MIDRCProviderManager):
         dataset_id = manager.discovery_id(identifier) or dataset_id
         online_url, access_type = manager.describe(identifier)

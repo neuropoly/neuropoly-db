@@ -174,6 +174,30 @@ class GitManager(Manager):
 
             return stdout.strip()
 
+    @staticmethod
+    def parse_repo_url(repo_url: str) -> tuple[str, str, str | None]:
+        """Split a repo URL into ``(clone_url, repo_name, pinned_ref)``.
+
+        A ``/tree/<ref>`` suffix is stripped from the URL and returned as the
+        pinned ref (``None`` when absent).
+        """
+        parsed_repo = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
+        base = f"{parsed_repo.scheme}://{parsed_repo.netloc}"
+        full_path = parsed_repo.path.rstrip("/")
+        tree_marker = "/tree/"
+        tree_idx = full_path.find(tree_marker)
+
+        if tree_idx != -1:
+            pinned_ref: str | None = full_path[tree_idx + len(tree_marker) :]
+            repo_path = full_path[:tree_idx]
+        else:
+            pinned_ref = None
+            repo_path = full_path
+
+        repo_path = repo_path.removesuffix(".git")
+        repo_name = repo_path.split("/")[-1] if repo_path else "repository"
+        return f"{base}{repo_path}.git", repo_name, pinned_ref
+
     def clone_sparse(
         self,
         repo_url: str,
@@ -218,26 +242,9 @@ class GitManager(Manager):
         # repo_url may include a Gitea /tree/<ref> suffix
         # (e.g. ".../whole-spine/tree/0491c0b3...").  Strip it to obtain the
         # actual repository path and remember the pinned ref separately.
-        parsed_repo = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
-        base = f"{parsed_repo.scheme}://{parsed_repo.netloc}"
-        full_path = parsed_repo.path.rstrip("/")
-        tree_marker = "/tree/"
-        tree_idx = full_path.find(tree_marker)
-
-        if tree_idx != -1:
-            pinned_ref: str | None = full_path[tree_idx + len(tree_marker) :]
-            repo_path = full_path[:tree_idx]
-        else:
-            pinned_ref = None
-            repo_path = full_path
-
-        repo_path = repo_path.removesuffix(".git")
-        git_url = f"{base}{repo_path}.git"
+        git_url, repo_name, pinned_ref = self.parse_repo_url(repo_url)
         env = self.git_env()
         git = ["git"] + self.git_http_config()
-
-        # Extract repository name from repo_url path
-        repo_name = repo_path.split("/")[-1] if repo_path else "repository"
 
         # Clone only if the destination is not already a git repo.
         if not (dest / ".git").exists():
