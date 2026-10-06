@@ -40,7 +40,7 @@ Providers that download large archives or dataset bundles should use a local cac
 npdb convert bagel git <repo_url> <output>
 npdb convert bagel kaggle <dataset_handle> <output>
 npdb convert bagel mendeley <dataset_id> <output>
-npdb convert bagel midrc <manifest.json> <output>
+npdb convert bagel midrc <dataset_url_or_id_or_guid_or_manifest> <output>
 npdb convert bagel openneuro <dataset_id> <output>
 npdb convert bagel zenodo <record_id_or_doi> <output>
 npdb convert bagel figshare <article_id_or_doi> <output>
@@ -81,8 +81,40 @@ Public Zenodo records can work without a token, but some embargoed, restricted, 
 
 - `NP_MIDRC_CREDENTIALS`
 - `NP_MIDRC_ENDPOINT` (defaults to `https://data.midrc.org`)
+- `NP_NPDB_CACHE_DIR` (or `--cache-dir`; required for Discovery datasets)
 
-Download the `credentials.json` file from your MIDRC profile and point `NP_MIDRC_CREDENTIALS` to it. The endpoint is usually the default value.
+MIDRC accepts **Discovery dataset URLs or IDs**, **file GUIDs**, and local
+Gen3 manifests. For example:
+
+```bash
+npdb convert bagel midrc https://data.midrc.org/discovery/H6K0-A61V/ ./output \
+  --credentials-path /absolute/path/to/credentials.json \
+  --cache-dir /absolute/path/to/midrc-cache
+```
+
+Dataset IDs resolve through MIDRC's Discovery metadata API and download all
+linked files. File GUIDs appear in the **Object Id** column in
+**Exploration > Data Files**; copy the full `dg.MD1R/` prefix. To create a manifest, sign in, select
+a cohort in Exploration, and use **Download file manifest**, not
+**Download table**.
+
+MIDRC permits anonymous discovery, but its open-access resources are intended
+for registered users under a Data Use Agreement. Anonymous checks of one
+indexed file returned HTTP 401 from the download API and HTTP 403 from storage.
+For authenticated Gen3 downloads, create an API key on your MIDRC **Profile**
+page and save the downloaded `credentials.json`.
+
+Downloads use authenticated Gen3 signed URLs, streaming, and indexed file
+size/checksum verification. Cached archives are copied into the fetch directory
+so shared extraction does not delete the reusable cache.
+
+The existing shared pipeline extracts archives, adjusts the layout, and converts
+metadata. It does not apply dataset-specific clinical joins, invent BIDS names,
+or convert DICOMs. Incompatible source layouts fail explicitly.
+
+See the [MIDRC GUID, manifest, and download guide](./download/guides/midrc.md)
+for exact input shapes, verified access checks, the supported Gen3 download
+workflow, caching behavior, and conversion-layout requirements.
 
 ### Figshare
 

@@ -98,6 +98,19 @@ class ProviderManager(Manager):
     def describe(self, identifier: str) -> tuple[str, str]:
         return identifier, self.access_type
 
+    def unpack(self, fetched: str | Path) -> Path:
+        from npdb.managers.preparation import unpack_provider_archives
+
+        return unpack_provider_archives(fetched)
+
+    def prepare(self, root: str | Path) -> Path:
+        from npdb.managers.preparation import prepare_provider_dataset
+
+        return prepare_provider_dataset(Path(root))
+
+    def prepare_fetched(self, fetched: str | Path) -> Path:
+        return self.prepare(self.unpack(fetched))
+
     def fetch(self, identifier: str, output_dir: str | Path, **kwargs: Any) -> Path:
         _ = identifier
         _ = output_dir

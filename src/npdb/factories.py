@@ -112,6 +112,7 @@ class ProviderManagerFactory:
             )
         if provider_name == ProviderName.MIDRC:
             return MIDRCProviderManager(
+                cache_dir=cache_dir,
                 credentials_path=(
                     str(credentials_path)
                     if credentials_path

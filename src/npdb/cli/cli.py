@@ -7,12 +7,7 @@ from typing import Optional
 import typer
 from dotenv import load_dotenv
 from rich.live import Live
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-)
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from npdb.annotation.modes import AnnotationMode
 from npdb.cli.display import RepoDownloadDisplay
@@ -21,12 +16,11 @@ from npdb.cli.helpers import (
     fetch_url,
     is_http_url,
     looks_like_non_git_repo_error,
-    prepare_provider_dataset,
     read_tsv,
     repo_has_git_annex,
-    unpack_provider_archives,
 )
 from npdb.factories import GiteaManagerFactory, ProviderManagerFactory
+from npdb.managers.midrc import MIDRCProviderManager
 from npdb.managers.model import ProviderName
 
 OPTION_GROUP_NAMES = {
@@ -303,11 +297,18 @@ def _provider_call(
         else identifier.replace("/", "_")
     )
     dataset_id = dataset_id.replace(".", "_")
+    if isinstance(manager, MIDRCProviderManager):
+        dataset_id = manager.discovery_id(identifier) or dataset_id
+        online_url, access_type = manager.describe(identifier)
     local_fetch = Path(output) / f"{provider_id}_{dataset_id}"
 
-    fetched = manager.fetch(identifier, local_fetch, **kwargs)
-    fetched = unpack_provider_archives(fetched)
-    fetched = prepare_provider_dataset(fetched)
+    if isinstance(manager, MIDRCProviderManager):
+        display = RepoDownloadDisplay()
+        manager.add_download_observer(display)
+        with Live(display, refresh_per_second=4, transient=False):
+            fetched = manager.fetch(identifier, local_fetch, **kwargs)
+    else:
+        fetched = manager.fetch(identifier, local_fetch, **kwargs)
 
     local2bagel(
         input_dir=fetched,
@@ -782,7 +783,7 @@ def mendeley2bagel(
 @bagel.command("midrc")
 def midrc2bagel(
     manifest: str = typer.Argument(
-        ..., help="MIDRC manifest JSON file or GUID to download."
+        ..., help="MIDRC Discovery URL or dataset ID, file GUID, or manifest JSON path."
     ),
     output: Path = typer.Argument(
         ...,
@@ -801,6 +802,14 @@ def midrc2bagel(
     endpoint: Optional[str] = typer.Option(
         None,
         help="MIDRC endpoint. Defaults to https://data.midrc.org.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Persistent download cache (required for Discovery datasets). Or set NP_NPDB_CACHE_DIR.",
+        file_okay=False,
+        dir_okay=True,
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
@@ -860,8 +869,10 @@ def midrc2bagel(
     """
     [bold]Convert MIDRC dataset metadata to Neurobagel JSON-LD[/bold]
 
-    This command resolves a MIDRC manifest or dataset identifier, downloads the
-    related files, and converts the dataset metadata into Neurobagel format.
+    Resolve a Discovery dataset, file GUID, or Gen3 manifest and download its
+    files using authorized URLs. Archives and layouts use the shared provider
+    preparation pipeline before Neurobagel conversion; unsupported layouts fail
+    explicitly rather than being remapped using dataset-specific rules.
 
     Access requirements:
     * Restricted MIDRC data requires credentials from the MIDRC portal.
@@ -869,6 +880,7 @@ def midrc2bagel(
       [cyan]--credentials-path[/cyan] option.
     * The endpoint is usually the default MIDRC endpoint unless you are using a
       custom instance.
+    * Discovery datasets download all linked files and require a persistent cache.
     """
     _provider_call(
         "midrc",
@@ -885,6 +897,7 @@ def midrc2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        cache_dir=cache_dir,
         credentials_path=str(credentials_path) if credentials_path else None,
         endpoint=endpoint,
     )

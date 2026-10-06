@@ -8,12 +8,39 @@ from unittest.mock import Mock, patch
 import pytest
 
 from npdb.cli.helpers import unpack_provider_archives
+from npdb.managers.model import ProviderManager
+
+
+def test_provider_preparation_hooks_are_ordered(tmp_path):
+    manager = ProviderManager()
+    extracted = tmp_path / "extracted"
+    prepared = tmp_path / "bids"
+    with (
+        patch.object(manager, "unpack", return_value=extracted) as unpack,
+        patch.object(manager, "prepare", return_value=prepared) as prepare,
+    ):
+        assert manager.prepare_fetched(tmp_path) == prepared
+    unpack.assert_called_once_with(tmp_path)
+    prepare.assert_called_once_with(extracted)
+
+
+def test_provider_default_hooks_prepare_an_archive(tmp_path):
+    with zipfile.ZipFile(tmp_path / "rawdata.zip", "w") as archive:
+        archive.writestr("rawdata/sub-01/anat/sub-01_T1w.nii.gz", b"image")
+    assert ProviderManager().prepare_fetched(tmp_path) == tmp_path
+    assert (tmp_path / "sub-01/anat/sub-01_T1w.nii.gz").read_bytes() == b"image"
+    assert (tmp_path / "participants.tsv").exists()
 
 
 @pytest.mark.parametrize(
     "suffix, mode",
-    [(".tar", "w"), (".tar.gz", "w:gz"), (".tgz", "w:gz"),
-     (".tar.bz2", "w:bz2"), (".tar.xz", "w:xz")],
+    [
+        (".tar", "w"),
+        (".tar.gz", "w:gz"),
+        (".tgz", "w:gz"),
+        (".tar.bz2", "w:bz2"),
+        (".tar.xz", "w:xz"),
+    ],
 )
 def test_unpack_tar_variants(tmp_path, suffix, mode):
     archive_path = tmp_path / f"dataset{suffix}"
@@ -119,10 +146,9 @@ def test_existing_symlink_cannot_redirect_extraction(tmp_path):
     assert not (outside / "participants.tsv").exists()
 
 
-@pytest.mark.parametrize("module_name", ["npdb.cli.cli", "npdb.cli.bagel"])
 @pytest.mark.parametrize("corrupt", [False, True])
-def test_provider_unpacks_before_conversion(tmp_path, module_name, corrupt):
-    module = importlib.import_module(module_name)
+def test_provider_unpacks_before_conversion(tmp_path, corrupt):
+    module = importlib.import_module("npdb.cli.cli")
     archive_path = tmp_path / "dataset.zip"
     if corrupt:
         archive_path.write_bytes(b"invalid")
@@ -131,7 +157,9 @@ def test_provider_unpacks_before_conversion(tmp_path, module_name, corrupt):
             archive.writestr("participants.tsv", b"data")
     manager = Mock()
     manager.provider_name = "figshare"
-    manager.fetch.return_value = tmp_path
+    manager.fetch.side_effect = (
+        lambda *args, **kwargs: ProviderManager().prepare_fetched(tmp_path)
+    )
 
     def convert(**kwargs):
         assert kwargs["input_dir"] == tmp_path
@@ -143,10 +171,18 @@ def test_provider_unpacks_before_conversion(tmp_path, module_name, corrupt):
         patch("npdb.cli.cli.local2bagel", side_effect=convert) as conversion,
     ):
         kwargs = dict(
-            output=tmp_path / "out", online_url="https://example.com",
-            access_type="public", mode="manual", phenotype_dict=None,
-            headless=True, timeout=300, artifacts_dir=None, ai_provider=None,
-            ai_model=None, header_map=None, extend_modalities=True,
+            output=tmp_path / "out",
+            online_url="https://example.com",
+            access_type="public",
+            mode="manual",
+            phenotype_dict=None,
+            headless=True,
+            timeout=300,
+            artifacts_dir=None,
+            ai_provider=None,
+            ai_model=None,
+            header_map=None,
+            extend_modalities=True,
         )
         if corrupt:
             with pytest.raises(zipfile.BadZipFile):

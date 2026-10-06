@@ -28,4 +28,4 @@ class GitProviderManager(GitManager, ProviderManager):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
         self.clone_sparse(identifier, sparse_paths=["."], dest=output_path)
-        return output_path
+        return self.prepare_fetched(output_path)

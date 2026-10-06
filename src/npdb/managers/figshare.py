@@ -44,7 +44,9 @@ class FigshareProviderManager(ProviderManager):
             response.raise_for_status()
             page_articles = response.json()
             if not isinstance(page_articles, list):
-                raise ValueError("Unexpected response while searching Figshare articles.")
+                raise ValueError(
+                    "Unexpected response while searching Figshare articles."
+                )
             articles.extend(page_articles)
             if len(page_articles) < 100:
                 return articles
@@ -55,7 +57,9 @@ class FigshareProviderManager(ProviderManager):
         if doi is None:
             return [identifier]
 
-        collection = re.fullmatch(r"10\.6084/m9\.figshare\.c\.([0-9]+)", doi, re.IGNORECASE)
+        collection = re.fullmatch(
+            r"10\.6084/m9\.figshare\.c\.([0-9]+)", doi, re.IGNORECASE
+        )
         if collection:
             articles = []
             page = 1
@@ -89,7 +93,9 @@ class FigshareProviderManager(ProviderManager):
         try:
             return [article["id"] for article in articles]
         except KeyError as exc:
-            raise ValueError("Figshare DOI search returned an article without an ID.") from exc
+            raise ValueError(
+                "Figshare DOI search returned an article without an ID."
+            ) from exc
 
     def fetch(self, identifier: str, output_dir: str | Path, **_: Any) -> Path:
         output_path = Path(output_dir)
@@ -115,8 +121,7 @@ class FigshareProviderManager(ProviderManager):
                 response = httpx.get(url, timeout=60, follow_redirects=True)
                 response.raise_for_status()
                 file_name = (
-                    file_info.get("name")
-                    or f"figshare_{file_info.get('id', 'file')}"
+                    file_info.get("name") or f"figshare_{file_info.get('id', 'file')}"
                 )
                 file_path = output_path / file_name
                 if file_name in downloaded_names:
@@ -125,4 +130,5 @@ class FigshareProviderManager(ProviderManager):
                     )
                 file_path.write_bytes(response.content)
                 downloaded_names.add(file_name)
-        return output_path
+
+        return self.prepare_fetched(output_path)

@@ -1,8 +1,10 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from bagel.cli import bagel
 from typer.testing import CliRunner
 
+from npdb.external.bids import validate_bids_dataset
 from npdb.external.neurobagel.errors import BagelCLIError
 from npdb.managers.model import BagelDB
 
@@ -13,14 +15,16 @@ class BagelMixin:
         self.db = db
 
     def bids2tsv(self, bids_directory: str, output_tsv: str):
-        self._run_bagel_cli(
-            "bids2tsv",
-            "--bids-dir",
-            bids_directory,
-            "--output",
-            output_tsv,
-            "--overwrite",
-        )
+        report = validate_bids_dataset(bids_directory)
+        with patch("bagel.cli.BIDSLayout", return_value=report):
+            self._run_bagel_cli(
+                "bids2tsv",
+                "--bids-dir",
+                bids_directory,
+                "--output",
+                output_tsv,
+                "--overwrite",
+            )
 
     def bagel_pheno(
         self,

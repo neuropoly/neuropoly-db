@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from npdb.cli.helpers import prepare_provider_dataset
 from npdb.managers.figshare import FigshareProviderManager
-from npdb.managers.model import ProviderName
+from npdb.managers.model import ProviderManager, ProviderName
 
 
 def test_reorganizes_dataset_and_generates_participants(tmp_path):
@@ -111,18 +111,21 @@ def test_missing_subjects_raise_without_empty_table(tmp_path):
     assert not (tmp_path / "participants.tsv").exists()
 
 
-@pytest.mark.parametrize("module_name", ["npdb.cli.cli", "npdb.cli.bagel"])
-def test_provider_prepares_extracted_data_before_conversion(tmp_path, module_name):
-    module = importlib.import_module(module_name)
+def test_provider_prepares_extracted_data_before_conversion(tmp_path):
+    module = importlib.import_module("npdb.cli.cli")
     manager = Mock()
     manager.provider_name = "figshare"
-    manager.fetch.return_value = tmp_path
 
     def unpack(fetched):
         assert fetched == tmp_path
         (tmp_path / "rawdata").mkdir()
         (tmp_path / "rawdata/sub-01_T1w.nii.gz").touch()
         return tmp_path
+
+    def fetch(*args, **kwargs):
+        return ProviderManager().prepare(unpack(tmp_path))
+
+    manager.fetch.side_effect = fetch
 
     def convert(**kwargs):
         assert kwargs["input_dir"] == tmp_path
@@ -134,23 +137,31 @@ def test_provider_prepares_extracted_data_before_conversion(tmp_path, module_nam
 
     with (
         patch.object(module.ProviderManagerFactory, "create", return_value=manager),
-        patch.object(module, "unpack_provider_archives", side_effect=unpack),
         patch("npdb.cli.cli.local2bagel", side_effect=convert) as conversion,
     ):
         module._provider_call(
-            "figshare", "123", output=tmp_path / "out",
-            online_url="https://example.com", access_type="public", mode="manual",
-            phenotype_dict=None, headless=True, timeout=300, artifacts_dir=None,
-            ai_provider=None, ai_model=None, header_map=None, extend_modalities=True,
+            "figshare",
+            "123",
+            output=tmp_path / "out",
+            online_url="https://example.com",
+            access_type="public",
+            mode="manual",
+            phenotype_dict=None,
+            headless=True,
+            timeout=300,
+            artifacts_dir=None,
+            ai_provider=None,
+            ai_model=None,
+            header_map=None,
+            extend_modalities=True,
         )
     conversion.assert_called_once()
 
 
-@pytest.mark.parametrize("module_name", ["npdb.cli.cli", "npdb.cli.bagel"])
-def test_figshare_cli_fetches_and_prepares_inside_output(tmp_path, module_name):
-    module = importlib.import_module(module_name)
+def test_figshare_cli_fetches_and_prepares_inside_output(tmp_path):
+    module = importlib.import_module("npdb.cli.cli")
     output = tmp_path / "chosen" / "output"
-    dataset = output / "dataset"
+    dataset = output / "figshare_123"
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle, "w") as archive:
         archive.writestr("rawdata/sub-01_T1w.nii.gz", b"image")
@@ -172,11 +183,12 @@ def test_figshare_cli_fetches_and_prepares_inside_output(tmp_path, module_name):
         assert not (dataset / "rawdata").exists()
         (output / "neurobagel.jsonld").write_text("converted")
 
-    app = module.npdb if module_name == "npdb.cli.cli" else module.bagel
-    command = ["convert", "bagel"] if module_name == "npdb.cli.cli" else []
+    app = module.npdb
+    command = ["convert", "bagel"]
     with (
         patch.object(
-            module.ProviderManagerFactory, "create",
+            module.ProviderManagerFactory,
+            "create",
             return_value=FigshareProviderManager(token="test-token"),
         ),
         patch("npdb.managers.figshare.httpx.get", side_effect=[article, download]),
@@ -190,25 +202,32 @@ def test_figshare_cli_fetches_and_prepares_inside_output(tmp_path, module_name):
     assert not (output.parent / "figshare_123").exists()
 
 
-@pytest.mark.parametrize("module_name", ["npdb.cli.cli", "npdb.cli.bagel"])
-def test_other_provider_staging_path_is_unchanged(tmp_path, module_name):
-    module = importlib.import_module(module_name)
+def test_other_provider_staging_path_is_unchanged(tmp_path):
+    module = importlib.import_module("npdb.cli.cli")
     manager = Mock()
     manager.provider_name = ProviderName.ZENODO
     output = tmp_path / "out"
-    staging = tmp_path / "zenodo_123"
+    staging = output / "zenodo_123"
     manager.fetch.return_value = staging
     with (
         patch.object(module.ProviderManagerFactory, "create", return_value=manager),
-        patch.object(module, "unpack_provider_archives", return_value=staging),
-        patch.object(module, "prepare_provider_dataset", return_value=staging),
         patch("npdb.cli.cli.local2bagel") as conversion,
     ):
         module._provider_call(
-            "zenodo", "123", output=output,
-            online_url="https://example.com", access_type="public", mode="manual",
-            phenotype_dict=None, headless=True, timeout=300, artifacts_dir=None,
-            ai_provider=None, ai_model=None, header_map=None, extend_modalities=True,
+            "zenodo",
+            "123",
+            output=output,
+            online_url="https://example.com",
+            access_type="public",
+            mode="manual",
+            phenotype_dict=None,
+            headless=True,
+            timeout=300,
+            artifacts_dir=None,
+            ai_provider=None,
+            ai_model=None,
+            header_map=None,
+            extend_modalities=True,
         )
     manager.fetch.assert_called_once_with("123", staging)
     assert conversion.call_args.kwargs["output"] == output

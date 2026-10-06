@@ -30,4 +30,4 @@ class ZenodoProviderManager(ProviderManager):
         if self.token:
             os.environ["ZENODO_ACCESS_TOKEN"] = self.token
         zenodo_get.download(record_or_doi=identifier, output_dir=str(output_path))
-        return output_path
+        return self.prepare_fetched(output_path)

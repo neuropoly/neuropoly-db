@@ -23,4 +23,4 @@ class OpenNeuroProviderManager(ProviderManager):
 
         openneuro.download(dataset=identifier, target_dir=str(output_path), **kwargs)
 
-        return output_path
+        return self.prepare_fetched(output_path)

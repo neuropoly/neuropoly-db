@@ -1,9 +1,18 @@
+import io
+import zipfile
 from unittest.mock import Mock, call, patch
 
 import httpx
 import pytest
 
 from npdb.managers.figshare import FigshareProviderManager
+
+
+@pytest.fixture
+def download_only(monkeypatch):
+    monkeypatch.setattr(
+        FigshareProviderManager, "prepare_fetched", lambda self, path: path
+    )
 
 
 def _response(payload=None, content=b""):
@@ -14,7 +23,7 @@ def _response(payload=None, content=b""):
     return response
 
 
-def test_fetch_article_id_does_not_search(tmp_path):
+def test_fetch_article_id_does_not_search(tmp_path, download_only):
     article = _response(
         {"files": [{"name": "dataset.tsv", "download_url": "file-url"}]}
     )
@@ -23,7 +32,9 @@ def test_fetch_article_id_does_not_search(tmp_path):
 
     with (
         patch("npdb.managers.figshare.httpx.post") as post,
-        patch("npdb.managers.figshare.httpx.get", side_effect=[article, download]) as get,
+        patch(
+            "npdb.managers.figshare.httpx.get", side_effect=[article, download]
+        ) as get,
     ):
         result = manager.fetch("12345", tmp_path)
 
@@ -37,7 +48,7 @@ def test_fetch_article_id_does_not_search(tmp_path):
     assert (tmp_path / "dataset.tsv").read_bytes() == b"contents"
 
 
-def test_fetch_collection_doi_downloads_each_article(tmp_path):
+def test_fetch_collection_doi_downloads_each_article(tmp_path, download_only):
     collection_search = _response([{"id": 123}, {"id": 456}])
     article_1 = _response(
         {"files": [{"name": "first.tsv", "download_url": "first-url"}]}
@@ -48,16 +59,32 @@ def test_fetch_collection_doi_downloads_each_article(tmp_path):
     download_1 = _response(content=b"first")
     download_2 = _response(content=b"second")
     manager = FigshareProviderManager()
+    prepared = tmp_path / "prepared"
+
+    def prepare(path):
+        assert path == tmp_path
+        assert (path / "first.tsv").read_bytes() == b"first"
+        assert (path / "second.tsv").read_bytes() == b"second"
+        return prepared
 
     with (
         patch("npdb.managers.figshare.httpx.post") as post,
         patch(
             "npdb.managers.figshare.httpx.get",
-            side_effect=[collection_search, article_1, download_1, article_2, download_2],
+            side_effect=[
+                collection_search,
+                article_1,
+                download_1,
+                article_2,
+                download_2,
+            ],
         ) as get,
+        patch.object(manager, "prepare_fetched", side_effect=prepare) as preparation,
     ):
-        manager.fetch("10.6084/m9.figshare.c.7372564", tmp_path)
+        result = manager.fetch("10.6084/m9.figshare.c.7372564", tmp_path)
 
+    assert result == prepared
+    preparation.assert_called_once_with(tmp_path)
     post.assert_not_called()
     assert get.call_args_list[0] == call(
         "https://api.figshare.com/v2/collections/7372564/articles",
@@ -81,7 +108,7 @@ def test_fetch_collection_doi_downloads_each_article(tmp_path):
     assert (tmp_path / "second.tsv").read_bytes() == b"second"
 
 
-def test_fetch_article_doi_falls_back_to_exact_doi_search(tmp_path):
+def test_fetch_article_doi_falls_back_to_exact_doi_search(tmp_path, download_only):
     no_collection = _response([])
     article_search = _response([{"id": 123, "doi": "10.6084/m9.figshare.123"}])
     article = _response({"files": []})
@@ -97,7 +124,48 @@ def test_fetch_article_doi_falls_back_to_exact_doi_search(tmp_path):
         manager.fetch("https://doi.org/10.6084/m9.figshare.123", tmp_path)
 
     assert post.call_count == 2
-    assert post.call_args_list[1].kwargs["json"]["search_for"] == "10.6084/m9.figshare.123"
+    assert (
+        post.call_args_list[1].kwargs["json"]["search_for"] == "10.6084/m9.figshare.123"
+    )
+
+
+def test_collection_prepares_shared_dataset_after_all_component_archives(tmp_path):
+    masks = io.BytesIO()
+    with zipfile.ZipFile(masks, "w") as archive:
+        archive.writestr("markers/sub-01_mask.nii.gz", b"mask")
+    rawdata = io.BytesIO()
+    with zipfile.ZipFile(rawdata, "w") as archive:
+        archive.writestr("rawdata/sub-01/anat/sub-01_T2w.nii.gz", b"first")
+        archive.writestr("rawdata/sub-02/anat/sub-02_T2w.nii.gz", b"second")
+    manager = FigshareProviderManager()
+    with (
+        patch(
+            "npdb.managers.figshare.httpx.get",
+            side_effect=[
+                _response([{"id": 123}, {"id": 456}]),
+                _response(
+                    {"files": [{"name": "markers.zip", "download_url": "markers-url"}]}
+                ),
+                _response(content=masks.getvalue()),
+                _response(
+                    {"files": [{"name": "rawdata.zip", "download_url": "rawdata-url"}]}
+                ),
+                _response(content=rawdata.getvalue()),
+            ],
+        ),
+        patch.object(
+            manager, "prepare_fetched", wraps=manager.prepare_fetched
+        ) as preparation,
+    ):
+        result = manager.fetch("10.6084/m9.figshare.c.7372564", tmp_path)
+    preparation.assert_called_once_with(tmp_path)
+    assert result == tmp_path
+    assert (result / "sub-01/anat/sub-01_T2w.nii.gz").read_bytes() == b"first"
+    assert (result / "sub-02/anat/sub-02_T2w.nii.gz").read_bytes() == b"second"
+    assert (result / "derivatives/markers/sub-01_mask.nii.gz").read_bytes() == b"mask"
+    assert (result / "participants.tsv").read_text() == (
+        "participant_id\tage\tsex\nsub-01\tN/A\tN/A\nsub-02\tN/A\tN/A\n"
+    )
 
 
 def test_fetch_unknown_doi_raises_clear_error(tmp_path):
@@ -122,7 +190,9 @@ def test_collection_resolves_actual_member_ids(identifier):
     # Collection members have no resource_doi linking them to the collection.
     members = [{"id": article_id, "resource_doi": None} for article_id in member_ids]
     with (
-        patch("npdb.managers.figshare.httpx.get", return_value=_response(members)) as get,
+        patch(
+            "npdb.managers.figshare.httpx.get", return_value=_response(members)
+        ) as get,
         patch("npdb.managers.figshare.httpx.post") as post,
     ):
         result = FigshareProviderManager()._article_ids(
@@ -172,7 +242,7 @@ def test_collection_http_failure_is_propagated():
         FigshareProviderManager()._article_ids("10.6084/m9.figshare.c.7372564", {})
 
 
-def test_existing_download_can_be_refetched(tmp_path):
+def test_existing_download_can_be_refetched(tmp_path, download_only):
     (tmp_path / "README").write_bytes(b"previous")
     with patch(
         "npdb.managers.figshare.httpx.get",
@@ -201,9 +271,7 @@ def test_malformed_collection_response_raises_clear_error(payload, message):
 
 
 def test_duplicate_names_do_not_overwrite_another_article(tmp_path):
-    article = _response(
-        {"files": [{"name": "README", "download_url": "file-url"}]}
-    )
+    article = _response({"files": [{"name": "README", "download_url": "file-url"}]})
     with (
         patch(
             "npdb.managers.figshare.httpx.get",
@@ -222,7 +290,7 @@ def test_duplicate_names_do_not_overwrite_another_article(tmp_path):
 
 
 @pytest.mark.parametrize("final_status", [200, 403])
-def test_download_follows_redirects(tmp_path, final_status):
+def test_download_follows_redirects(tmp_path, final_status, download_only):
     download_url = "https://ndownloader.figshare.com/files/48013288"
     storage_url = "https://storage.example/rawdata.zip?signature=test"
     requests = []

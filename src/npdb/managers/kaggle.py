@@ -32,4 +32,4 @@ class KaggleProviderManager(ProviderManager):
         target = Path(downloaded)
         if not target.exists():
             target = path
-        return target
+        return self.prepare_fetched(target)

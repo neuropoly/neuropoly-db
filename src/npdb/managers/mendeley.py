@@ -41,4 +41,4 @@ class MendeleyProviderManager(ProviderManager):
                 continue
             content = httpx.get(download_url, timeout=60).raise_for_status().content
             (output_path / file_name).write_bytes(content)
-        return output_path
+        return self.prepare_fetched(output_path)
