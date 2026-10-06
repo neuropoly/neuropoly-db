@@ -1,0 +1,10 @@
+**
+!tools/
+!tools/bids-validator-rust/
+!tools/bids-validator-rust/Cargo.toml
+!tools/bids-validator-rust/Cargo.lock
+!tools/bids-validator-rust/src/
+!tools/bids-validator-rust/src/main.rs
+!.devcontainer/
+!.devcontainer/Dockerfile
+!.devcontainer/Dockerfile.dockerignore

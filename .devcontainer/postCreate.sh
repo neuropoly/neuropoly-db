@@ -229,6 +229,14 @@ else
     echo "   ✓ git-annex already available"
 fi
 
+echo ""
+echo "==> Checking native BIDS tools..."
+command -v dcm2niix >/dev/null || {
+    echo "ERROR: dcm2niix is missing. Rebuild the workspace container."
+    exit 1
+}
+bash scripts/install_bids_validator.sh .venv
+
 # ── 9. Summary ────────────────────────────────────────────────────────────
 echo ""
 echo "──────────────────────────────────────────────────────────"

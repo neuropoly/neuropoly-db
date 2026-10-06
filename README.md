@@ -46,6 +46,9 @@ All `npdb` commands are **interactive by default** and require user input to pro
 - Install [Python 3.12+](https://www.python.org/downloads/)
 - Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - Install [git-annex](https://git-annex.branchable.com/install/)
+- Install [Rust 1.85+ with Cargo](https://rustup.rs/) to build the pinned Rust BIDS validator.
+- Install `dcm2niix` for MIDRC DICOM conversion. The workspace container includes
+  both native tools; see [Native Tools](./docs/npdb/native_tools.md).
 
 ### Installation
 
@@ -81,7 +84,23 @@ All `npdb` commands are **interactive by default** and require user input to pro
    > - All optional integrations: `uv sync --active --group all`
    > - Provider-specific groups: `uv sync --active --group git gitea openneuro ...`
 
-3. (Recommended) If you intend on using the **assisted or automated modes** for BIDS standardization and conversion to NeuroBagel (see commands below), you need to **install the automation extra**. Run the following commands to install it :
+3. **Install the native validation and conversion tools**:
+
+  ```bash
+  # Debian/Ubuntu; run system package installation yourself.
+  sudo apt-get update
+  sudo apt-get install -y dcm2niix build-essential
+  bash scripts/install_bids_validator.sh
+  .venv/bin/bids-validator-rust --version
+  dcm2niix --version
+  ```
+
+  The installer builds the locked Rust `bids-validate 0.0.3` runner into the
+  active environment (or `.venv`). There is no JavaScript/Deno validator
+  installation or fallback. See [Native Tools](./docs/npdb/native_tools.md)
+  for other platforms, container rebuilds, and validation coverage.
+
+4. (Recommended) If you intend on using the **assisted or automated modes** for BIDS standardization and conversion to NeuroBagel (see commands below), you need to **install the automation extra**. Run the following commands to install it :
 
     ```bash
     uv sync --active --extra annotation-automation
@@ -98,7 +117,7 @@ The following provider-specific `npdb convert bagel` commands are supported as p
 - `npdb convert bagel git <repo_url> <output>`
 - `npdb convert bagel kaggle <dataset_handle> <output>`
 - `npdb convert bagel mendeley <dataset_id> <output>`
-- `npdb convert bagel midrc <manifest.json> <output>`
+- `npdb convert bagel midrc <dataset_url_or_id_or_guid_or_manifest> <output>`
 - `npdb convert bagel openneuro <dataset_id> <output>`
 - `npdb convert bagel zenodo <record_id_or_doi> <output>`
 - `npdb convert bagel figshare <article_id_or_doi> <output>`
@@ -106,6 +125,10 @@ The following provider-specific `npdb convert bagel` commands are supported as p
 For providers that require credentials or a large local cache, the repository docs and the CLI help describe the exact env vars and setup steps. For example, Kaggle and archive-only Zenodo downloads require `--cache-dir` or `NP_NPDB_CACHE_DIR`; the CLI will stop with a clear error if it is missing because the download can be large.
 
 See the provider guide: [docs/npdb/provider_managers.md](./docs/npdb/provider_managers.md).
+
+For MIDRC Discovery datasets, file GUIDs, portal manifests, authenticated
+downloads, caching, and shared conversion requirements, see the
+[MIDRC download guide](./docs/npdb/download/guides/midrc.md).
 
 ### Usage guides
 
