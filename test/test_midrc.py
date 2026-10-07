@@ -515,9 +515,12 @@ def test_extraction_retains_cached_archives(manager, sdk, tmp_path):
 
 
 def test_shared_pipeline_produces_real_neurobagel_jsonld(manager, sdk, tmp_path):
+    from inspect import signature
+
     import nibabel as nib
     import numpy as np
     from bagel import mappings
+    from bagel.cli import pheno
 
     from npdb.managers.annotation import NeurobagelAnnotator
 
@@ -598,6 +601,8 @@ def test_shared_pipeline_produces_real_neurobagel_jsonld(manager, sdk, tmp_path)
             },
         }
     ]
+    # Bagel captures CLI choices at import time, independently of runtime metadata.
+    config_choices = signature(pheno).parameters["config"].default.click_type
     with (
         patch("npdb.cli.cli.ProviderManagerFactory.create", return_value=manager),
         patch(
@@ -606,6 +611,10 @@ def test_shared_pipeline_produces_real_neurobagel_jsonld(manager, sdk, tmp_path)
         patch("npdb.managers.midrc.httpx.stream", return_value=response(data)),
         patch.object(NeurobagelAnnotator, "execute", side_effect=annotate),
         patch.object(mappings, "CONFIG_NAMESPACES_MAPPING", namespaces),
+        patch.object(mappings, "CONFIG_NAMESPACES_FETCHING_ERR", None),
+        patch.object(
+            config_choices, "choices", tuple(item["config_name"] for item in namespaces)
+        ),
         patch(
             "bagel.utilities.bids_utils.get_bids_suffix_to_std_term_mapping",
             return_value={"T2w": "nidm:T2Weighted"},

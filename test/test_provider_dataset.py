@@ -6,9 +6,9 @@ from unittest.mock import Mock, patch
 import pytest
 from typer.testing import CliRunner
 
-from npdb.cli.helpers import prepare_provider_dataset
 from npdb.managers.figshare import FigshareProviderManager
 from npdb.managers.model import ProviderManager, ProviderName
+from npdb.managers.preparation import prepare_provider_dataset
 
 
 def test_reorganizes_dataset_and_generates_participants(tmp_path):

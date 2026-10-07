@@ -114,13 +114,14 @@ def test_neurobagel_validation_gate_uses_rust_instead_of_pybids(tmp_path):
     manager.cli.invoke.side_effect = lambda app, arguments: invoke(arguments)
     with (
         patch(
-            "npdb.managers.neurobagel.validate_bids_dataset", return_value=report
+            "npdb.managers.neurobagel.validate_and_repair_bids_dataset",
+            return_value={**report, "repair": {"final_report": report}},
         ) as validation,
         patch("bagel.cli.BIDSLayout") as original_layout,
     ):
         manager.bids2tsv(str(tmp_path), str(tmp_path / "bids.tsv"))
         assert bagel_cli.BIDSLayout is original_layout
-    validation.assert_called_once_with(str(tmp_path))
+    validation.assert_called_once_with(str(tmp_path), severity_threshold="warning")
     original_layout.assert_not_called()
 
 

@@ -108,7 +108,8 @@ class ProviderManagerFactory:
             return KaggleProviderManager(cache_dir=cache_dir)
         if provider_name == ProviderName.MENDELEY:
             return MendeleyProviderManager(
-                access_token=token or os.environ.get("NP_MENDELEY_ACCESS_TOKEN")
+                access_token=token or os.environ.get("NP_MENDELEY_ACCESS_TOKEN"),
+                cache_dir=cache_dir,
             )
         if provider_name == ProviderName.MIDRC:
             return MIDRCProviderManager(

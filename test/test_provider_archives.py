@@ -1,14 +1,15 @@
 import importlib
 import io
 import stat
+import struct
 import tarfile
 import zipfile
 from unittest.mock import Mock, patch
 
 import pytest
 
-from npdb.cli.helpers import unpack_provider_archives
 from npdb.managers.model import ProviderManager
+from npdb.managers.preparation import unpack_provider_archives
 
 
 def test_provider_preparation_hooks_are_ordered(tmp_path):
@@ -144,6 +145,52 @@ def test_existing_symlink_cannot_redirect_extraction(tmp_path):
         unpack_provider_archives(root)
     assert archive_path.exists()
     assert not (outside / "participants.tsv").exists()
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_legacy_zip_with_wrapped_32_bit_offsets(tmp_path, corrupt):
+    original = io.BytesIO()
+    with zipfile.ZipFile(original, "w") as archive:
+        archive.writestr("first.tsv", b"first")
+        archive.writestr("second.tsv", b"second")
+        archive.writestr("third.tsv", b"third")
+        second_offset = archive.getinfo("second.tsv").header_offset
+        third_offset = archive.getinfo("third.tsv").header_offset
+        central_offset = archive.start_dir
+    data = bytearray(original.getvalue())
+    physical_second = (1 << 32) - 64
+    physical_third = (1 << 32) + 64
+    physical_central = physical_third + central_offset - third_offset
+    central = central_offset
+    for offset in (0, physical_second, physical_third % (1 << 32)):
+        struct.pack_into("<L", data, central + 42, offset)
+        name_size, extra_size, comment_size = struct.unpack_from(
+            "<3H", data, central + 28
+        )
+        central += 46 + name_size + extra_size + comment_size
+    struct.pack_into("<L", data, len(data) - 6, physical_central % (1 << 32))
+    archive_path = tmp_path / "legacy.zip"
+    # A sparse gap reproduces 4-GiB offset overflow without storing 4 GiB.
+    with archive_path.open("wb") as stream:
+        stream.write(data[:second_offset])
+        stream.seek(physical_second)
+        stream.write(data[second_offset:third_offset])
+        stream.seek(physical_third)
+        stream.write(data[third_offset:])
+        if corrupt:
+            stream.seek(30)
+            stream.write(b"X")
+    if corrupt:
+        with pytest.raises(zipfile.BadZipFile, match="filename mismatch"):
+            unpack_provider_archives(tmp_path)
+        assert archive_path.exists()
+        assert not (tmp_path / "first.tsv").exists()
+    else:
+        unpack_provider_archives(tmp_path)
+        assert (tmp_path / "first.tsv").read_bytes() == b"first"
+        assert (tmp_path / "second.tsv").read_bytes() == b"second"
+        assert (tmp_path / "third.tsv").read_bytes() == b"third"
+        assert not archive_path.exists()
 
 
 @pytest.mark.parametrize("corrupt", [False, True])

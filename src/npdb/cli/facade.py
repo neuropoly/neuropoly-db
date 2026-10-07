@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Optional
 
 from npdb.annotation import AnnotationConfig
+from npdb.cli.helpers import extend_bids_description
+from npdb.external.bids import BidsSeverity, validate_and_repair_bids_dataset
 from npdb.managers.annotation import BIDSStandardizer, NeurobagelAnnotator
 from npdb.managers.neuropoly import BagelNeuroPolyMTL
 from npdb.report import LedgerObserver, RunLedger
@@ -36,12 +38,18 @@ class DatasetConversionFacade:
     ) -> None:
         self._annotation_config = annotation_config
         self._run_ledger = run_ledger or RunLedger()
+        self.bids_repair_report: dict | None = None
 
     async def run(
         self,
         dataset_dir: Path,
         output: Path,
         extend_modalities: bool = False,
+        bids_version: str | None = None,
+        suffix_aliases: dict[str, str] | None = None,
+        online_url: str | None = None,
+        access_type: str = "restricted",
+        severity_threshold: BidsSeverity | str = BidsSeverity.WARNING,
     ) -> None:
         """
         Execute the full gitea → Neurobagel JSON-LD conversion for *dataset*.
@@ -56,6 +64,13 @@ class DatasetConversionFacade:
 
         # Locate dataset_description.json
         dataset_description_path = dataset_dir / "dataset_description.json"
+        self.bids_repair_report = validate_and_repair_bids_dataset(
+            dataset_dir,
+            bids_version=bids_version,
+            suffix_aliases=suffix_aliases,
+            severity_threshold=severity_threshold,
+        )
+
         if not dataset_description_path.exists():
             self._run_ledger.record_failure(
                 f"dataset_description.json not found in {dataset_dir}"
@@ -67,6 +82,14 @@ class DatasetConversionFacade:
 
         with open(dataset_description_path, "r", encoding="utf-8") as f:
             dataset_description = json.load(f)
+
+        if online_url is not None:
+            dataset_description = extend_bids_description(
+                dataset_dir.name,
+                str(dataset_dir),
+                online_url,
+                access_type,
+            )
 
         # Locate participants.tsv
         participants_tsv_path = dataset_dir / "participants.tsv"
@@ -97,14 +120,20 @@ class DatasetConversionFacade:
         bagel_manager = BagelNeuroPolyMTL(str(output))
         phenotypes_tsv = str(output / "phenotypes.tsv")
         phenotypes_annotations = str(output / "phenotypes_annotations.json")
-        bagel_manager.convert_bids(
+        result = bagel_manager.convert_bids(
             dataset=dataset_dir.name,
             bids_dir=str(dataset_dir),
             phenotypes_tsv=phenotypes_tsv,
             phenotypes_annotations=phenotypes_annotations,
             dataset_description=dataset_description,
             extend_modalities=extend_modalities,
+            bids_version=bids_version,
+            suffix_aliases=suffix_aliases,
+            validation_report=self.bids_repair_report,
+            severity_threshold=severity_threshold,
         )
+        if result is not None:
+            self.bids_repair_report = result
 
         self._run_ledger.record_success()
         self._run_ledger.flush()

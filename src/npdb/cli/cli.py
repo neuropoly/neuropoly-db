@@ -1,8 +1,9 @@
+import json
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Optional
 
 import typer
 from dotenv import load_dotenv
@@ -12,15 +13,16 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from npdb.annotation.modes import AnnotationMode
 from npdb.cli.display import RepoDownloadDisplay
 from npdb.cli.helpers import (
-    extend_bids_description,
     fetch_url,
     is_http_url,
     looks_like_non_git_repo_error,
     read_tsv,
     repo_has_git_annex,
 )
+from npdb.external.bids import BidsSeverity, BidsValidationError
 from npdb.factories import GiteaManagerFactory, ProviderManagerFactory
 from npdb.managers.git import GitProviderManager
+from npdb.managers.mendeley import MendeleyProviderManager
 from npdb.managers.midrc import MIDRCProviderManager
 from npdb.managers.model import ProviderName
 
@@ -32,6 +34,24 @@ OPTION_GROUP_NAMES = {
     "ai": "AI Options",
     "troubleshooting": "Troubleshooting",
 }
+
+BIDS_VERSION_HELP = (
+    "BIDSVersion to supply when missing or invalid; use 'latest' to resolve "
+    "the latest stable official BIDS release (requires network access)."
+)
+
+BidsSeverityOption = Annotated[
+    BidsSeverity,
+    typer.Option(
+        "--bids-severity-threshold",
+        help=(
+            "Highest allowed severity after all BIDS repairs: info, warning, or error. "
+            "Only findings strictly above this level fail final validation."
+        ),
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+]
 
 
 npdb = typer.Typer(
@@ -58,6 +78,13 @@ convert = typer.Typer(
 )
 npdb.add_typer(convert, name="convert")
 
+repair = typer.Typer(
+    help="Plan, apply, and recover safe BIDS dataset repairs.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+npdb.add_typer(repair, name="repair")
+
 
 bagel = typer.Typer(
     help=(
@@ -71,6 +98,200 @@ bagel = typer.Typer(
     rich_markup_mode="rich",
 )
 convert.add_typer(bagel, name="bagel")
+
+
+def _parse_suffix_aliases(values: list[str] | None) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for value in values or []:
+        source, separator, target = value.partition("=")
+        source = source.strip()
+        target = target.strip()
+        if not separator or not source or not target:
+            raise ValueError(
+                f"Invalid suffix alias '{value}'. Use --suffix-alias OLD=NEW."
+            )
+        if source in aliases and aliases[source] != target:
+            raise ValueError(
+                f"Conflicting suffix aliases for '{source}': "
+                f"'{aliases[source]}' and '{target}'."
+            )
+        aliases[source] = target
+    return aliases
+
+
+def _echo_repair_plan(plan: dict, output_format: str) -> None:
+    if output_format == "json":
+        typer.echo(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
+    if "application" in plan:
+        application = plan["application"]
+        gate = application["severity_gate"]
+        status = "passed" if gate["passed"] else "failed"
+        typer.echo(f"Final severity check (above {gate['threshold']}): {status}")
+        return
+
+    typer.echo(f"BIDS repair plan for {plan.get('dataset', 'dataset')}")
+    operations = plan.get("operations", [])
+    findings = plan.get("findings", [])
+    typer.echo(f"Proposed operations: {len(operations)}")
+    for operation in operations:
+        source = operation.get("source", "")
+        target = operation.get("target", "")
+        detail = f"{source} -> {target}" if target else source
+        typer.echo(f"  - {operation.get('kind', 'repair')}: {detail}")
+    typer.echo(f"Findings: {len(findings)}")
+    for finding in findings:
+        location = f" [{finding['path']}]" if finding.get("path") else ""
+        resolution = finding.get("resolution") or finding.get("action")
+        detail = f" — {resolution}" if resolution else ""
+        typer.echo(
+            f"  - {finding.get('severity', 'info').upper()} "
+            f"{finding.get('code', 'UNKNOWN')}{location}: "
+            f"{finding.get('message', '')}{detail}"
+        )
+    if plan.get("blocking") and "application" not in plan:
+        typer.echo(
+            "Unresolved error findings in this plan; the final severity check "
+            "runs only after --apply."
+        )
+
+
+@repair.command("bids")
+def repair_bids(
+    dataset: Path = typer.Argument(
+        ...,
+        help="BIDS dataset root to inspect.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Apply safe planned repairs. By default this command is read-only.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Explicitly request a read-only repair plan (the default).",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    output_format: str = typer.Option(
+        "human",
+        "--format",
+        help="Output format: human or json.",
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["output"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """Plan repairs by default; pass --apply to modify dataset files."""
+    from npdb.bids_repair import plan_bids_repair
+    from npdb.external.bids import validate_and_repair_bids_dataset
+
+    output_format = output_format.lower()
+    if output_format not in {"human", "json"}:
+        typer.echo("Error: --format must be 'human' or 'json'.", err=True)
+        raise typer.Exit(code=2)
+    if apply and dry_run:
+        typer.echo("Error: --apply and --dry-run cannot be used together.", err=True)
+        raise typer.Exit(code=2)
+    try:
+        aliases = _parse_suffix_aliases(suffix_alias)
+    except ValueError as exc:
+        typer.echo(f"Error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    try:
+        if apply:
+            report = validate_and_repair_bids_dataset(
+                dataset,
+                bids_version=bids_version,
+                suffix_aliases=aliases or None,
+                severity_threshold=bids_severity_threshold,
+            )
+            result = _repair_application_result(dataset, report)
+        else:
+            result = plan_bids_repair(
+                dataset,
+                bids_version=bids_version,
+                suffix_aliases=aliases or None,
+            )
+        _echo_repair_plan(result, output_format)
+    except BidsValidationError as exc:
+        _echo_repair_plan(_repair_application_result(dataset, exc.report), output_format)
+        raise typer.Exit(code=1) from exc
+    except (OSError, ValueError, RuntimeError) as exc:
+        if output_format == "json":
+            typer.echo(json.dumps({"error": str(exc)}, sort_keys=True), err=True)
+        else:
+            typer.echo(f"Error planning/applying BIDS repairs: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+
+def _repair_application_result(dataset: Path, report: dict) -> dict:
+    summary = report["repair"]
+    return {
+        "dataset": str(dataset),
+        "findings": summary["unresolved"],
+        "operations": summary["operations"],
+        "blocking": not summary["severity_gate"]["passed"],
+        "application": summary,
+    }
+
+
+@repair.command("recover")
+def recover_bids(
+    dataset: Path = typer.Argument(
+        ...,
+        help="BIDS dataset root with an incomplete repair journal.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+    ),
+    output_format: str = typer.Option(
+        "human",
+        "--format",
+        help="Output format: human or json.",
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["output"],
+    ),
+):
+    """Recover the most recent incomplete journaled BIDS repair, if present."""
+    from npdb.bids_repair import recover_bids_repair
+
+    output_format = output_format.lower()
+    if output_format not in {"human", "json"}:
+        typer.echo("Error: --format must be 'human' or 'json'.", err=True)
+        raise typer.Exit(code=2)
+    try:
+        result = recover_bids_repair(dataset)
+    except (OSError, RuntimeError, ValueError) as exc:
+        typer.echo(f"Error recovering BIDS repair: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    if output_format == "json":
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        typer.echo(result.get("message", "BIDS repair recovery completed."))
+        if result.get("journal"):
+            typer.echo(f"Journal: {result['journal']}")
 
 
 @bagel.command("local")
@@ -158,6 +379,19 @@ def local2bagel(
         ),
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert local dataset metadata to Neurobagel JSON-LD[/bold]
@@ -200,6 +434,12 @@ def local2bagel(
         typer.echo("Error: --ai-provider required with --ai-model.", err=True)
         raise typer.Exit(code=1)
 
+    try:
+        suffix_aliases = _parse_suffix_aliases(suffix_alias)
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=2) from e
+
     if header_map:
         try:
             hmap = load_header_map(header_map)
@@ -237,7 +477,6 @@ def local2bagel(
     )
 
     facade = DatasetConversionFacade(annotation_config)
-    extend_bids_description(input_dir.name, str(input_dir), online_url, access_type)
 
     with Progress(
         SpinnerColumn(),
@@ -251,6 +490,11 @@ def local2bagel(
                     input_dir,
                     output,
                     extend_modalities=extend_modalities,
+                    bids_version=bids_version,
+                    suffix_aliases=suffix_aliases or None,
+                    severity_threshold=bids_severity_threshold,
+                    online_url=online_url,
+                    access_type=access_type,
                 )
             )
         except Exception as e:
@@ -276,6 +520,9 @@ def _provider_call(
     ai_model: Optional[str],
     header_map: Optional[Path],
     extend_modalities: bool,
+    bids_version: Optional[str] = None,
+    suffix_alias: Optional[list[str]] = None,
+    bids_severity_threshold: BidsSeverity = BidsSeverity.WARNING,
     cache_dir: Optional[Path] = None,
     **kwargs,
 ) -> None:
@@ -305,13 +552,15 @@ def _provider_call(
         online_url, access_type = manager.describe(identifier)
     local_fetch = Path(output) / f"{provider_id}_{dataset_id}"
 
-    if isinstance(manager, MIDRCProviderManager):
+    if isinstance(manager, (MIDRCProviderManager, MendeleyProviderManager)):
         display = RepoDownloadDisplay()
         manager.add_download_observer(display)
         with Live(display, refresh_per_second=4, transient=False):
             fetched = manager.fetch(identifier, local_fetch, **kwargs)
     else:
         fetched = manager.fetch(identifier, local_fetch, **kwargs)
+    if provider_id == ProviderName.MENDELEY.value:
+        access_type = manager.access_type
 
     local2bagel(
         input_dir=fetched,
@@ -327,6 +576,9 @@ def _provider_call(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
     )
 
 
@@ -406,6 +658,19 @@ def gitea2bagel(
         ),
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert NeuroGitea dataset metadata to Neurobagel JSON-LD[/bold]
@@ -454,6 +719,9 @@ def gitea2bagel(
             ai_model=ai_model,
             header_map=header_map,
             extend_modalities=extend_modalities,
+            bids_version=bids_version,
+            suffix_alias=suffix_alias,
+            bids_severity_threshold=bids_severity_threshold,
         )
 
 
@@ -531,6 +799,19 @@ def git2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert Git repository metadata to Neurobagel JSON-LD[/bold]
@@ -565,6 +846,9 @@ def git2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         cache_dir=cache_dir,
     )
 
@@ -645,6 +929,19 @@ def kaggle2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert Kaggle dataset metadata to Neurobagel JSON-LD[/bold]
@@ -675,6 +972,9 @@ def kaggle2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         cache_dir=cache_dir,
     )
 
@@ -693,6 +993,16 @@ def mendeley2bagel(
     token: Optional[str] = typer.Option(
         None,
         help="Optional Mendeley access token. Or set NP_MENDELEY_ACCESS_TOKEN.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Optional verified download cache. Or set NP_NPDB_CACHE_DIR.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
@@ -748,6 +1058,19 @@ def mendeley2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert Mendeley dataset metadata to Neurobagel JSON-LD[/bold]
@@ -756,11 +1079,15 @@ def mendeley2bagel(
     metadata records into the Neurobagel format. The command is useful when a
     dataset is exposed through a public or controlled Mendeley archive.
 
+    Reuse verified downloads with [cyan]--cache-dir[/cyan] or
+    [cyan]NP_NPDB_CACHE_DIR[/cyan]. Cached archives survive extraction and
+    conversion failures. Leave space for cache, staging, and extracted data.
+
     Access requirements:
-    * Public Mendeley archives may work without authentication.
-    * Restricted or access-controlled datasets usually require an access token or
-      app credentials, via [cyan]NP_MENDELEY_ACCESS_TOKEN[/cyan] and the related
-      Mendeley client variables.
+    * Public Mendeley datasets are downloaded without authentication.
+    * Restricted datasets require an OAuth access token via [cyan]--token[/cyan]
+      or [cyan]NP_MENDELEY_ACCESS_TOKEN[/cyan]. Client credentials alone are not
+      exchanged for a token by this command.
     * See the provider guide and the template environment file for the required
       variables.
     """
@@ -769,7 +1096,7 @@ def mendeley2bagel(
         dataset,
         output=output,
         online_url=f"https://data.mendeley.com/datasets/{dataset}",
-        access_type="restricted",
+        access_type="public",
         mode=mode,
         phenotype_dict=phenotype_dict,
         headless=headless,
@@ -779,7 +1106,11 @@ def mendeley2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         token=token,
+        cache_dir=cache_dir,
     )
 
 
@@ -868,6 +1199,19 @@ def midrc2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert MIDRC dataset metadata to Neurobagel JSON-LD[/bold]
@@ -900,6 +1244,9 @@ def midrc2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         cache_dir=cache_dir,
         credentials_path=str(credentials_path) if credentials_path else None,
         endpoint=endpoint,
@@ -982,6 +1329,19 @@ def openneuro2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert OpenNeuro dataset metadata to Neurobagel JSON-LD[/bold]
@@ -1011,6 +1371,9 @@ def openneuro2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         cache_dir=cache_dir,
     )
 
@@ -1094,6 +1457,19 @@ def zenodo2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert Zenodo record metadata to Neurobagel JSON-LD[/bold]
@@ -1125,6 +1501,9 @@ def zenodo2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         cache_dir=cache_dir,
         token=token,
     )
@@ -1199,6 +1578,19 @@ def figshare2bagel(
         help="Use NeuroPoly custom modality mappings by default.",
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
     [bold]Convert Figshare article metadata to Neurobagel JSON-LD[/bold]
@@ -1229,6 +1621,9 @@ def figshare2bagel(
         ai_model=ai_model,
         header_map=header_map,
         extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
         token=token,
     )
 

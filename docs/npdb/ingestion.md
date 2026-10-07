@@ -9,6 +9,19 @@ Use this guide to choose the right `npdb convert bagel` entry point before inges
 
 Both commands feed the same annotation and conversion pipeline. After conversion, place the generated JSON-LD files in the location used by your NeuroBagel node and reload the node as described in [NeuroBagel node management](../neurobagel/manage.md#update-the-datasets-available).
 
+When this pipeline runs BIDS validation, it automatically applies supported
+structural repairs and revalidates. It summarizes final info/warning/error counts
+and saves detailed findings in a manifest beside the repair journal. By
+default, fails if validation errors remain. The
+`--bids-severity-threshold info|warning|error` option sets the highest allowed
+severity, checked only after repair finishes (default: `warning`).
+Local conversion can therefore modify metadata and
+rename files in the input dataset; preserve a separate source copy when needed.
+Use the standalone `npdb repair bids <dataset> --dry-run` command to inspect a
+repair plan first. See
+[BIDS validation and repair](./provider_managers.md#bids-validation-and-repair)
+for supported rules, explicit-input requirements, and safety boundaries.
+
 ## Local BIDS datasets (default when the dataset is already on disk)
 
 Use `npdb convert bagel local` when you already have the BIDS dataset in a local directory, on shared storage, or in a location that does not need to be resolved from NeuroGitea/Forgejo first.

@@ -167,12 +167,9 @@ class TestCLINoRegressions:
         (input_dir / "dataset_description.json").write_text("{}", encoding="utf-8")
         output_dir = tmp_path / "output"
 
-        with (
-            patch("npdb.cli.cli.extend_bids_description") as mock_extend,
-            patch(
-                "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
-            ) as mock_run,
-        ):
+        with patch(
+            "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
+        ) as mock_run:
             result = runner.invoke(
                 npdb,
                 LOCAL_COMMAND
@@ -186,13 +183,9 @@ class TestCLINoRegressions:
             )
 
         assert result.exit_code == 0, result.output
-        mock_extend.assert_called_once_with(
-            input_dir.name,
-            str(input_dir),
-            "https://example.com/repo",
-            "restricted",
-        )
         mock_run.assert_awaited_once()
+        assert mock_run.await_args.kwargs["online_url"] == "https://example.com/repo"
+        assert mock_run.await_args.kwargs["access_type"] == "restricted"
         assert "Conversion complete!" in result.stdout
 
 

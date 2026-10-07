@@ -518,14 +518,22 @@ class TestLlmResolve:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def bagel_suffix_functions(monkeypatch):
+    bids_utils = pytest.importorskip("bagel.utilities.bids_utils")
+    mapping = {"T1w": "nidm:T1Weighted", "bold": "nidm:Functional"}
+    monkeypatch.setattr(
+        bids_utils, "get_bids_suffix_to_std_term_mapping", lambda: mapping.copy()
+    )
+    monkeypatch.setattr(bids_utils, "get_all_bids_suffixes", lambda: set(mapping))
+    monkeypatch.setattr(bids_utils, "get_bids_raw_data_suffixes", lambda: set(mapping))
+    return bids_utils
+
+
 class TestPatchBagelSuffixMap:
 
-    def test_extra_entries_appear_in_mapping(self):
-        try:
-            from bagel.utilities import bids_utils
-        except ImportError:
-            pytest.skip("bagel not installed")
-
+    def test_extra_entries_appear_in_mapping(self, bagel_suffix_functions):
+        bids_utils = bagel_suffix_functions
         extra = {
             "TEM": "nb:TransmissionElectronMicroscopy",
             "BF": "nb:BrightFieldMicroscopy",
@@ -534,30 +542,31 @@ class TestPatchBagelSuffixMap:
         mapping = bids_utils.get_bids_suffix_to_std_term_mapping()
         assert mapping.get("TEM") == "nb:TransmissionElectronMicroscopy"
         assert mapping.get("BF") == "nb:BrightFieldMicroscopy"
+        assert set(extra) <= bids_utils.get_all_bids_suffixes()
+        assert set(extra) <= bids_utils.get_bids_raw_data_suffixes()
 
-    def test_builtin_entries_not_removed_after_patch(self):
-        try:
-            from bagel.utilities import bids_utils
-        except ImportError:
-            pytest.skip("bagel not installed")
-
+    def test_builtin_entries_not_removed_after_patch(self, bagel_suffix_functions):
+        bids_utils = bagel_suffix_functions
+        original = bids_utils.get_bids_suffix_to_std_term_mapping()
         patch_bagel_suffix_map({"MY_CUSTOM": "nb:Custom"})
         mapping = bids_utils.get_bids_suffix_to_std_term_mapping()
-        # Standard entries must still be present
-        assert "T1w" in mapping
-        assert "bold" in mapping
+        assert {key: mapping[key] for key in original} == original
+        assert set(original) <= bids_utils.get_all_bids_suffixes()
+        assert set(original) <= bids_utils.get_bids_raw_data_suffixes()
 
-    def test_idempotent_multiple_patches(self):
-        try:
-            from bagel.utilities import bids_utils
-        except ImportError:
-            pytest.skip("bagel not installed")
-
+    def test_idempotent_multiple_patches(self, bagel_suffix_functions):
+        bids_utils = bagel_suffix_functions
         extra = {"PATCH_TEST": "nb:PatchTest"}
         patch_bagel_suffix_map(extra)
+        first_mapping = bids_utils.get_bids_suffix_to_std_term_mapping()
+        first_all = bids_utils.get_all_bids_suffixes()
+        first_raw = bids_utils.get_bids_raw_data_suffixes()
         patch_bagel_suffix_map(extra)
         mapping = bids_utils.get_bids_suffix_to_std_term_mapping()
         assert mapping.get("PATCH_TEST") == "nb:PatchTest"
+        assert mapping == first_mapping
+        assert bids_utils.get_all_bids_suffixes() == first_all
+        assert bids_utils.get_bids_raw_data_suffixes() == first_raw
 
     def test_no_error_when_bagel_not_installed(self, monkeypatch):
         """patch_bagel_suffix_map must be a no-op if bagel is not importable."""
