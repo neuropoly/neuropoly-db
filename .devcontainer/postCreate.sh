@@ -41,7 +41,7 @@ if [ -f "$_REQ_HASH_FILE" ] && [ "$(cat "$_REQ_HASH_FILE")" = "$_REQ_HASH" ]; th
     echo "==> Project install up to date (pyproject.toml/uv.lock unchanged) — skipping."
 else
     echo "==> Syncing project with uv..."
-    uv sync --active --quiet --dev --extra annotation-automation
+    uv sync --active --quiet --dev --all-extras
     echo "$_REQ_HASH" > "$_REQ_HASH_FILE"
 fi
 
@@ -51,8 +51,8 @@ fi
 echo ""
 echo "==> Installing Playwright system dependencies and browsers..."
 
-# Sync project with annotation-automation extra
-uv sync --active --quiet --extra annotation-automation
+# Sync project with all extras (providers + annotation-automation)
+uv sync --active --quiet --all-extras
 
 # Run playwright installation tool from chromium browser package
 uv run playwright install chromium --with-deps > /dev/null 2>&1 || {
