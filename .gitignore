@@ -12,3 +12,5 @@ wg0.conf
 
 *.pyc
 __pycache__/
+
+npdb-error*

@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any, ClassVar
 
+from npdb.extras import require_module
 from npdb.managers.model import ProviderManager, ProviderName
 
 
@@ -17,13 +18,9 @@ class ZenodoProviderManager(ProviderManager):
         self.token = token or os.environ.get("NP_ZENODO_TOKEN")
 
     def fetch(self, identifier: str, output_dir: str | Path, **kwargs: Any) -> Path:
-        try:
-            import zenodo_get  # type: ignore
-        except ImportError as exc:  # pragma: no cover - environment guard
-            raise ImportError(
-                "The Zenodo provider requires the zenodo extra. "
-                "Install it with: uv sync --group zenodo"
-            ) from exc
+        zenodo_get = require_module(
+            "zenodo_get", extra="zenodo", feature="The Zenodo provider"
+        )
 
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)

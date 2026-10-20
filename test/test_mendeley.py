@@ -33,9 +33,12 @@ class Chunks(httpx.SyncByteStream):
 
 
 @pytest.fixture
-def transport(monkeypatch):
+def transport(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("NP_MENDELEY_ACCESS_TOKEN", raising=False)
     monkeypatch.delenv("NP_NPDB_CACHE_DIR", raising=False)
+    monkeypatch.setenv(
+        "XDG_CACHE_HOME", str(tmp_path_factory.mktemp("mendeley-default-cache"))
+    )
     clients = []
 
     def install(handler):
@@ -360,8 +363,8 @@ def test_cache_survives_extraction_and_reuses_content_across_redirect_urls(
 def test_preparation_failure_keeps_cache_for_retry(tmp_path, transport):
     content = bundle()
     requests = serve(transport, metadata(content), content)
-    cache = tmp_path / "cache"
-    manager = MendeleyProviderManager(cache_dir=cache)
+    manager = MendeleyProviderManager()
+    cache = manager.cache_dir
     with (
         patch.object(manager, "prepare_fetched", side_effect=ValueError("preparation")),
         pytest.raises(ValueError, match="preparation"),
@@ -369,13 +372,20 @@ def test_preparation_failure_keeps_cache_for_retry(tmp_path, transport):
         manager.fetch("yd695ynbdz", tmp_path / "out")
     assert next(cache.rglob("dataset.zip")).read_bytes() == content
     requests.clear()
-    root = manager.fetch("yd695ynbdz", tmp_path / "out")
+    root = MendeleyProviderManager().fetch("yd695ynbdz", tmp_path / "out")
     assert [str(request.url) for request in requests] == [PUBLIC]
     assert (root / "participants.tsv").exists()
+    requests.clear()
+    MendeleyProviderManager().fetch("yd695ynbdz", tmp_path / "retry")
+    assert [str(request.url) for request in requests] == [PUBLIC]
+    assert next(cache.rglob("dataset.zip")).read_bytes() == content
 
 
 @pytest.mark.parametrize("corruption", ["same-size", "truncated"])
-def test_corrupt_cache_is_redownloaded(tmp_path, transport, corruption):
+@pytest.mark.parametrize("valid_target", [True, False])
+def test_corrupt_cache_is_recovered_from_verified_target_or_download(
+    tmp_path, transport, corruption, valid_target
+):
     content = b"participant_id\nsub-01\n"
     payload = metadata(content, "participants.tsv")
     requests = serve(transport, payload, content)
@@ -384,9 +394,13 @@ def test_corrupt_cache_is_redownloaded(tmp_path, transport, corruption):
     manager.fetch("yd695ynbdz", tmp_path / "out")
     cached = next(cache.rglob("participants.tsv"))
     cached.write_bytes(b"x" * len(content) if corruption == "same-size" else b"x")
+    if not valid_target:
+        (tmp_path / "out/participants.tsv").write_bytes(b"x" * len(content))
     requests.clear()
     manager.fetch("yd695ynbdz", tmp_path / "out")
-    assert [str(request.url) for request in requests] == [PUBLIC, DOWNLOAD]
+    assert [str(request.url) for request in requests] == (
+        [PUBLIC] if valid_target else [PUBLIC, DOWNLOAD]
+    )
     assert cached.read_bytes() == content
     assert (tmp_path / "out/participants.tsv").read_bytes() == content
 
@@ -630,3 +644,59 @@ def test_factory_wires_cache_and_explicit_path_overrides_environment(
     assert explicit.cache_dir == tmp_path / "cache"
     from_env = ProviderManagerFactory.create("mendeley")
     assert from_env.cache_dir == tmp_path / "env-cache"
+
+
+@pytest.mark.parametrize("xdg", [True, False])
+def test_default_cache_uses_xdg_or_home(tmp_path, monkeypatch, xdg):
+    monkeypatch.delenv("NP_NPDB_CACHE_DIR", raising=False)
+    monkeypatch.setattr("npdb.managers.mendeley.Path.home", lambda: tmp_path / "home")
+    if xdg:
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+        root = tmp_path / "xdg"
+    else:
+        monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+        root = tmp_path / "home/.cache"
+    assert MendeleyProviderManager().cache_dir == root / "npdb/downloads"
+
+
+def test_verified_existing_archive_is_adopted_without_download(tmp_path, transport):
+    content = bundle()
+    requests = serve(transport, metadata(content), content)
+    output = tmp_path / "out"
+    output.mkdir()
+    (output / "dataset.zip").write_bytes(content)
+    manager = MendeleyProviderManager()
+    observer = Mock(spec=DownloadObserver)
+    manager.add_download_observer(observer)
+    with patch(
+        "npdb.managers.mendeley.shutil.disk_usage",
+        return_value=SimpleNamespace(free=len(content)),
+    ):
+        root = manager.fetch("yd695ynbdz", output)
+    assert [str(request.url) for request in requests] == [PUBLIC]
+    assert (root / "participants.tsv").exists()
+    assert next(manager.cache_dir.rglob("dataset.zip")).read_bytes() == content
+    assert not (output / "dataset.zip").exists()
+    assert any(
+        "Reusing verified download" in call.args[1]
+        for call in observer.on_repo_step.call_args_list
+    )
+
+
+def test_cli_default_cache_survives_downstream_conversion_failure(tmp_path, transport):
+    module = importlib.import_module("npdb.cli.cli")
+    content = bundle()
+    requests = serve(transport, metadata(content), content)
+    command = [
+        "convert", "bagel", "mendeley", "yd695ynbdz", str(tmp_path / "out"),
+        "--mode", "full-auto", "--headless", "--bids-version", "latest",
+    ]
+    with patch.object(
+        module, "local2bagel", side_effect=[ValueError("after download"), None]
+    ):
+        failed = CliRunner().invoke(module.npdb, command)
+        assert failed.exit_code == 1
+        assert "after download" in failed.output
+        completed = CliRunner().invoke(module.npdb, command)
+        assert completed.exit_code == 0, completed.exception
+    assert [str(request.url) for request in requests] == [PUBLIC, DOWNLOAD, PUBLIC]

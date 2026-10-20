@@ -383,8 +383,20 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> list[str]:
 
         ann["Levels"] = nb_levels
         annotations[col]["Annotations"] = ann
-        if nb_levels:
-            annotations[col]["Levels"] = bids_levels
+        for value, entry in nb_levels.items():
+            if value not in bids_levels:
+                bids_levels[value] = entry.get("Label", value)
+                changed = True
+                warnings_list.append(
+                    f"fix_missing_levels: column '{col}': added BIDS Levels "
+                    f"description for {value!r}."
+                )
+        if col_data.get("Levels") is None:
+            changed = True
+            warnings_list.append(
+                f"fix_missing_levels: column '{col}': added BIDS Levels."
+            )
+        annotations[col]["Levels"] = bids_levels
 
     if changed:
         with open(annotations_path, "w", encoding="utf-8") as fh:
@@ -414,6 +426,65 @@ def fix_missing_levels(tsv_path: Path, annotations_path: Path) -> list[str]:
             fh.writelines(new_lines)
 
     return warnings_list
+
+
+def strip_tsv_cell_whitespace(tsv_path: Path) -> list[str]:
+    """Trim leading/trailing whitespace from TSV headers and cells.
+
+    Padded values (e.g. ``"sub-06 "``) otherwise fail exact matching against
+    BIDS subject folders and annotated categorical levels.
+    """
+    if not tsv_path.exists():
+        return []
+    with tsv_path.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.reader(stream, delimiter="\t"))
+    changed: list[str] = []
+    for index, row in enumerate(rows, 1):
+        for position, value in enumerate(row):
+            stripped = value.strip()
+            if stripped != value:
+                row[position] = stripped
+                changed.append(f"row {index}: {value!r} → {stripped!r}")
+    if not changed:
+        return []
+    with tsv_path.open("w", newline="", encoding="utf-8") as stream:
+        csv.writer(stream, delimiter="\t", lineterminator="\n").writerows(rows)
+    shown = "; ".join(changed[:10])
+    more = f"; … {len(changed) - 10} more" if len(changed) > 10 else ""
+    return [
+        f"strip_tsv_cell_whitespace: trimmed whitespace in {len(changed)} "
+        f"cell(s) of {tsv_path.name}: {shown}{more}."
+    ]
+
+
+def fix_trailing_empty_tsv_cells(tsv_path: Path) -> list[str]:
+    """Remove only surplus empty cells that would shift pandas' TSV columns."""
+    if not tsv_path.exists():
+        return []
+    with tsv_path.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.reader(stream, delimiter="\t"))
+    if not rows:
+        return []
+    width = len(rows[0])
+    corrected = 0
+    for index, row in enumerate(rows[1:], 2):
+        if len(row) <= width:
+            continue
+        if any(value != "" for value in row[width:]):
+            raise ValueError(
+                f"{tsv_path.name}: row {index} has non-empty cells beyond "
+                f"the {width} header columns; refusing to discard data."
+            )
+        del row[width:]
+        corrected += 1
+    if corrected:
+        with tsv_path.open("w", newline="", encoding="utf-8") as stream:
+            csv.writer(stream, delimiter="\t", lineterminator="\n").writerows(rows)
+        return [
+            f"fix_trailing_empty_tsv_cells: removed surplus empty cells from "
+            f"{corrected} row(s) in {tsv_path.name}."
+        ]
+    return []
 
 
 def fix_single_column_tsv(tsv_path: Path) -> list[str]:

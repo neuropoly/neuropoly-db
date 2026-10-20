@@ -7,7 +7,7 @@ flowchart LR
     A[Search on<br/>Neurobagel] --> B[Export a<br/>results file] --> C[npdb download] --> D[Data on<br/>your computer]
 ```
 
-New here? Read **[What's available to you](docs/overview.md)** first.
+New here? Read **[What&#39;s available to you](docs/overview.md)** first.
 
 ## Get started
 
@@ -15,14 +15,13 @@ New here? Read **[What's available to you](docs/overview.md)** first.
 2. **[Install npdb](docs/install.md)**: one command with [uv](https://docs.astral.sh/uv/):
 
    ```bash
-   uv tool install "npdb[download] @ git+https://github.com/neuropoly/neuropoly-db"
+   uv tool install "npdb[all] @ git+https://github.com/neuropoly/neuropoly-db"
    ```
-
-3. **[Find data](docs/find-data.md)** on Neurobagel: <https://data.neuro.polymtl.ca/bagel>.
+3. **[Find data](docs/find-data.md)** on Neurobagel: [https://data.neuro.polymtl.ca/bagel](https://data.neuro.polymtl.ca/bagel).
 4. **[Download data](docs/download-data.md)**:
 
    ```bash
-   npdb download --no-verify-ssl results.tsv -o my-cohort
+   npdb download results.tsv -o my-cohort
    ```
 
 Walk through all of it with an example: **[Tutorial: your first cohort](docs/tutorial-first-cohort.md)**.

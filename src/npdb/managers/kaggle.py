@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, ClassVar
 
+from npdb.extras import require_module
 from npdb.managers.model import ProviderManager, ProviderName
 
 
@@ -14,13 +15,7 @@ class KaggleProviderManager(ProviderManager):
         super().__init__(cache_dir=cache_dir)
 
     def fetch(self, identifier: str, output_dir: str | Path, **_: Any) -> Path:
-        try:
-            import kagglehub  # type: ignore
-        except ImportError as exc:  # pragma: no cover - environment guard
-            raise ImportError(
-                "The Kaggle provider requires the kaggle extra. "
-                "Install it with: uv sync --group kaggle"
-            ) from exc
+        kagglehub = require_module("kagglehub", extra="kaggle", feature="The Kaggle provider")
 
         cache = self.ensure_cache_dir(required=True)
         handle = identifier

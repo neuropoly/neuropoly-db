@@ -6,12 +6,22 @@ Supports headless and headed modes with configurable timeouts.
 Includes manual retry logic for transient failures and artifact capture on errors.
 """
 
+from __future__ import annotations
+
 import asyncio
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from npdb.extras import MissingExtraError
+
+try:
+    from playwright.async_api import async_playwright
+except ImportError:  # 'annotation-automation' extra not installed; raised on launch
+    async_playwright = None
+
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
 
 
 class NBAnnotationToolBrowserSession:
@@ -72,6 +82,10 @@ class NBAnnotationToolBrowserSession:
         Raises:
             RuntimeError: If browser launch fails.
         """
+        if async_playwright is None:
+            raise MissingExtraError(
+                "Browser automation (--mode assist|auto|full-auto)", "annotation-automation"
+            )
         try:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(headless=self.headless)

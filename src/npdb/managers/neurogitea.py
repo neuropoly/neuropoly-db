@@ -1,7 +1,14 @@
-from collections.abc import Sequence
+from __future__ import annotations
 
-import gitea as gt_client
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+from npdb.extras import require_module
+
+if TYPE_CHECKING:
+    import gitea as gt_client
 
 _RETRY = retry(
     stop=stop_after_attempt(3),
@@ -16,7 +23,8 @@ class OrganizationMixin:
 
     @_RETRY
     def _fetch_organization(self, client: gt_client.Gitea, organization: str):
-        return gt_client.Organization.request(client, organization)
+        gitea = require_module("gitea", extra="gitea", feature="NeuroGitea access")
+        return gitea.Organization.request(client, organization)
 
     @property
     def datasets(self) -> Sequence[object]:

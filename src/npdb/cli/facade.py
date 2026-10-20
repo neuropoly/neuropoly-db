@@ -14,6 +14,7 @@ from typing import Optional
 
 from npdb.annotation import AnnotationConfig
 from npdb.cli.helpers import extend_bids_description
+from npdb.errors import NpdbError
 from npdb.external.bids import BidsSeverity, validate_and_repair_bids_dataset
 from npdb.managers.annotation import BIDSStandardizer, NeurobagelAnnotator
 from npdb.managers.neuropoly import BagelNeuroPolyMTL
@@ -114,7 +115,11 @@ class DatasetConversionFacade:
         if not success:
             self._run_ledger.record_failure("Annotation step returned False")
             self._run_ledger.flush()
-            return
+            raise NpdbError(
+                "Annotation did not complete; no Neurobagel files were written.",
+                hint="Rerun with --headed to watch the annotation tool, or keep screenshots with --artifacts-dir.",
+                docs="Development-Ingestion#annotation-modes",
+            )
 
         # Convert BIDS
         bagel_manager = BagelNeuroPolyMTL(str(output))
@@ -182,3 +187,9 @@ class BIDSStandardizationFacade:
             self._run_ledger.record_failure("BIDSStandardizer returned False")
 
         self._run_ledger.flush()
+        if not success:
+            raise NpdbError(
+                "Standardization did not complete; participants files were not updated.",
+                hint="Rerun with --dry-run to see the proposed changes.",
+                docs="Development-Standardization",
+            )

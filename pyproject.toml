@@ -25,19 +25,22 @@ dependencies = [
   "tenacity>=8.0",
 ]
 
+# One extra per provider backend; `all` is the recommended install. Once installers
+# support PEP 771, add `default-optional-dependency-keys = ["all"]` to [project].
 [project.optional-dependencies]
 annotation-automation = [
   "playwright>=1.58.0",
 ]
-git = [
-  "GitPython>=3.1.62",
-]
+# git and git-annex are system executables; the git provider needs no Python package.
+git = []
 gitea = [
   "py-gitea==0.2.10",
 ]
 kaggle = [
   "kagglehub==1.0.2",
 ]
+mendeley = []
+figshare = []
 midrc = [
   "gen3==4.28.4"
 ]
@@ -48,14 +51,17 @@ zenodo = [
   "zenodo_get==3.1.0",
 ]
 download = [
-  "npdb[git,gitea]",
+  "npdb[gitea]",
 ]
 all = [
-  "npdb[git,gitea,kaggle,midrc,openneuro,zenodo]",
+  "npdb[git,gitea,kaggle,mendeley,figshare,midrc,openneuro,zenodo]",
+]
+full = [
+  "npdb[all,annotation-automation]",
 ]
 
 [project.scripts]
-npdb = "npdb.cli.cli:npdb"
+npdb = "npdb.cli.cli:run"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

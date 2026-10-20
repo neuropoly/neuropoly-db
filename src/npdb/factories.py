@@ -15,6 +15,7 @@ from typing import Any
 
 from npdb.annotation import AnnotationConfig
 from npdb.annotation.modes import AnnotationMode
+from npdb.errors import ConfigurationError
 from npdb.managers.figshare import FigshareProviderManager
 from npdb.managers.git import GitProviderManager
 from npdb.managers.kaggle import KaggleProviderManager
@@ -61,8 +62,10 @@ class GiteaManagerFactory:
             if not val
         ]
         if missing:
-            raise ValueError(
-                f"Missing required environment variables: {', '.join(missing)}"
+            raise ConfigurationError(
+                f"Missing required environment variables: {', '.join(missing)}",
+                hint="Add them to a .env file in the folder where you run npdb (see docs/get-access.md).",
+                docs="Development-Provider-NeuroGitea#access",
             )
 
         return DataNeuroPolyMTL(

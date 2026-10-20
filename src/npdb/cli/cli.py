@@ -1,17 +1,20 @@
+import functools
 import json
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Callable, Optional
 
+import click
 import typer
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from rich.live import Live
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from npdb.annotation.modes import AnnotationMode
 from npdb.cli.display import RepoDownloadDisplay
+from npdb.cli.errors import report_exception
 from npdb.cli.helpers import (
     fetch_url,
     is_http_url,
@@ -19,6 +22,7 @@ from npdb.cli.helpers import (
     read_tsv,
     repo_has_git_annex,
 )
+from npdb.errors import ConfigurationError, UsageError
 from npdb.external.bids import BidsSeverity, BidsValidationError
 from npdb.factories import GiteaManagerFactory, ProviderManagerFactory
 from npdb.managers.git import GitProviderManager
@@ -54,7 +58,42 @@ BidsSeverityOption = Annotated[
 ]
 
 
-npdb = typer.Typer(
+def handle_errors(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (
+            click.exceptions.Exit,
+            click.exceptions.ClickException,
+            click.exceptions.Abort,
+            SystemExit,
+        ):
+            raise
+        except (Exception, KeyboardInterrupt) as exc:
+            raise typer.Exit(report_exception(exc)) from exc
+
+    return wrapper
+
+
+class NpdbTyper(typer.Typer):
+    """Typer app whose commands all report errors through :func:`handle_errors`."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("pretty_exceptions_enable", False)
+        super().__init__(*args, **kwargs)
+
+    def command(self, *args, **kwargs):
+        register = super().command(*args, **kwargs)
+
+        def decorator(func: Callable) -> Callable:
+            register(handle_errors(func))
+            return func
+
+        return decorator
+
+
+npdb = NpdbTyper(
     help="NeuroPoly Database CLI for converting, standardizing, and downloading BIDS datasets.",
     context_settings={"help_option_names": ["--help", "-h"]},
     no_args_is_help=True,
@@ -68,7 +107,7 @@ def main():
     return
 
 
-convert = typer.Typer(
+convert = NpdbTyper(
     help=(
         "Dataset conversion workflows for standardizing and ingesting BIDS data "
         "into the Neurobagel JSON-LD format."
@@ -78,7 +117,7 @@ convert = typer.Typer(
 )
 npdb.add_typer(convert, name="convert")
 
-repair = typer.Typer(
+repair = NpdbTyper(
     help="Plan, apply, and recover safe BIDS dataset repairs.",
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -86,18 +125,25 @@ repair = typer.Typer(
 npdb.add_typer(repair, name="repair")
 
 
-bagel = typer.Typer(
+bagel = NpdbTyper(
     help=(
         "Convert dataset metadata into Neurobagel JSON-LD. The pipeline downloads or "
         "loads the source dataset, normalizes the tabular metadata, and writes the "
         "resulting Neurobagel output. Dataset access requirements vary by backend; "
-        "see the provider guide in docs/npdb/provider_managers.md and the "
-        "environment template in template.env."
+        "see the provider guide at "
+        "https://github.com/neuropoly/neuropoly-db/wiki/Development-Providers "
+        "and the environment template in template.env."
     ),
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
 convert.add_typer(bagel, name="bagel")
+
+
+def _load_env() -> None:
+    # A .env in the working directory wins; the repo-root .env is a fallback for source checkouts.
+    load_dotenv(find_dotenv(usecwd=True))
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
 
 def _parse_suffix_aliases(values: list[str] | None) -> dict[str, str]:
@@ -107,11 +153,11 @@ def _parse_suffix_aliases(values: list[str] | None) -> dict[str, str]:
         source = source.strip()
         target = target.strip()
         if not separator or not source or not target:
-            raise ValueError(
+            raise UsageError(
                 f"Invalid suffix alias '{value}'. Use --suffix-alias OLD=NEW."
             )
         if source in aliases and aliases[source] != target:
-            raise ValueError(
+            raise UsageError(
                 f"Conflicting suffix aliases for '{source}': "
                 f"'{aliases[source]}' and '{target}'."
             )
@@ -207,16 +253,10 @@ def repair_bids(
 
     output_format = output_format.lower()
     if output_format not in {"human", "json"}:
-        typer.echo("Error: --format must be 'human' or 'json'.", err=True)
-        raise typer.Exit(code=2)
+        raise UsageError("--format must be 'human' or 'json'.")
     if apply and dry_run:
-        typer.echo("Error: --apply and --dry-run cannot be used together.", err=True)
-        raise typer.Exit(code=2)
-    try:
-        aliases = _parse_suffix_aliases(suffix_alias)
-    except ValueError as exc:
-        typer.echo(f"Error: {exc}", err=True)
-        raise typer.Exit(code=2) from exc
+        raise UsageError("--apply and --dry-run cannot be used together.")
+    aliases = _parse_suffix_aliases(suffix_alias)
     try:
         if apply:
             report = validate_and_repair_bids_dataset(
@@ -234,13 +274,9 @@ def repair_bids(
             )
         _echo_repair_plan(result, output_format)
     except BidsValidationError as exc:
-        _echo_repair_plan(_repair_application_result(dataset, exc.report), output_format)
-        raise typer.Exit(code=1) from exc
-    except (OSError, ValueError, RuntimeError) as exc:
-        if output_format == "json":
-            typer.echo(json.dumps({"error": str(exc)}, sort_keys=True), err=True)
-        else:
-            typer.echo(f"Error planning/applying BIDS repairs: {exc}", err=True)
+        _echo_repair_plan(
+            _repair_application_result(dataset, exc.report), output_format
+        )
         raise typer.Exit(code=1) from exc
 
 
@@ -279,13 +315,8 @@ def recover_bids(
 
     output_format = output_format.lower()
     if output_format not in {"human", "json"}:
-        typer.echo("Error: --format must be 'human' or 'json'.", err=True)
-        raise typer.Exit(code=2)
-    try:
-        result = recover_bids_repair(dataset)
-    except (OSError, RuntimeError, ValueError) as exc:
-        typer.echo(f"Error recovering BIDS repair: {exc}", err=True)
-        raise typer.Exit(code=1) from exc
+        raise UsageError("--format must be 'human' or 'json'.")
+    result = recover_bids_repair(dataset)
     if output_format == "json":
         typer.echo(json.dumps(result, indent=2, sort_keys=True))
     else:
@@ -420,50 +451,29 @@ def local2bagel(
     try:
         mode_enum = AnnotationMode(mode)
     except ValueError:
-        typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError(
+            f"Invalid mode '{mode}'. Use one of: manual, assist, auto, full-auto."
+        ) from None
 
     if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:
-        typer.echo("Error: --ai-model required with --ai-provider.", err=True)
-        raise typer.Exit(code=1)
-
+        raise UsageError("--ai-model required with --ai-provider.")
     if ai_model and not ai_provider:
-        typer.echo("Error: --ai-provider required with --ai-model.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-provider required with --ai-model.")
 
-    try:
-        suffix_aliases = _parse_suffix_aliases(suffix_alias)
-    except ValueError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=2) from e
+    suffix_aliases = _parse_suffix_aliases(suffix_alias)
 
     if header_map:
-        try:
-            hmap = load_header_map(header_map)
-            static = load_static_mappings()
-            valid_keys = set(static.get("mappings", {}).keys())
-            validate_header_map_keys(hmap, valid_keys)
-        except (ValueError, FileNotFoundError) as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        hmap = load_header_map(header_map)
+        static = load_static_mappings()
+        valid_keys = set(static.get("mappings", {}).keys())
+        validate_header_map_keys(hmap, valid_keys)
 
-    try:
-        output.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        typer.echo(f"Error creating output directory '{output}': {e}", err=True)
-        raise typer.Exit(code=1)
-
+    output.mkdir(parents=True, exist_ok=True)
     if artifacts_dir:
-        try:
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            typer.echo(
-                f"Error creating artifacts directory '{artifacts_dir}': {e}", err=True
-            )
-            raise typer.Exit(code=1)
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     annotation_config = AnnotationConfigFactory.create_from_cli_args(
         mode=mode,
@@ -484,22 +494,18 @@ def local2bagel(
         transient=True,
     ) as progress:
         progress.add_task(f"Converting {input_dir.name}...", total=None)
-        try:
-            asyncio.run(
-                facade.run(
-                    input_dir,
-                    output,
-                    extend_modalities=extend_modalities,
-                    bids_version=bids_version,
-                    suffix_aliases=suffix_aliases or None,
-                    severity_threshold=bids_severity_threshold,
-                    online_url=online_url,
-                    access_type=access_type,
-                )
+        asyncio.run(
+            facade.run(
+                input_dir,
+                output,
+                extend_modalities=extend_modalities,
+                bids_version=bids_version,
+                suffix_aliases=suffix_aliases or None,
+                severity_threshold=bids_severity_threshold,
+                online_url=online_url,
+                access_type=access_type,
             )
-        except Exception as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        )
 
     typer.echo(f"Conversion complete! Output saved to: {output}")
 
@@ -586,7 +592,7 @@ def _provider_call(
 def gitea2bagel(
     dataset: str = typer.Argument(
         ...,
-        help="Dataset name on Gitea (under the datasets organization).",
+        help="Dataset name on NeuroGitea (under the datasets organization).",
     ),
     output: Path = typer.Argument(
         ...,
@@ -598,7 +604,7 @@ def gitea2bagel(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to Gitea.",
+        help="Verify SSL certificates when connecting to NeuroGitea.",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
@@ -675,28 +681,23 @@ def gitea2bagel(
     """
     [bold]Convert NeuroGitea dataset metadata to Neurobagel JSON-LD[/bold]
 
-    This command resolves a dataset from the configured neurogitea instance,
+    This command resolves a dataset from the configured NeuroGitea instance,
     clones it locally, and then runs the metadata conversion flow: metadata
     normalization, phenotype resolution, and Neurobagel export.
 
     Access requirements:
-    * Requires the Gitea/Forgejo connection variables in .env or the environment:
+    * Requires the NeuroGitea connection variables in .env or the environment:
       [cyan]NP_GITEA_APP_URL[/cyan], [cyan]NP_GITEA_APP_USER[/cyan],
       [cyan]NP_GITEA_APP_TOKEN[/cyan].
     * Private or restricted datasets may also require the instance-specific SSH
-      or token access described in the Gitea setup docs.
+      or token access described in docs/get-access.md.
     * If the dataset itself is public, token-based authentication is often not
       required beyond repository access policies.
     """
     from npdb.factories import GiteaManagerFactory
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
-
-    try:
-        gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
-    except ValueError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1)
+    _load_env()
+    gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
 
     with tempfile.TemporaryDirectory(prefix="npdb_clone_") as tmp_dir:
         local_clone = Path(tmp_dir) / dataset
@@ -828,7 +829,8 @@ def git2bagel(
     * Large repositories or archive-heavy datasets should use a persistent
       [cyan]--cache-dir[/cyan] so the local staging step is not exhausted by a
       temporary download location.
-    * See the provider documentation in [cyan]docs/npdb/provider_managers.md[/cyan]
+    * See the provider guide at
+      [cyan]https://github.com/neuropoly/neuropoly-db/wiki/Development-Provider-Git[/cyan]
       and the environment template in [cyan]template.env[/cyan].
     """
     _provider_call(
@@ -1661,7 +1663,7 @@ def download(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to Gitea (git mode only).",
+        help="Verify SSL certificates when connecting to NeuroGitea (git mode only).",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     verbose: bool = typer.Option(
@@ -1690,11 +1692,7 @@ def download(
     Git operations require [bold]NP_GITEA_APP_URL[/bold], [bold]NP_GITEA_APP_USER[/bold],
     and [bold]NP_GITEA_APP_TOKEN[/bold] environment variables.
     """
-    try:
-        rows = read_tsv(query_results)
-    except (OSError, ValueError) as exc:
-        typer.echo(f"Error reading TSV: {exc}", err=True)
-        raise typer.Exit(code=1)
+    rows = read_tsv(query_results)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1761,17 +1759,13 @@ def download(
 
     git_failures = 0
     if subjects:
-        load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+        _load_env()
 
-        try:
-            if verbose:
-                typer.echo("Initializing Gitea manager...")
-            gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
-            if verbose:
-                typer.echo("Gitea manager initialized successfully.")
-        except ValueError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        if verbose:
+            typer.echo("Initializing Gitea manager...")
+        gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
+        if verbose:
+            typer.echo("Gitea manager initialized successfully.")
 
         gitea_manager.verbose = verbose
 
@@ -1834,7 +1828,7 @@ def download(
     typer.echo("Download complete!")
 
 
-standardize = typer.Typer(
+standardize = NpdbTyper(
     help="Standardization tools for BIDS datasets.",
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -1935,31 +1929,30 @@ def standardize_bids(
     try:
         mode_enum = AnnotationMode(mode)
     except ValueError:
-        typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError(
+            f"Invalid mode '{mode}'. Use one of: manual, auto, full-auto."
+        ) from None
 
     if mode_enum == AnnotationMode.ASSIST:
-        typer.echo(
-            "Error: --mode assist is no longer supported for 'npdb standardize bids'. "
-            "Use one of: manual, auto, full-auto.",
-            err=True,
+        raise UsageError(
+            "--mode assist is no longer supported for 'npdb standardize bids'. "
+            "Use one of: manual, auto, full-auto."
         )
-        raise typer.Exit(code=1)
 
     if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:
-        typer.echo("Error: --ai-model required with --ai-provider.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-model required with --ai-provider.")
     if ai_model and not ai_provider:
-        typer.echo("Error: --ai-provider required with --ai-model.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-provider required with --ai-model.")
 
     participants_tsv = bids_dir / "participants.tsv"
     if not participants_tsv.exists():
-        typer.echo(f"Error: participants.tsv not found in {bids_dir}.", err=True)
-        raise typer.Exit(code=1)
+        raise ConfigurationError(
+            f"participants.tsv not found in {bids_dir}.",
+            hint="Point npdb standardize bids to the BIDS dataset root.",
+        )
 
     if dry_run:
         typer.echo("Dry-run mode: no files will be modified.\n")
@@ -1979,17 +1972,13 @@ def standardize_bids(
     )
 
     facade = BIDSStandardizationFacade(config)
-
-    try:
-        asyncio.run(facade.run(bids_dir))
-    except FileNotFoundError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1)
-    except Exception as e:
-        typer.echo(f"Error during BIDS standardization: {e}", err=True)
-        raise typer.Exit(code=1)
+    asyncio.run(facade.run(bids_dir))
 
     if dry_run:
         typer.echo("\nDry-run complete. No files were modified.")
     else:
         typer.echo(f"\nBIDS standardization complete: {bids_dir}")
+
+
+def run() -> None:
+    npdb()

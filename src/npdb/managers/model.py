@@ -11,9 +11,20 @@ from queue import Empty, Queue
 from typing import Any, Callable, ClassVar, List, Sequence
 from urllib.parse import urlparse
 
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from npdb.cli.observers import DownloadObserver
+from npdb.errors import ConfigurationError, GitCommandError, redact
+from npdb.extras import MissingExecutableError, require_executable
+
+
+def redact_command(cmd: list[str]) -> str:
+    return redact(shlex.join(cmd))
 
 
 class ProviderName(str, Enum):
@@ -86,10 +97,12 @@ class ProviderManager(Manager):
                 if cache:
                     self.cache_dir = Path(cache)
             if self.cache_dir is None:
-                raise ValueError(
+                raise ConfigurationError(
                     "A cache directory is required for this provider. "
                     "Pass --cache-dir or set NP_NPDB_CACHE_DIR. "
-                    "This download may be large."
+                    "This download may be large.",
+                    hint="npdb ... --cache-dir \"$HOME/.cache/npdb-downloads\"",
+                    docs="Development-Provider-Framework#shared-cache-rule",
                 )
             self.cache_dir.mkdir(parents=True, exist_ok=True)
             return self.cache_dir
@@ -300,7 +313,10 @@ class GitManager(Manager):
         self._notify_repo_step(repo_name, "Sparse checkout complete", 4, 4)
 
     @retry(
-        stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10), reraise=True
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(min=1, max=10),
+        retry=retry_if_not_exception_type(MissingExecutableError),
+        reraise=True,
     )
     def _run_git(
         self,
@@ -327,7 +343,18 @@ class GitManager(Manager):
             RuntimeError: If process exits non-zero or times out.
         """
         if getattr(self, "verbose", False):
-            print(f"+ {shlex.join(cmd)}", flush=True)
+            print(f"+ {redact_command(cmd)}", flush=True)
+
+        if cmd and cmd[0] == "git":
+            require_executable(
+                "git", feature="Git downloads", hint="Install git: https://git-scm.com/downloads"
+            )
+            if "annex" in cmd[1:4]:
+                require_executable(
+                    "git-annex",
+                    feature="git-annex downloads",
+                    hint="Install git-annex: https://git-annex.branchable.com/install/",
+                )
 
         proc = subprocess.Popen(
             cmd,
@@ -382,18 +409,18 @@ class GitManager(Manager):
             return_code = proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired as e:
             proc.kill()
-            raise RuntimeError(f"{context} failed.\nTimeout: {e}") from e
+            raise GitCommandError(f"{context} failed.\nTimeout: {e}") from e
 
         stdout_text = "\n".join(stdout_lines)
         stderr_text = "\n".join(stderr_lines)
 
         if return_code != 0:
             detail = (
-                f"Command: {' '.join(cmd)}\n"
+                f"Command: {redact_command(cmd)}\n"
                 f"Stdout: {stdout_text}\n"
                 f"Stderr: {stderr_text}"
             )
-            raise RuntimeError(f"{context} failed.\n{detail}")
+            raise GitCommandError(f"{context} failed.\n{detail}")
 
         return stdout_text, stderr_text
 

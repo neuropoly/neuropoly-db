@@ -76,8 +76,16 @@ class BagelMixin:
     def _run_bagel_cli(self, *args):
         result = self.cli.invoke(bagel, args)
         if result.exit_code != 0:
+            output = result.output
+            if result.exception is not None and not isinstance(
+                result.exception, SystemExit
+            ):
+                output += (
+                    f"\nBagel exception: {type(result.exception).__name__}: "
+                    f"{result.exception}\n"
+                )
             raise BagelCLIError.from_result(
                 command=" ".join(str(a) for a in args),
                 exit_code=result.exit_code,
-                output=result.output,
-            )
+                output=output,
+            ) from result.exception

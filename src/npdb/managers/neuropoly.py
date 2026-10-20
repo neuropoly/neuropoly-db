@@ -174,11 +174,15 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             fix_age_format,
             fix_missing_levels,
             fix_single_column_tsv,
+            fix_trailing_empty_tsv_cells,
+            strip_tsv_cell_whitespace,
         )
 
         preprocessing_warnings: list[str] = []
         if pheno_tsv_path.exists() and pheno_ann_path.exists():
             preprocessing_warnings.extend(fix_single_column_tsv(pheno_tsv_path))
+            preprocessing_warnings.extend(fix_trailing_empty_tsv_cells(pheno_tsv_path))
+            preprocessing_warnings.extend(strip_tsv_cell_whitespace(pheno_tsv_path))
             preprocessing_warnings.extend(dedup_participant_ids(pheno_tsv_path))
             preprocessing_warnings.extend(fill_empty_id_rows(pheno_tsv_path))
             preprocessing_warnings.extend(

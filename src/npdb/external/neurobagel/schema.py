@@ -161,6 +161,9 @@ def convert_to_bagel_schema(
                     "Label": level_value.get("Label") or level_value.get("label", ""),
                 }
             bagel_dict[column_name]["Annotations"]["Levels"] = normalized_levels
+            bagel_dict[column_name]["Levels"] = {
+                key: value["Label"] for key, value in normalized_levels.items()
+            }
         elif variable_type == "Continuous" and format_term:
             bagel_dict[column_name]["Annotations"]["Format"] = format_term
         elif variable_type == "Continuous" and not format_term:

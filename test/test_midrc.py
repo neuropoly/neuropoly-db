@@ -500,7 +500,8 @@ def test_cli_uses_shared_preparation_and_canonical_url(
         conversion.assert_called_once()
     else:
         assert result.exit_code != 0
-        assert "No BIDS subject labels" in str(result.exception)
+        assert "No BIDS subject labels" in result.output
+        assert "Traceback" not in result.output
         conversion.assert_not_called()
 
 

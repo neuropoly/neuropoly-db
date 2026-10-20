@@ -21,6 +21,8 @@ from npdb.annotation.autofix import (
     fix_age_format,
     fix_missing_levels,
     fix_single_column_tsv,
+    fix_trailing_empty_tsv_cells,
+    strip_tsv_cell_whitespace,
 )
 from npdb.automation.mappings.resolvers import ResolvedMapping
 from npdb.external.neurobagel.schema import expand_iri
@@ -69,6 +71,8 @@ def normalize_participants_tsv(
     """Run the canonical TSV cleanup routines from the autofix module."""
     warnings: list[str] = []
     warnings.extend(fix_single_column_tsv(tsv_path))
+    warnings.extend(fix_trailing_empty_tsv_cells(tsv_path))
+    warnings.extend(strip_tsv_cell_whitespace(tsv_path))
     warnings.extend(fill_empty_id_rows(tsv_path))
     warnings.extend(dedup_participant_ids(tsv_path))
 

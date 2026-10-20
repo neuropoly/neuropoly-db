@@ -20,6 +20,13 @@ LOCAL_COMMAND = ["convert", "bagel", "local"]
 class TestCLIStructure:
     """Tests for CLI interface structure and help."""
 
+    def test_console_entry_delegates_to_app(self):
+        from npdb.cli.cli import run
+
+        with patch("npdb.cli.cli.npdb") as app:
+            run()
+        app.assert_called_once_with()
+
     def test_cli_app_exists(self):
         """Test that CLI app is properly initialized."""
         assert npdb is not None

@@ -11,6 +11,8 @@ from urllib.parse import unquote, urlparse
 
 import httpx
 
+from npdb.errors import ConfigurationError
+from npdb.extras import require_module
 from npdb.managers.model import ProviderManager, ProviderName
 
 
@@ -353,20 +355,18 @@ class MIDRCProviderManager(ProviderManager):
                 partial.unlink()
 
     def fetch(self, identifier: str, output_dir: str | Path, **_: Any) -> Path:
+        feature = "The MIDRC provider"
+        Gen3Auth = require_module("gen3.auth", extra="midrc", feature=feature).Gen3Auth
+        Gen3File = require_module("gen3.file", extra="midrc", feature=feature).Gen3File
+        Gen3Index = require_module("gen3.index", extra="midrc", feature=feature).Gen3Index
         if not self.credentials_path:
-            raise ValueError(
+            raise ConfigurationError(
                 "MIDRC requires a credentials file. Set NP_MIDRC_CREDENTIALS or pass credentials_path. "
-                "The file is usually downloaded from your MIDRC profile as credentials.json."
+                "The file is usually downloaded from your MIDRC profile as credentials.json.",
+                hint="npdb convert bagel midrc ... --credentials-path /absolute/path/to/credentials.json",
+                docs="Development-Provider-MIDRC#access",
             )
         guids = self._resolve(identifier)
-        try:
-            from gen3.auth import Gen3Auth
-            from gen3.file import Gen3File
-            from gen3.index import Gen3Index
-        except ImportError as exc:  # pragma: no cover - environment guard
-            raise ImportError(
-                "The MIDRC provider requires: uv sync --group midrc"
-            ) from exc
         auth = Gen3Auth(self.endpoint, self.credentials_path)
         index = Gen3Index(self.endpoint, auth)
         files = Gen3File(self.endpoint, auth)
