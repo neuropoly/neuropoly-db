@@ -109,6 +109,42 @@ def unpack_provider_archives(fetched: str | Path) -> Path:
     return root
 
 
+def find_dataset_root(root: Path) -> Path:
+    """Return the BIDS root inside ``root``, following wrapper folders.
+
+    Archives often wrap the dataset in a folder such as ``<repo>-<commit>/``.
+    The top-level folder wins whenever it already looks like a dataset.
+    """
+    root = Path(root)
+    if (root / "dataset_description.json").is_file() or any(root.glob("sub-*")):
+        return root
+    excluded = {"__MACOSX", "derivatives", "sourcedata", "stimuli", "code", "phenotype"}
+    candidates = [
+        path
+        for path in [root, *sorted(root.rglob("*"))]
+        if path.is_dir()
+        and not path.is_symlink()
+        and not any(
+            part.startswith(".") or part in excluded
+            for part in path.relative_to(root).parts
+        )
+        and (
+            (path / "participants.tsv").is_file()
+            or (path / "rawdata").is_dir()
+            or any(child.is_dir() for child in path.glob("sub-*"))
+        )
+    ]
+    candidates = [
+        path
+        for path in candidates
+        if not any(parent in candidates for parent in path.parents)
+    ]
+    if len(candidates) > 1:
+        found = ", ".join(str(path.relative_to(root)) for path in candidates)
+        raise ValueError(f"Multiple dataset roots found in {root}: {found}.")
+    return candidates[0] if candidates else root
+
+
 def prepare_provider_dataset(root: Path) -> Path:
     rawdata = root / "rawdata"
     derivatives = root / "derivatives"

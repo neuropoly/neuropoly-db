@@ -89,16 +89,33 @@ def no_interactive_annotation(request, monkeypatch):
     monkeypatch.setattr(NeurobagelAnnotator, "execute", unexpected)
 
 
-def bids_archive() -> bytes:
+# Archive layouts seen in the wild; every provider must find the BIDS root in each.
+LAYOUTS = {
+    "flat": "",
+    "release-wrapper": "lab-dataset-2b5f8f7/",
+    "macos-wrapper": "dataset/",
+    "rawdata": "rawdata/",
+}
+
+
+def bids_archive(layout: str = "flat") -> bytes:
     import nibabel as nib
     import numpy as np
 
+    prefix = LAYOUTS[layout]
     image = nib.Nifti1Image(np.zeros((2, 2, 2), dtype=np.int16), np.eye(4))
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
-        archive.writestr("sub-01/anat/sub-01_T2w.nii.gz", gzip.compress(image.to_bytes()))
-        archive.writestr("participants.tsv", "participant_id\tage\tsex\nsub-01\t42\tF\n")
-        archive.writestr("dataset_description.json", json.dumps({"Name": "Adequacy", "BIDSVersion": "1.9.0"}))
+        archive.writestr(f"{prefix}sub-01/anat/sub-01_T2w.nii.gz", gzip.compress(image.to_bytes()))
+        archive.writestr(f"{prefix}participants.tsv", "participant_id\tage\tsex\nsub-01\t42\tF\n")
+        description = json.dumps({"Name": "Adequacy", "BIDSVersion": "1.9.0"})
+        # BIDS keeps dataset_description.json at the top level next to rawdata/.
+        archive.writestr(
+            "dataset_description.json" if layout == "rawdata" else f"{prefix}dataset_description.json",
+            description,
+        )
+        if layout == "macos-wrapper":
+            archive.writestr("__MACOSX/dataset/sub-01/._sub-01_T2w.nii.gz", b"resource fork")
     return stream.getvalue()
 
 
@@ -187,11 +204,12 @@ def assert_explained(result, *fragments):
 
 
 @pytest.mark.skipif(not has_validator(), reason="bids-validator-rust not installed")
+@pytest.mark.parametrize("layout", LAYOUTS)
 @pytest.mark.parametrize("provider", PROVIDERS, ids=IDS)
-def test_delivered_dataset_is_ingestable(provider, tmp_path):
+def test_delivered_dataset_is_ingestable(provider, layout, tmp_path):
     with ExitStack() as stack:
         ingest_patches(stack)
-        stack.enter_context(patch.object(provider.manager, "fetch", deliver({"dataset.zip": bids_archive()})))
+        stack.enter_context(patch.object(provider.manager, "fetch", deliver({"dataset.zip": bids_archive(layout)})))
         result = runner.invoke(npdb, args(provider, tmp_path))
     assert_ingestable(result, tmp_path / "out")
 

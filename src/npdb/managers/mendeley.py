@@ -11,7 +11,11 @@ from typing import Any, ClassVar
 
 import httpx
 
-from npdb.managers.model import ProviderManager, ProviderName
+from npdb.managers.model import (
+    ProviderManager,
+    ProviderName,
+    default_download_cache,
+)
 
 
 class MendeleyProviderManager(ProviderManager):
@@ -24,13 +28,7 @@ class MendeleyProviderManager(ProviderManager):
         cache_dir: str | Path | None = None,
         **_: Any,
     ):
-        configured_cache = cache_dir or os.environ.get("NP_NPDB_CACHE_DIR")
-        if not configured_cache:
-            cache_home = os.environ.get("XDG_CACHE_HOME")
-            configured_cache = (
-                Path(cache_home) if cache_home else Path.home() / ".cache"
-            ) / "npdb" / "downloads"
-        super().__init__(cache_dir=configured_cache)
+        super().__init__(cache_dir=default_download_cache(cache_dir))
         self.access_token = access_token or os.environ.get("NP_MENDELEY_ACCESS_TOKEN")
 
     def fetch(self, identifier: str, output_dir: str | Path, **_: Any) -> Path:
@@ -265,38 +263,3 @@ class MendeleyProviderManager(ProviderManager):
                 partial.replace(target)
             finally:
                 partial.unlink(missing_ok=True)
-
-    def prepare(self, root: str | Path) -> Path:
-        root = Path(root)
-        excluded = {
-            "__MACOSX",
-            "derivatives",
-            "sourcedata",
-            "stimuli",
-            "code",
-            "phenotype",
-        }
-        # Select a wrapped BIDS root before generic preparation classifies folders.
-        candidates = [
-            path
-            for path in [root, *sorted(root.rglob("*"))]
-            if path.is_dir()
-            and not path.is_symlink()
-            and not any(
-                part.startswith(".") or part in excluded
-                for part in path.relative_to(root).parts
-            )
-            and (
-                (path / "participants.tsv").is_file()
-                or (path / "rawdata").is_dir()
-                or any(child.is_dir() for child in path.glob("sub-*"))
-            )
-        ]
-        candidates = [
-            path
-            for path in candidates
-            if not any(parent in candidates for parent in path.parents)
-        ]
-        if len(candidates) > 1:
-            raise ValueError(f"Multiple Mendeley dataset roots found in {root}.")
-        return super().prepare(candidates[0] if candidates else root)

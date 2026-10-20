@@ -23,6 +23,19 @@ from npdb.errors import ConfigurationError, GitCommandError, redact
 from npdb.extras import MissingExecutableError, require_executable
 
 
+def default_download_cache(cache_dir: str | Path | None = None) -> Path:
+    """Resolve --cache-dir, then NP_NPDB_CACHE_DIR, then the XDG user cache."""
+    configured = cache_dir or os.environ.get("NP_NPDB_CACHE_DIR")
+    if configured:
+        return Path(configured)
+    cache_home = os.environ.get("XDG_CACHE_HOME")
+    return (
+        (Path(cache_home) if cache_home else Path.home() / ".cache")
+        / "npdb"
+        / "downloads"
+    )
+
+
 def redact_command(cmd: list[str]) -> str:
     return redact(shlex.join(cmd))
 
@@ -117,9 +130,12 @@ class ProviderManager(Manager):
         return unpack_provider_archives(fetched)
 
     def prepare(self, root: str | Path) -> Path:
-        from npdb.managers.preparation import prepare_provider_dataset
+        from npdb.managers.preparation import (
+            find_dataset_root,
+            prepare_provider_dataset,
+        )
 
-        return prepare_provider_dataset(Path(root))
+        return prepare_provider_dataset(find_dataset_root(Path(root)))
 
     def prepare_fetched(self, fetched: str | Path) -> Path:
         return self.prepare(self.unpack(fetched))

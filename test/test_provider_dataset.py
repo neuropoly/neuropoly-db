@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from npdb.managers.figshare import FigshareProviderManager
 from npdb.managers.model import ProviderManager, ProviderName
-from npdb.managers.preparation import prepare_provider_dataset
+from npdb.managers.preparation import find_dataset_root, prepare_provider_dataset
 
 
 def test_reorganizes_dataset_and_generates_participants(tmp_path):
@@ -231,3 +231,55 @@ def test_other_provider_staging_path_is_unchanged(tmp_path):
         )
     manager.fetch.assert_called_once_with("123", staging)
     assert conversion.call_args.kwargs["output"] == output
+
+
+def test_described_root_is_kept_even_with_nested_datasets(tmp_path):
+    (tmp_path / "dataset_description.json").write_text("{}")
+    (tmp_path / "derivatives/pipeline/sub-01").mkdir(parents=True)
+    (tmp_path / "nested/sub-01").mkdir(parents=True)
+    assert find_dataset_root(tmp_path) == tmp_path
+
+
+def test_flat_subject_files_keep_the_root(tmp_path):
+    (tmp_path / "sub-01_T1w.nii.gz").touch()
+    (tmp_path / "extra/sub-02").mkdir(parents=True)
+    assert find_dataset_root(tmp_path) == tmp_path
+
+
+def test_rawdata_root_is_not_descended(tmp_path):
+    (tmp_path / "rawdata/sub-01").mkdir(parents=True)
+    assert find_dataset_root(tmp_path) == tmp_path
+
+
+def test_wrapper_is_selected_over_hidden_and_auxiliary_examples(tmp_path):
+    actual = tmp_path / "release-abc/data"
+    (actual / "sub-01").mkdir(parents=True)
+    for name in (".git", "__MACOSX", "code", "derivatives"):
+        (tmp_path / name / "sub-99").mkdir(parents=True)
+    assert find_dataset_root(tmp_path) == actual
+
+
+def test_participants_table_marks_a_wrapper_without_subject_folders(tmp_path):
+    (tmp_path / "wrapper").mkdir()
+    (tmp_path / "wrapper/participants.tsv").write_text("participant_id\n")
+    assert find_dataset_root(tmp_path) == tmp_path / "wrapper"
+
+
+def test_ambiguous_wrappers_are_reported(tmp_path):
+    for name in ("first", "second"):
+        (tmp_path / name / "sub-01").mkdir(parents=True)
+    with pytest.raises(ValueError, match="Multiple dataset roots.*first, second"):
+        find_dataset_root(tmp_path)
+
+
+def test_unrecognized_layout_keeps_the_root(tmp_path):
+    (tmp_path / "README.md").write_text("not BIDS")
+    (tmp_path / "docs").mkdir()
+    assert find_dataset_root(tmp_path) == tmp_path
+
+
+def test_symlinked_wrapper_is_not_followed(tmp_path):
+    target = tmp_path.parent / f"{tmp_path.name}-outside"
+    (target / "sub-01").mkdir(parents=True)
+    (tmp_path / "link").symlink_to(target, target_is_directory=True)
+    assert find_dataset_root(tmp_path) == tmp_path

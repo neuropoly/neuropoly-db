@@ -220,7 +220,7 @@ def test_incomplete_metadata_is_not_silently_skipped(tmp_path, transport, proble
 def test_multiple_wrapped_datasets_are_rejected(tmp_path):
     for name in ("first", "second"):
         (tmp_path / name / "sub-01").mkdir(parents=True)
-    with pytest.raises(ValueError, match="Multiple Mendeley dataset roots"):
+    with pytest.raises(ValueError, match="Multiple dataset roots"):
         MendeleyProviderManager().prepare(tmp_path)
 
 
