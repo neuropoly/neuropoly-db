@@ -182,7 +182,7 @@ provider-specific download or extraction logic.
 - Repeated conversions are idempotent, and shared validation paths do not apply
   duplicate repairs.
 - Full suite passes with network access blocked.
-- No provider-specific rules or NeuroGitea interaction.
+- No provider-specific rules or NeuroData interaction.
 
 ## Dependencies and rollout
 

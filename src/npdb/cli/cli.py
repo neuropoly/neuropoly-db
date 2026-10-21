@@ -592,7 +592,7 @@ def _provider_call(
 def gitea2bagel(
     dataset: str = typer.Argument(
         ...,
-        help="Dataset name on NeuroGitea (under the datasets organization).",
+        help="Dataset name on NeuroData (under the datasets organization).",
     ),
     output: Path = typer.Argument(
         ...,
@@ -604,7 +604,7 @@ def gitea2bagel(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to NeuroGitea.",
+        help="Verify SSL certificates when connecting to NeuroData.",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
@@ -679,14 +679,14 @@ def gitea2bagel(
     ),
 ):
     """
-    [bold]Convert NeuroGitea dataset metadata to Neurobagel JSON-LD[/bold]
+    [bold]Convert NeuroData dataset metadata to Neurobagel JSON-LD[/bold]
 
-    This command resolves a dataset from the configured NeuroGitea instance,
+    This command resolves a dataset from the configured NeuroData instance,
     clones it locally, and then runs the metadata conversion flow: metadata
     normalization, phenotype resolution, and Neurobagel export.
 
     Access requirements:
-    * Requires the NeuroGitea connection variables in .env or the environment:
+    * Requires the NeuroData connection variables in .env or the environment:
       [cyan]NP_GITEA_APP_URL[/cyan], [cyan]NP_GITEA_APP_USER[/cyan],
       [cyan]NP_GITEA_APP_TOKEN[/cyan].
     * Private or restricted datasets may also require the instance-specific SSH
@@ -1663,7 +1663,7 @@ def download(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to NeuroGitea (git mode only).",
+        help="Verify SSL certificates when connecting to NeuroData (git mode only).",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     verbose: bool = typer.Option(

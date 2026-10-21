@@ -65,7 +65,7 @@ class GiteaManagerFactory:
             raise ConfigurationError(
                 f"Missing required environment variables: {', '.join(missing)}",
                 hint="Add them to a .env file in the folder where you run npdb (see docs/get-access.md).",
-                docs="Development-Provider-NeuroGitea#access",
+                docs="Development-Provider-NeuroData#access",
             )
 
         return DataNeuroPolyMTL(

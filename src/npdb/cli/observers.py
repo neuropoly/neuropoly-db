@@ -13,7 +13,7 @@ class DownloadObserver(Protocol):
     Observer for repository download operations.
 
     Register via
-    :meth:`~npdb.external.neurogitea.gitea.GiteaManager.add_download_observer`.
+    :meth:`~npdb.external.neurodata.gitea.GiteaManager.add_download_observer`.
     All methods are called from the thread that runs the git subprocess.
     """
 

@@ -3,7 +3,7 @@
 You do this **once**. It takes about 15 minutes.
 
 - [1. VPN and GitHub](#1-vpn-and-github)
-- [2. NeuroGitea account](#2-neurogitea-account)
+- [2. NeuroData account](#2-neurodata-account)
 - [3. Register your computer (SSH key)](#3-register-your-computer-ssh-key)
 - [4. Create a download token](#4-create-a-download-token)
 - [5. Save your credentials](#5-save-your-credentials)
@@ -13,7 +13,7 @@ You do this **once**. It takes about 15 minutes.
 - Off campus, connect to the **Polytechnique VPN** before anything else.
 - Make sure you're a member of the **[neuropoly GitHub organization](https://github.com/neuropoly)**. If not, ask your supervisor or the lab admins.
 
-## 2. NeuroGitea account
+## 2. NeuroData account
 
 Go to <https://data.neuro.polymtl.ca> and log in.
 
@@ -21,7 +21,7 @@ Go to <https://data.neuro.polymtl.ca> and log in.
 
 Open your settings: click your profile picture (top right), then **Settings**.
 
-![NeuroGitea user settings](assets/neurogitea_token/neurogitea_user_settings.png)
+![NeuroData user settings](assets/neurodata_token/neurodata_user_settings.png)
 
 ## 3. Register your computer (SSH key)
 
@@ -54,15 +54,15 @@ Open your settings: click your profile picture (top right), then **Settings**.
    cat ~/.ssh/id_ed25519.pub
    ```
 
-4. In NeuroGitea settings, click **SSH / GPG Keys**, then **Add Key** (next to *Manage SSH Keys*).
+4. In NeuroData settings, click **SSH / GPG Keys**, then **Add Key** (next to *Manage SSH Keys*).
 
-   ![SSH / GPG Keys](assets/neurogitea_token/neurogitea_ssh_keys.png)
+   ![SSH / GPG Keys](assets/neurodata_token/neurodata_ssh_keys.png)
 
-   ![Add Key](assets/neurogitea_token/neurogitea_add_ssh_key.png)
+   ![Add Key](assets/neurodata_token/neurodata_add_ssh_key.png)
 
 5. Paste the key in **Content**, then click **Add Key**.
 
-   ![Paste key](assets/neurogitea_token/neurogitea_add_ssh_key_form.png)
+   ![Paste key](assets/neurodata_token/neurodata_add_ssh_key_form.png)
 
 6. Check it works: run `ssh git@data.neuro.polymtl.ca` again. You should see `You've successfully authenticated`.
 
@@ -70,21 +70,21 @@ Open your settings: click your profile picture (top right), then **Settings**.
 
 A token is a password made for programs. `npdb` uses it to download for you.
 
-1. In NeuroGitea settings, click **Applications**.
+1. In NeuroData settings, click **Applications**.
 
-   ![Applications](assets/neurogitea_token/neurogitea_applications.png)
+   ![Applications](assets/neurodata_token/neurodata_applications.png)
 
 2. Name the token (e.g. `npdb`), then click **Select permissions**.
 
-   ![New token](assets/neurogitea_token/neurogitea_new_token.png)
+   ![New token](assets/neurodata_token/neurodata_new_token.png)
 
 3. Set **organization**, **repository** and **user** to **Read**. Click **Generate Token**.
 
-   ![Permissions](assets/neurogitea_token/neurogitea_token_permissions.png)
+   ![Permissions](assets/neurodata_token/neurodata_token_permissions.png)
 
 4. **Copy the token now.** It is shown only once.
 
-   ![Generated token](assets/neurogitea_token/neurogitea_generated_token.png)
+   ![Generated token](assets/neurodata_token/neurodata_generated_token.png)
 
 ## 5. Save your credentials
 
@@ -96,7 +96,7 @@ cd ~/neuropoly-data
 nano .env
 ```
 
-Paste these 3 lines, with your NeuroGitea username and token:
+Paste these 3 lines, with your NeuroData username and token:
 
 ```bash
 NP_GITEA_APP_URL=https://data.neuro.polymtl.ca

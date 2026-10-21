@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2016  # literal backticks/${key} in single quotes are intended
-# Benchmark every class of network call npdb makes to NeuroGitea
+# Benchmark every class of network call npdb makes to NeuroData
 # (REST API, HTTPS git, SSH git-annex) and report which ones are lagging.
 #
-# Usage: scripts/benchmark_neurogitea.sh [options]   (see -h)
+# Usage: scripts/benchmark_neurodata.sh [options]   (see -h)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -26,7 +26,7 @@ usage() {
     cat <<EOF
 Usage: $(basename "$0") [options]
 
-Times NeuroGitea calls used by npdb. Each run picks a random dataset from the
+Times NeuroData calls used by npdb. Each run picks a random dataset from the
 list to avoid server/proxy caching. Every call is bounded by a timeout and is
 never retried, so the numbers show raw latency.
 
@@ -160,7 +160,7 @@ aggregate() {
     for p in "${!SITE[@]}"; do printf '%s\t%s\n' "$p" "${SITE[$p]}" >> "$site_file"; done
 
     {
-        echo "# NeuroGitea benchmark report"
+        echo "# NeuroData benchmark report"
         echo
         if [[ -f "$outdir/abort.txt" ]]; then
             echo '## Aborted'

@@ -52,5 +52,5 @@ You should see one folder per dataset, and inside, one `sub-...` folder per subj
 ## Going further
 
 - Repeat with other filters (age range, diagnosis) and compare the numbers.
-- Learn how the lab organizes data on NeuroGitea: [wiki tutorial, part 2](https://github.com/neuropoly/neuropoly-db/wiki/Tutorial-2-NeuroGitea).
-- Want to **add your own dataset** to Neurobagel? That's curation: see the [wiki tutorials, parts 4 and 5](https://github.com/neuropoly/neuropoly-db/wiki/Tutorial-4-NeuroGitea-to-Neurobagel).
+- Learn how the lab organizes data on NeuroData: [wiki tutorial, part 2](https://github.com/neuropoly/neuropoly-db/wiki/Tutorial-2-NeuroData).
+- Want to **add your own dataset** to Neurobagel? That's curation: see the [wiki tutorials, parts 4 and 5](https://github.com/neuropoly/neuropoly-db/wiki/Tutorial-4-NeuroData-to-Neurobagel).

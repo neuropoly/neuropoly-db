@@ -23,7 +23,7 @@ class OrganizationMixin:
 
     @_RETRY
     def _fetch_organization(self, client: gt_client.Gitea, organization: str):
-        gitea = require_module("gitea", extra="gitea", feature="NeuroGitea access")
+        gitea = require_module("gitea", extra="gitea", feature="NeuroData access")
         return gitea.Organization.request(client, organization)
 
     @property

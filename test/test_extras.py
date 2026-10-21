@@ -41,7 +41,9 @@ def test_require_executable(monkeypatch):
         ("gen3.auth", "midrc", lambda tmp: _midrc()),
     ],
 )
-def test_provider_fetch_reports_missing_extra(monkeypatch, tmp_path, module, extra, factory):
+def test_provider_fetch_reports_missing_extra(
+    monkeypatch, tmp_path, module, extra, factory
+):
     monkeypatch.setitem(sys.modules, module, None)
     manager = factory(tmp_path)
     with pytest.raises(MissingExtraError) as err:
@@ -75,7 +77,7 @@ def _midrc():
 
 
 def test_gitea_manager_reports_missing_extra(monkeypatch):
-    monkeypatch.setattr("npdb.external.neurogitea.gitea.gt_client", None)
+    monkeypatch.setattr("npdb.external.neurodata.gitea.gt_client", None)
     from npdb.factories import GiteaManagerFactory
 
     monkeypatch.setenv("NP_GITEA_APP_URL", "https://example.invalid")
@@ -120,8 +122,15 @@ def test_cli_prints_missing_extra_without_traceback(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "kagglehub", None)
     result = CliRunner().invoke(
         npdb,
-        ["convert", "bagel", "kaggle", "u/d", str(tmp_path / "out"),
-         "--cache-dir", str(tmp_path / "cache")],
+        [
+            "convert",
+            "bagel",
+            "kaggle",
+            "u/d",
+            str(tmp_path / "out"),
+            "--cache-dir",
+            str(tmp_path / "cache"),
+        ],
     )
     assert result.exit_code == 1
     assert "requires the 'kaggle' extra" in result.output

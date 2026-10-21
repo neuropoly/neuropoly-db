@@ -8,10 +8,10 @@ from typing import Optional
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
 from npdb.external.bids import BidsSeverity, validate_and_repair_bids_dataset
 from npdb.external.neurobagel.errors import BagelCLIError
-from npdb.external.neurogitea.gitea import GiteaManager
+from npdb.external.neurodata.gitea import GiteaManager
 from npdb.managers.model import NeurobagelManager
 from npdb.managers.neurobagel import BagelMixin
-from npdb.managers.neurogitea import OrganizationMixin
+from npdb.managers.neurodata import OrganizationMixin
 
 
 class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):

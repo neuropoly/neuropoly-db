@@ -14,7 +14,7 @@ except ImportError:  # 'gitea' extra not installed; raised on use
 class GiteaManager(GitManager):
     def __init__(self, url: str, user: str, token: str, ssl_verify: bool = True):
         if gt_client is None:
-            raise MissingExtraError("NeuroGitea access", "gitea")
+            raise MissingExtraError("NeuroData access", "gitea")
         super().__init__(user, token, ssl_verify)
 
         # Normalise the URL: strip protocol if present, remember it.

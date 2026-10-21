@@ -188,7 +188,7 @@ placeholders and unnecessary abstractions.
 - Actual Rust-validator fixtures still demonstrate finding resolution.
 - Provider option-forwarding tests pass.
 - The full suite passes with network access blocked.
-- No NeuroGitea interaction or modification of user datasets is required.
+- No NeuroData interaction or modification of user datasets is required.
 
 ## Dependencies and rollout
 

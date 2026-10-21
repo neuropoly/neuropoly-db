@@ -45,16 +45,30 @@ class Provider:
     identifier: str
     extra_module: str | None = None
     options: tuple[str, ...] = ()
-    config_error: tuple[tuple[str, ...], str] | None = None  # (options, expected fragment)
+    config_error: tuple[tuple[str, ...], str] | None = (
+        None  # (options, expected fragment)
+    )
 
 
 PROVIDERS = [
     Provider("git", GitProviderManager, "https://github.com/example/ds.git"),
-    Provider("kaggle", KaggleProviderManager, "user/ds", "kagglehub", ("--cache-dir", "{tmp}/cache"),
-             config_error=((), "--cache-dir")),
+    Provider(
+        "kaggle",
+        KaggleProviderManager,
+        "user/ds",
+        "kagglehub",
+        ("--cache-dir", "{tmp}/cache"),
+        config_error=((), "--cache-dir"),
+    ),
     Provider("mendeley", MendeleyProviderManager, "yd695ynbdz"),
-    Provider("midrc", MIDRCProviderManager, "dg.MD1R/ee75bf02-33e9-4d89-ba0a-868dd4aec81c", "gen3.auth",
-             ("--credentials-path", "{tmp}/credentials.json"), config_error=((), "credentials")),
+    Provider(
+        "midrc",
+        MIDRCProviderManager,
+        "dg.MD1R/ee75bf02-33e9-4d89-ba0a-868dd4aec81c",
+        "gen3.auth",
+        ("--credentials-path", "{tmp}/credentials.json"),
+        config_error=((), "credentials"),
+    ),
     Provider("openneuro", OpenNeuroProviderManager, "ds000001", "openneuro"),
     Provider("zenodo", ZenodoProviderManager, "123456", "zenodo_get"),
     Provider("figshare", FigshareProviderManager, "123456"),
@@ -65,21 +79,38 @@ IDS = [p.command for p in PROVIDERS]
 def args(provider, tmp_path, options=None):
     opts = provider.options if options is None else options
     (tmp_path / "credentials.json").write_text("{}")
-    return ["convert", "bagel", provider.command, provider.identifier, str(tmp_path / "out"),
-            "--neurobagel-modalities", *(o.format(tmp=tmp_path) for o in opts)]
+    return [
+        "convert",
+        "bagel",
+        provider.command,
+        provider.identifier,
+        str(tmp_path / "out"),
+        "--neurobagel-modalities",
+        *(o.format(tmp=tmp_path) for o in opts),
+    ]
 
 
 @pytest.fixture(autouse=True)
 def isolated_env(monkeypatch):
-    for name in ("NP_NPDB_CACHE_DIR", "NP_MIDRC_CREDENTIALS", "NP_MENDELEY_ACCESS_TOKEN",
-                 "NP_ZENODO_TOKEN", "NP_FIGSHARE_TOKEN", "NP_GIT_USER", "NP_GIT_TOKEN"):
+    for name in (
+        "NP_NPDB_CACHE_DIR",
+        "NP_MIDRC_CREDENTIALS",
+        "NP_MENDELEY_ACCESS_TOKEN",
+        "NP_ZENODO_TOKEN",
+        "NP_FIGSHARE_TOKEN",
+        "NP_GIT_USER",
+        "NP_GIT_TOKEN",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)
 def no_interactive_annotation(request, monkeypatch):
     # Manual annotation waits for a human; outside the ingest test, reaching it is a failure.
-    if request.node.originalname in {"test_delivered_dataset_is_ingestable", "test_neurogitea_dataset_is_ingestable"}:
+    if request.node.originalname in {
+        "test_delivered_dataset_is_ingestable",
+        "test_neurodata_dataset_is_ingestable",
+    }:
         return
     from npdb.managers.annotation import NeurobagelAnnotator
 
@@ -106,16 +137,26 @@ def bids_archive(layout: str = "flat") -> bytes:
     image = nib.Nifti1Image(np.zeros((2, 2, 2), dtype=np.int16), np.eye(4))
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
-        archive.writestr(f"{prefix}sub-01/anat/sub-01_T2w.nii.gz", gzip.compress(image.to_bytes()))
-        archive.writestr(f"{prefix}participants.tsv", "participant_id\tage\tsex\nsub-01\t42\tF\n")
+        archive.writestr(
+            f"{prefix}sub-01/anat/sub-01_T2w.nii.gz", gzip.compress(image.to_bytes())
+        )
+        archive.writestr(
+            f"{prefix}participants.tsv", "participant_id\tage\tsex\nsub-01\t42\tF\n"
+        )
         description = json.dumps({"Name": "Adequacy", "BIDSVersion": "1.9.0"})
         # BIDS keeps dataset_description.json at the top level next to rawdata/.
         archive.writestr(
-            "dataset_description.json" if layout == "rawdata" else f"{prefix}dataset_description.json",
+            (
+                "dataset_description.json"
+                if layout == "rawdata"
+                else f"{prefix}dataset_description.json"
+            ),
             description,
         )
         if layout == "macos-wrapper":
-            archive.writestr("__MACOSX/dataset/sub-01/._sub-01_T2w.nii.gz", b"resource fork")
+            archive.writestr(
+                "__MACOSX/dataset/sub-01/._sub-01_T2w.nii.gz", b"resource fork"
+            )
     return stream.getvalue()
 
 
@@ -141,8 +182,11 @@ def fail_with(exc):
 
 def http_error(status):
     request = httpx.Request("GET", "https://provider.example/api")
-    return httpx.HTTPStatusError(f"HTTP {status}", request=request,
-                                 response=httpx.Response(status, request=request))
+    return httpx.HTTPStatusError(
+        f"HTTP {status}",
+        request=request,
+        response=httpx.Response(status, request=request),
+    )
 
 
 def ingest_patches(stack: ExitStack):
@@ -153,14 +197,32 @@ def ingest_patches(stack: ExitStack):
     from npdb.managers.annotation import NeurobagelAnnotator
 
     dictionary = {
-        "participant_id": {"Description": "Participant", "Annotations": {
-            "IsAbout": {"TermURL": "nb:ParticipantID", "Label": "Participant"}, "VariableType": "Identifier"}},
-        "age": {"Description": "Age", "Annotations": {
-            "IsAbout": {"TermURL": "nb:Age", "Label": "Age"}, "VariableType": "Continuous",
-            "Format": {"TermURL": "nb:FromFloat", "Label": "Decimal years"}, "MissingValues": ["N/A"]}},
-        "sex": {"Description": "Sex", "Levels": {"F": "Female"}, "Annotations": {
-            "IsAbout": {"TermURL": "nb:Sex", "Label": "Sex"}, "VariableType": "Categorical",
-            "Levels": {"F": {"TermURL": "ncit:C16576", "Label": "Female"}}, "MissingValues": ["N/A"]}},
+        "participant_id": {
+            "Description": "Participant",
+            "Annotations": {
+                "IsAbout": {"TermURL": "nb:ParticipantID", "Label": "Participant"},
+                "VariableType": "Identifier",
+            },
+        },
+        "age": {
+            "Description": "Age",
+            "Annotations": {
+                "IsAbout": {"TermURL": "nb:Age", "Label": "Age"},
+                "VariableType": "Continuous",
+                "Format": {"TermURL": "nb:FromFloat", "Label": "Decimal years"},
+                "MissingValues": ["N/A"],
+            },
+        },
+        "sex": {
+            "Description": "Sex",
+            "Levels": {"F": "Female"},
+            "Annotations": {
+                "IsAbout": {"TermURL": "nb:Sex", "Label": "Sex"},
+                "VariableType": "Categorical",
+                "Levels": {"F": {"TermURL": "ncit:C16576", "Label": "Female"}},
+                "MissingValues": ["N/A"],
+            },
+        },
     }
 
     async def annotate(*, input_path, output_dir):
@@ -168,22 +230,47 @@ def ingest_patches(stack: ExitStack):
         (output_dir / "phenotypes_annotations.json").write_text(json.dumps(dictionary))
         return True
 
-    namespaces = [{"config_name": "Neurobagel", "namespaces": {"standard": [
-        {"namespace_prefix": "nb", "namespace_url": "http://neurobagel.org/vocab/"},
-        {"namespace_prefix": "ncit", "namespace_url": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#"},
-        {"namespace_prefix": "nidm", "namespace_url": "http://purl.org/nidash/nidm#"},
-    ]}}]
+    namespaces = [
+        {
+            "config_name": "Neurobagel",
+            "namespaces": {
+                "standard": [
+                    {
+                        "namespace_prefix": "nb",
+                        "namespace_url": "http://neurobagel.org/vocab/",
+                    },
+                    {
+                        "namespace_prefix": "ncit",
+                        "namespace_url": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#",
+                    },
+                    {
+                        "namespace_prefix": "nidm",
+                        "namespace_url": "http://purl.org/nidash/nidm#",
+                    },
+                ]
+            },
+        }
+    ]
     choices = signature(pheno).parameters["config"].default.click_type
-    stack.enter_context(patch.object(NeurobagelAnnotator, "execute", side_effect=annotate))
+    stack.enter_context(
+        patch.object(NeurobagelAnnotator, "execute", side_effect=annotate)
+    )
     stack.enter_context(patch.object(mappings, "CONFIG_NAMESPACES_MAPPING", namespaces))
     stack.enter_context(patch.object(mappings, "CONFIG_NAMESPACES_FETCHING_ERR", None))
     stack.enter_context(patch.object(choices, "choices", ("Neurobagel",)))
-    stack.enter_context(patch("bagel.utilities.bids_utils.get_bids_suffix_to_std_term_mapping",
-                              return_value={"T2w": "nidm:T2Weighted"}))
+    stack.enter_context(
+        patch(
+            "bagel.utilities.bids_utils.get_bids_suffix_to_std_term_mapping",
+            return_value={"T2w": "nidm:T2Weighted"},
+        )
+    )
 
 
 def has_validator():
-    return bool(shutil.which("bids-validator-rust") or Path(sys.executable).with_name("bids-validator-rust").exists())
+    return bool(
+        shutil.which("bids-validator-rust")
+        or Path(sys.executable).with_name("bids-validator-rust").exists()
+    )
 
 
 def assert_ingestable(result, output: Path):
@@ -209,38 +296,70 @@ def assert_explained(result, *fragments):
 def test_delivered_dataset_is_ingestable(provider, layout, tmp_path):
     with ExitStack() as stack:
         ingest_patches(stack)
-        stack.enter_context(patch.object(provider.manager, "fetch", deliver({"dataset.zip": bids_archive(layout)})))
+        stack.enter_context(
+            patch.object(
+                provider.manager,
+                "fetch",
+                deliver({"dataset.zip": bids_archive(layout)}),
+            )
+        )
         result = runner.invoke(npdb, args(provider, tmp_path))
     assert_ingestable(result, tmp_path / "out")
 
 
 @pytest.mark.skipif(not has_validator(), reason="bids-validator-rust not installed")
-def test_neurogitea_dataset_is_ingestable(tmp_path):
+def test_neurodata_dataset_is_ingestable(tmp_path):
     def clone_repository(dataset, local_path, light=False):
         with zipfile.ZipFile(io.BytesIO(bids_archive())) as archive:
             archive.extractall(local_path)
 
-    manager = type("NeuroGitea", (), {
-        "clone_repository": staticmethod(clone_repository),
-        "get_description_extensions": staticmethod(lambda d: (f"https://data.neuro.polymtl.ca/datasets/{d}", "restricted")),
-    })()
+    manager = type(
+        "NeuroData",
+        (),
+        {
+            "clone_repository": staticmethod(clone_repository),
+            "get_description_extensions": staticmethod(
+                lambda d: (f"https://data.neuro.polymtl.ca/datasets/{d}", "restricted")
+            ),
+        },
+    )()
     with ExitStack() as stack:
         ingest_patches(stack)
         stack.enter_context(patch("npdb.cli.cli._load_env"))
-        stack.enter_context(patch("npdb.cli.cli.GiteaManagerFactory.create_from_env", return_value=manager))
-        result = runner.invoke(npdb, ["convert", "bagel", "gitea", "ds", str(tmp_path / "out"), "--neurobagel-modalities"])
+        stack.enter_context(
+            patch(
+                "npdb.cli.cli.GiteaManagerFactory.create_from_env", return_value=manager
+            )
+        )
+        result = runner.invoke(
+            npdb,
+            [
+                "convert",
+                "bagel",
+                "gitea",
+                "ds",
+                str(tmp_path / "out"),
+                "--neurobagel-modalities",
+            ],
+        )
     assert_ingestable(result, tmp_path / "out")
 
 
-@pytest.mark.parametrize("provider", [p for p in PROVIDERS if p.extra_module], ids=lambda p: p.command)
+@pytest.mark.parametrize(
+    "provider", [p for p in PROVIDERS if p.extra_module], ids=lambda p: p.command
+)
 def test_missing_extra_is_explained(provider, tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, provider.extra_module, None)
     result = runner.invoke(npdb, args(provider, tmp_path))
-    extra = {"gen3.auth": "midrc", "kagglehub": "kaggle", "zenodo_get": "zenodo"}.get(provider.extra_module, provider.extra_module)
+    extra = {"gen3.auth": "midrc", "kagglehub": "kaggle", "zenodo_get": "zenodo"}.get(
+        provider.extra_module, provider.extra_module
+    )
     assert_explained(result, "Missing dependency", f"npdb[{extra}]")
 
 
-@pytest.mark.parametrize("provider", [p for p in PROVIDERS if p.config_error], ids=lambda p: p.command)
+@pytest.mark.parametrize(
+    "provider", [p for p in PROVIDERS if p.config_error], ids=lambda p: p.command
+)
 def test_missing_configuration_is_explained(provider, tmp_path, monkeypatch):
     if provider.extra_module:
         monkeypatch.setitem(sys.modules, provider.extra_module, type(sys)("stub"))
@@ -263,7 +382,9 @@ REMOTE_FAILURES = [
 
 
 @pytest.mark.parametrize("provider", PROVIDERS, ids=IDS)
-@pytest.mark.parametrize(("case", "exc", "fragments"), REMOTE_FAILURES, ids=[c[0] for c in REMOTE_FAILURES])
+@pytest.mark.parametrize(
+    ("case", "exc", "fragments"), REMOTE_FAILURES, ids=[c[0] for c in REMOTE_FAILURES]
+)
 def test_remote_failures_are_explained(provider, case, exc, fragments, tmp_path):
     with patch.object(provider.manager, "fetch", fail_with(exc)):
         result = runner.invoke(npdb, args(provider, tmp_path))
@@ -278,7 +399,10 @@ def test_unusable_layout_is_explained(provider, tmp_path):
     assert_explained(result)
 
 
-@pytest.mark.xfail(strict=True, reason="npdb download only resolves NeuroGitea/HTTP rows; align it with ingestion providers")
+@pytest.mark.xfail(
+    strict=True,
+    reason="npdb download only resolves NeuroData/HTTP rows; align it with ingestion providers",
+)
 @pytest.mark.parametrize("provider", PROVIDERS, ids=IDS)
 def test_download_uses_the_ingestion_provider(provider, tmp_path):
     tsv = tmp_path / "q.tsv"
@@ -290,7 +414,10 @@ def test_download_uses_the_ingestion_provider(provider, tmp_path):
 
     with (
         patch("npdb.cli.cli._load_env"),
-        patch("npdb.cli.cli.GiteaManagerFactory.create_from_env", side_effect=ConfigurationError("offline")),
+        patch(
+            "npdb.cli.cli.GiteaManagerFactory.create_from_env",
+            side_effect=ConfigurationError("offline"),
+        ),
         patch("npdb.factories.ProviderManagerFactory.create") as create,
     ):
         runner.invoke(npdb, ["download", str(tsv), "-o", str(tmp_path / "dl")])

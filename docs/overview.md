@@ -14,8 +14,8 @@ flowchart LR
 | | What it is | Where |
 |-|------------|-------|
 | **Neurobagel** | A search website. Filter subjects by age, sex, diagnosis, type of scan... across all lab datasets at once. | <https://data.neuro.polymtl.ca/bagel> |
-| **NeuroGitea** | The lab's data server. Every dataset lives there, organized in the [BIDS](https://bids.neuroimaging.io) format. | <https://data.neuro.polymtl.ca> |
-| **npdb** | A command you type in a terminal. It reads your Neurobagel results and downloads only those subjects from NeuroGitea. | your computer |
+| **NeuroData** | The lab's data server. Every dataset lives there, organized in the [BIDS](https://bids.neuroimaging.io) format. | <https://data.neuro.polymtl.ca> |
+| **npdb** | A command you type in a terminal. It reads your Neurobagel results and downloads only those subjects from NeuroData. | your computer |
 
 ## What you can do
 
@@ -27,7 +27,7 @@ flowchart LR
 
 - The Polytechnique **VPN** when you're off campus.
 - To be a member of the **[neuropoly GitHub organization](https://github.com/neuropoly)** (to open Neurobagel).
-- A **NeuroGitea account** (to download).
+- A **NeuroData account** (to download).
 
 Setting these up is a one-time job: [Get access](get-access.md).
 

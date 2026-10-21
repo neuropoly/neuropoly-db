@@ -6,7 +6,7 @@
 
 - VPN on (off campus).
 - [npdb installed](install.md).
-- A `.env` file with your NeuroGitea credentials in your data folder ([Get access, step 5](get-access.md#5-save-your-credentials)).
+- A `.env` file with your NeuroData credentials in your data folder ([Get access, step 5](get-access.md#5-save-your-credentials)).
 
 ## Download
 
@@ -20,7 +20,7 @@ npdb download --no-verify-ssl results.tsv -o my-cohort
 Replace `results.tsv` with the name of your results file, and `my-cohort` with the folder to download into.
 
 > [!IMPORTANT]
-> `--no-verify-ssl` is **required** for now: the NeuroGitea server certificate is not yet recognized by default. This is safe because NeuroGitea is only reachable through the VPN.
+> `--no-verify-ssl` is **required** for now: the NeuroData server certificate is not yet recognized by default. This is safe because NeuroData is only reachable through the VPN.
 
 ## What you get
 

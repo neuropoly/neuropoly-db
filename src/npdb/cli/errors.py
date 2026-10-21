@@ -36,8 +36,8 @@ DEBUG_ENV = "NPDB_DEBUG"
 ISSUE_URL_LIMIT = 7500
 
 _PROVIDER_PAGES = {
-    "download": "Development-Provider-NeuroGitea",
-    "gitea": "Development-Provider-NeuroGitea",
+    "download": "Development-Provider-NeuroData",
+    "gitea": "Development-Provider-NeuroData",
     "git": "Development-Provider-Git",
     "kaggle": "Development-Provider-Kaggle",
     "mendeley": "Development-Provider-Mendeley",
@@ -66,7 +66,7 @@ _GIT_HINTS = [
             "permission denied (publickey)",
         ),
         "Check NP_GITEA_APP_USER / NP_GITEA_APP_TOKEN (or your SSH key) and that the token has Read access.",
-        "Development-Provider-NeuroGitea#access",
+        "Development-Provider-NeuroData#access",
     ),
     (
         (
@@ -75,7 +75,7 @@ _GIT_HINTS = [
             "server certificate verification failed",
         ),
         "The server certificate is not trusted: rerun with --no-verify-ssl (safe behind the VPN).",
-        "Development-Provider-NeuroGitea#details",
+        "Development-Provider-NeuroData#details",
     ),
     (
         (
@@ -210,8 +210,8 @@ def _diagnose_one(exc: BaseException) -> Diagnosis | None:
         return Diagnosis(
             "SSL certificate error",
             text,
-            hint="For NeuroGitea, rerun with --no-verify-ssl (safe behind the VPN).",
-            docs="Development-Provider-NeuroGitea#details",
+            hint="For NeuroData, rerun with --no-verify-ssl (safe behind the VPN).",
+            docs="Development-Provider-NeuroData#details",
         )
     if isinstance(
         exc, (httpx.TransportError, ConnectionError, TimeoutError, socket.gaierror)
