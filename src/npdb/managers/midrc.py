@@ -10,9 +10,11 @@ from typing import Any, ClassVar
 from urllib.parse import unquote, urlparse
 
 import httpx
+from gen3.auth import Gen3Auth
+from gen3.file import Gen3File
+from gen3.index import Gen3Index
 
 from npdb.errors import ConfigurationError
-from npdb.extras import require_module
 from npdb.managers.model import ProviderManager, ProviderName
 
 
@@ -356,9 +358,9 @@ class MIDRCProviderManager(ProviderManager):
 
     def fetch(self, identifier: str, output_dir: str | Path, **_: Any) -> Path:
         feature = "The MIDRC provider"
-        Gen3Auth = require_module("gen3.auth", extra="midrc", feature=feature).Gen3Auth
-        Gen3File = require_module("gen3.file", extra="midrc", feature=feature).Gen3File
-        Gen3Index = require_module("gen3.index", extra="midrc", feature=feature).Gen3Index
+        # Gen3Auth = require_module("gen3.auth", extra="midrc", feature=feature).Gen3Auth
+        # Gen3File = require_module("gen3.file", extra="midrc", feature=feature).Gen3File
+        # Gen3Index = require_module("gen3.index", extra="midrc", feature=feature).Gen3Index
         if not self.credentials_path:
             raise ConfigurationError(
                 "MIDRC requires a credentials file. Set NP_MIDRC_CREDENTIALS or pass credentials_path. "

@@ -3,9 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
+import gitea
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-from npdb.extras import require_module
 
 if TYPE_CHECKING:
     import gitea as gt_client
@@ -23,7 +22,7 @@ class OrganizationMixin:
 
     @_RETRY
     def _fetch_organization(self, client: gt_client.Gitea, organization: str):
-        gitea = require_module("gitea", extra="gitea", feature="NeuroData access")
+        # gitea = require_module("gitea", extra="gitea", feature="NeuroData access")
         return gitea.Organization.request(client, organization)
 
     @property

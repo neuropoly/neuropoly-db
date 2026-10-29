@@ -9,55 +9,26 @@ description = "NeuroPoly database tooling and managers"
 requires-python = ">=3.12"
 dependencies = [
   "bagel==0.11.4",
-  "pybids>=0.16",
-  "pydicom>=2.4",
-  "jupyter",
-  "ipywidgets",
-  "pandas",
-  "tqdm",
-  "nibabel",
-  "python-dotenv>=1.2.2",
-  "typer>=0.24.1",
-  "rich>=14.3.3",
+  "gen3==4.28.4",
   "httpx>=0.25.0",
-  "pydantic>=2.0",
-  "rapidfuzz>=3.0",
-  "tenacity>=8.0",
-]
-
-# One extra per provider backend; `all` is the recommended install. Once installers
-# support PEP 771, add `default-optional-dependency-keys = ["all"]` to [project].
-[project.optional-dependencies]
-annotation-automation = [
-  "playwright>=1.58.0",
-]
-# git and git-annex are system executables; the git provider needs no Python package.
-git = []
-gitea = [
-  "py-gitea==0.2.10",
-]
-kaggle = [
+  "ipywidgets",
+  "jupyter",
   "kagglehub==1.0.2",
-]
-mendeley = []
-figshare = []
-midrc = [
-  "gen3==4.28.4"
-]
-openneuro = [
+  "nibabel",
   "openneuro-py==2026.9.1",
-]
-zenodo = [
-  "zenodo_get==3.1.0",
-]
-download = [
-  "npdb[gitea]",
-]
-all = [
-  "npdb[git,gitea,kaggle,mendeley,figshare,midrc,openneuro,zenodo]",
-]
-full = [
-  "npdb[all,annotation-automation]",
+  "pandas",
+  "playwright>=1.58.0",
+  "pybids>=0.16",
+  "pydantic>=2.0",
+  "pydicom>=2.4",
+  "python-dotenv>=1.2.2",
+  "py-gitea==0.2.10",
+  "rapidfuzz>=3.0",
+  "rich>=14.3.3",
+  "tenacity>=8.0",
+  "tqdm",
+  "typer>=0.24.1",
+  "zenodo_get==3.1.0"
 ]
 
 [project.scripts]

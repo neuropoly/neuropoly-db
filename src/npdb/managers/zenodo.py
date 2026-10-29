@@ -8,7 +8,8 @@ import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar
 
-from npdb.extras import require_module
+import zenodo_get
+
 from npdb.managers.model import (
     ProviderManager,
     ProviderName,
@@ -26,9 +27,9 @@ class ZenodoProviderManager(ProviderManager):
         self.token = token or os.environ.get("NP_ZENODO_TOKEN")
 
     def fetch(self, identifier: str, output_dir: str | Path, **kwargs: Any) -> Path:
-        zenodo_get = require_module(
-            "zenodo_get", extra="zenodo", feature="The Zenodo provider"
-        )
+        # zenodo_get = require_module(
+        #     "zenodo_get", extra="zenodo", feature="The Zenodo provider"
+        # )
 
         output_path = Path(output_dir)
         cache = self.ensure_cache_dir(required=True)
