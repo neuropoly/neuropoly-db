@@ -37,6 +37,14 @@ def _report(root: Path, *issues: dict) -> dict:
     }
 
 
+def _multi_dataset_report(*datasets: dict) -> dict:
+    return {
+        "validator": "test",
+        "coverage": "structural",
+        "datasets": list(datasets),
+    }
+
+
 def _filename_issue(path: str, severity: str = "warning") -> dict:
     return {
         "code": "INVALID_FILENAME",
@@ -434,6 +442,125 @@ def test_final_severity_threshold_is_exclusive(tmp_path, severity, threshold, pa
     assert bool(gate["exceeding"]) is not passes
     assert result["datasets"] == report["datasets"]
     assert result["repair"]["unresolved"][0]["severity"] == severity
+
+
+def test_derivative_errors_are_downgraded_to_warnings_by_default(tmp_path):
+    root = _make_dataset(tmp_path)
+    derivatives = root / "derivatives" / "labels"
+    derivatives.mkdir(parents=True)
+    report = _multi_dataset_report(
+        {"dataset": str(root), "errors": 0, "warnings": 0, "issues": []},
+        {
+            "dataset": str(derivatives),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [
+                {
+                    "code": "MISSING_DATASET_DESCRIPTION",
+                    "severity": "error",
+                    "message": "dataset_description.json is required at the root",
+                }
+            ],
+        },
+    )
+    with patch("npdb.external.bids.get_bids_validation_report", return_value=report):
+        result = validate_and_repair_bids_dataset(root)
+    assert result["repair"]["counts"]["error"] == 0
+    assert result["repair"]["counts"]["warning"] == 1
+    unresolved = result["repair"]["unresolved"][0]
+    assert unresolved["severity"] == "warning"
+    assert unresolved["original_severity"] == "error"
+
+
+def test_derivative_warnings_still_fail_at_info_threshold(tmp_path):
+    root = _make_dataset(tmp_path)
+    report = _multi_dataset_report(
+        {"dataset": str(root), "errors": 0, "warnings": 0, "issues": []},
+        {
+            "dataset": str(root / "derivatives" / "labels"),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [
+                {
+                    "code": "DERIVATIVE_PROVENANCE",
+                    "severity": "error",
+                    "message": "Missing dataset_description.json in project root",
+                }
+            ],
+        },
+    )
+    with (
+        patch("npdb.external.bids.get_bids_validation_report", return_value=report),
+        pytest.raises(BidsValidationError, match="above 'info'"),
+    ):
+        validate_and_repair_bids_dataset(root, severity_threshold="info")
+
+
+def test_standalone_validation_ignores_derivative_only_errors(tmp_path):
+    root = _make_dataset(tmp_path)
+    report = _multi_dataset_report(
+        {"dataset": str(root), "errors": 0, "warnings": 0, "issues": []},
+        {
+            "dataset": str(root / "derivatives" / "labels"),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [
+                {
+                    "code": "MISSING_DATASET_DESCRIPTION",
+                    "severity": "error",
+                    "message": "dataset_description.json is required at the root",
+                }
+            ],
+        },
+    )
+    with patch("npdb.external.bids.get_bids_validation_report", return_value=report):
+        assert validate_bids_dataset(root) == report
+
+
+def test_revalidation_does_not_mark_same_pathless_derivative_issue_as_new(tmp_path):
+    root = _make_dataset(tmp_path)
+    deriv_root = root / "derivatives" / "labels"
+    deriv_root.mkdir(parents=True)
+    file_path = root / "sub-01" / "func" / "sub-01_task-rest_run2_bold.nii.gz"
+    file_path.parent.mkdir(parents=True)
+    file_path.write_bytes(b"image")
+    derivative_issue = {
+        "code": "DERIVATIVE_PROVENANCE",
+        "severity": "error",
+        "message": "Missing dataset_description.json in project root",
+    }
+    initial = _multi_dataset_report(
+        {
+            "dataset": str(root),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [_filename_issue("sub-01/func/sub-01_task-rest_run2_bold.nii.gz", "error")],
+        },
+        {
+            "dataset": str(deriv_root),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [{**derivative_issue, "path": None}],
+        },
+    )
+    final = _multi_dataset_report(
+        {"dataset": str(root), "errors": 0, "warnings": 0, "issues": []},
+        {
+            "dataset": str(deriv_root),
+            "errors": 1,
+            "warnings": 0,
+            "issues": [derivative_issue],
+        },
+    )
+    with patch(
+        "npdb.external.bids.get_bids_validation_report",
+        side_effect=[initial, final],
+    ):
+        result = validate_and_repair_bids_dataset(root)
+    assert result["repair"]["newly_introduced"] == []
+    unresolved = result["repair"]["unresolved"][0]
+    assert "New finding appeared during revalidation" not in unresolved["resolution"]
+    assert unresolved["severity"] == "warning"
 
 
 def test_threshold_is_not_checked_at_entry_or_between_repair_passes(tmp_path):

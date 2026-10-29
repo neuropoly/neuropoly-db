@@ -50,6 +50,7 @@ BidsSeverityOption = Annotated[
         "--bids-severity-threshold",
         help=(
             "Highest allowed severity after all BIDS repairs: info, warning, or error. "
+            "Derivative findings are treated as warnings by default. "
             "Only findings strictly above this level fail final validation."
         ),
         case_sensitive=False,

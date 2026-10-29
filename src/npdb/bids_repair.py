@@ -126,9 +126,9 @@ def _plan_from_report(
     issue_records = list(_iter_issues(report))
 
     for issue, owner in issue_records:
-        finding = _normalise_finding(issue)
-        findings.append(finding)
         owner = Path(os.path.abspath(owner))
+        finding = _normalise_finding(issue, owner)
+        findings.append(finding)
         if not _is_within(root, owner):
             finding["resolution"] = "The validator reported a dataset root outside the requested dataset."
             continue
@@ -159,6 +159,7 @@ def _plan_from_report(
                         "BIDS_VERSION_REQUIRED",
                         "error",
                         version_message,
+                        dataset=str(owner),
                         path=str(owner / "dataset_description.json"),
                         resolution="The repair engine never guesses a BIDS version.",
                         required_input="--bids-version VERSION",
@@ -170,6 +171,7 @@ def _plan_from_report(
                         "INVALID_DATASET_DESCRIPTION_JSON",
                         "error",
                         "dataset_description.json contains malformed JSON.",
+                        dataset=str(owner),
                         path=str(owner / "dataset_description.json"),
                         resolution="Malformed JSON is reported but never rewritten speculatively.",
                     )
@@ -187,6 +189,7 @@ def _plan_from_report(
                         "INVALID_DATASET_DESCRIPTION_SCHEMA",
                         "error",
                         explanation,
+                        dataset=str(owner),
                         path=str(owner / "dataset_description.json"),
                         resolution="The invalid field requires user correction.",
                     )
@@ -550,12 +553,13 @@ def _validate_aliases(aliases: dict[str, str]) -> dict[str, str]:
     return result
 
 
-def _normalise_finding(issue: dict[str, Any]) -> dict[str, Any]:
+def _normalise_finding(issue: dict[str, Any], owner: Path) -> dict[str, Any]:
     code = str(issue.get("code", "UNKNOWN_VALIDATOR_ISSUE"))
     severity = str(issue.get("severity", "info")).lower()
     if severity not in {"error", "warning", "info"}:
         severity = "info"
     finding = {
+        "dataset": str(owner),
         "code": code,
         "severity": severity,
         "message": str(issue.get("message", "Validator reported an issue.")),
