@@ -1,0 +1,10 @@
+[package]
+name = "bids-validator-rust"
+version = "0.0.3"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+bids-validate = "=0.0.3"
+serde_json = "1"

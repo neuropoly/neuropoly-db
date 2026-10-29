@@ -3,6 +3,7 @@ venv/
 data/
 data.neuro.polymtl.ca/
 benchmark/
+tmp/
 
 # Ignore wireguard config if present
 wg0.conf
@@ -11,3 +12,5 @@ wg0.conf
 
 *.pyc
 __pycache__/
+
+npdb-error*

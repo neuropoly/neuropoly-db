@@ -150,6 +150,9 @@ class GraphUpdater:
             True if metadata update successful, False otherwise
         """
         try:
+            if not jsonld_path.exists():
+                raise FileNotFoundError(f"JSON-LD file not found: {jsonld_path}")
+
             # Load existing metadata
             if datasets_metadata_path.exists():
                 with open(datasets_metadata_path, "r") as f:
