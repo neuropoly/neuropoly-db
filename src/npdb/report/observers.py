@@ -13,7 +13,7 @@ class ResolutionObserver(Protocol):
     """
     Protocol for objects that want to be notified of column resolution events.
 
-    Implement both methods and register via AnnotationManager.add_observer().
+    Implement both methods and register via Annotator.add_observer().
     """
 
     def on_resolved(self, column_name: str, mapping: ResolvedMapping) -> None:
@@ -30,7 +30,7 @@ class ProvenanceObserver:
     Built-in observer that records resolution events into a ProvenanceReport.
 
     Wraps add_column_provenance() and provenance.warnings.append() so that
-    AnnotationManager.resolve_and_track() never touches provenance directly.
+    Annotator.resolve_and_track() never touches provenance directly.
     """
 
     def __init__(self, provenance: ProvenanceReport) -> None:

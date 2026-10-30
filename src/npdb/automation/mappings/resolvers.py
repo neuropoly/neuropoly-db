@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from npdb.annotation.matching import ColumnMatcher
+from bids_repair.matching import ColumnMatcher
 from npdb.automation.mappings.solvers import (
     load_static_mappings,
     load_user_mappings,
@@ -41,7 +41,7 @@ class MappingResolver:
     Precedence order:
     1. Static dictionary (user-supplied or built-in)
     2. Fuzzy matching against static dict keys/aliases
-    3. AI suggestions (deferred to AnnotationManager; not handled here)
+    3. AI suggestions (deferred to NeurobagelAnnotator; not handled here)
     """
 
     def __init__(

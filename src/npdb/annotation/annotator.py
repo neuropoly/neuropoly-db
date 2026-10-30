@@ -6,9 +6,10 @@ from npdb.automation.mappings.resolvers import MappingResolver, ResolvedMapping
 from npdb.report.observers import ProvenanceObserver, ResolutionObserver
 from npdb.report.provenance import ProvenanceReport
 
+
 class Annotator(ABC):
     """
-    Abstract manager for annotation-based workflows.
+    Abstract base for annotation-based workflows.
 
     Subclasses implement execute() and _save_outputs() for their specific
     output format (Neurobagel JSON-LD vs BIDS participants.json).

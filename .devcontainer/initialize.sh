@@ -26,6 +26,10 @@ if [ ! -f "$NB_DIR/docker-compose.yml" ]; then
   error_exit "Missing neurobagel-recipes files at $NB_DIR. Initialize submodules before launching the devcontainer."
 fi
 
+if [ ! -f "$ROOT_DIR/tools/bids-validator-rust/Cargo.toml" ]; then
+  error_exit "Missing Rust validator source. Run: git submodule update --init --recursive -- tools/bids-validator-rust"
+fi
+
 # Ensure local_nb_nodes.json exists (needed by federation service).
 NODES_TEMPLATE="$NB_DIR/local_nb_nodes.template.json"
 NODES_FILE="$ROOT_DIR/local_nb_nodes.json"

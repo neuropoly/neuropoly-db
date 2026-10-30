@@ -23,8 +23,8 @@ from npdb.annotation.standardize import (
     rename_tsv_headers,
     validate_bids_sidecar,
 )
+from npdb.annotators import BIDSAnnotator
 from npdb.automation.mappings.resolvers import MappingResolver
-from npdb.managers.annotation import BIDSStandardizer
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "datasets" / "unstandardized_bids"
 
@@ -62,7 +62,9 @@ class TestRenameTsvHeaders:
         tsv = bids / "participants.tsv"
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "age", "sex"])
+
         rename_map = rename_tsv_headers(tsv, resolved)
+
         # participant_id, age, sex are all exact keys — no renames
         assert rename_map == {}
         assert _read_tsv_headers(tsv) == ["participant_id", "age", "sex"]
@@ -76,7 +78,9 @@ class TestRenameTsvHeaders:
         tsv = bids / "participants.tsv"
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["partid", "age"])
+
         rename_map = rename_tsv_headers(tsv, resolved)
+
         # partid is a known alias → participant_id
         assert "partid" in rename_map
         assert rename_map["partid"] == "participant_id"
@@ -91,7 +95,9 @@ class TestRenameTsvHeaders:
         tsv = bids / "participants.tsv"
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["participant_id", "my_custom_col"])
+
         rename_map = rename_tsv_headers(tsv, resolved)
+
         assert "my_custom_col" not in rename_map
         assert "my_custom_col" in _read_tsv_headers(tsv)
 
@@ -105,7 +111,9 @@ class TestRenameTsvHeaders:
         original = tsv.read_text()
         resolver = MappingResolver()
         resolved = resolver.resolve_columns(["partid", "age"])
+
         rename_map = rename_tsv_headers(tsv, resolved, dry_run=True)
+
         assert "partid" in rename_map
         # File unchanged
         assert tsv.read_text() == original
@@ -123,7 +131,9 @@ class TestAddMissingColumns:
         )
         tsv = bids / "participants.tsv"
         resolver = MappingResolver()
+
         added = add_missing_standard_columns(tsv, resolver.mappings)
+
         assert len(added) > 0
         headers = _read_tsv_headers(tsv)
         for col in added:
@@ -144,7 +154,9 @@ class TestAddMissingColumns:
         data = "\t".join(["val"] * len(all_keys))
         bids = _make_bids_dir(tmp_path, f"{header}\n{data}\n")
         tsv = bids / "participants.tsv"
+
         added = add_missing_standard_columns(tsv, resolver.mappings)
+
         assert added == []
 
 
@@ -329,7 +341,7 @@ class TestDryRun:
         assert not (bids / "participants.json").exists()
 
         config = AnnotationConfig(mode="auto", dry_run=True)
-        standardizer = BIDSStandardizer(config)
+        standardizer = BIDSAnnotator(config)
 
         import asyncio
 
@@ -355,7 +367,7 @@ class TestEndToEnd:
         shutil.copytree(FIXTURES_DIR, bids)
 
         config = AnnotationConfig(mode="auto")
-        standardizer = BIDSStandardizer(config)
+        standardizer = BIDSAnnotator(config)
 
         import asyncio
 
@@ -392,13 +404,13 @@ class TestEndToEnd:
         import asyncio
 
         # First run
-        s1 = BIDSStandardizer(config)
+        s1 = BIDSAnnotator(config)
         asyncio.run(s1.execute(input_path=bids))
         tsv_after_first = (bids / "participants.tsv").read_text()
         json_after_first = (bids / "participants.json").read_text()
 
         # Second run
-        s2 = BIDSStandardizer(config)
+        s2 = BIDSAnnotator(config)
         asyncio.run(s2.execute(input_path=bids))
         tsv_after_second = (bids / "participants.tsv").read_text()
         json_after_second = (bids / "participants.json").read_text()

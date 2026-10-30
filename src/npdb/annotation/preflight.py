@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from bids_repair.dataset import compare_participant_ids, scan_imaging_suffixes
 from npdb.external.neurobagel.schema import BAGEL_SUPPORTED_SUFFIXES
 
 
@@ -36,23 +37,9 @@ def check_bids_suffixes(
     Bagel-supported BIDS suffix (including extra entries).
     """
     effective_supported = BAGEL_SUPPORTED_SUFFIXES | frozenset(extra_suffix_map or {})
-    bids_path = Path(bids_dir)
-    supported: set[str] = set()
-    unsupported: set[str] = set()
-
-    for nii in bids_path.glob("sub-*/**/*.nii*"):
-        stem = nii.name
-        # Strip .nii.gz or .nii
-        if stem.endswith(".nii.gz"):
-            stem = stem[:-7]
-        elif stem.endswith(".nii"):
-            stem = stem[:-4]
-        # BIDS suffix is the entity after the last underscore
-        suffix = stem.rsplit("_", 1)[-1] if "_" in stem else stem
-        if suffix in effective_supported:
-            supported.add(suffix)
-        else:
-            unsupported.add(suffix)
+    suffixes = scan_imaging_suffixes(bids_dir)
+    supported = suffixes & effective_supported
+    unsupported = suffixes - effective_supported
 
     if not supported and unsupported:
         raise PreflightError(
@@ -88,37 +75,6 @@ def check_bids_suffixes(
         )
 
     return supported, unsupported
-
-
-def compare_participant_ids(
-    pheno_tsv: str, bids_tsv: str
-) -> tuple[list[str], list[str]]:
-    """
-    Compare participant IDs in phenotypes TSV vs BIDS TSV (case-insensitive).
-
-    Returns ``(in_bids_not_pheno, in_pheno_not_bids)``.
-    """
-    import csv as _csv
-
-    def _read_ids(path: str) -> set[str]:
-        ids: set[str] = set()
-        try:
-            with open(path, "r", encoding="utf-8", newline="") as fh:
-                reader = _csv.DictReader(fh, delimiter="\t")
-                for row in reader:
-                    pid = (row.get("participant_id") or "").strip().lower()
-                    if pid:
-                        ids.add(pid)
-        except OSError:
-            pass
-        return ids
-
-    pheno_ids = _read_ids(pheno_tsv)
-    bids_ids = _read_ids(bids_tsv)
-
-    in_bids_not_pheno = sorted(bids_ids - pheno_ids)
-    in_pheno_not_bids = sorted(pheno_ids - bids_ids)
-    return in_bids_not_pheno, in_pheno_not_bids
 
 
 def check_missing_files(*paths: str) -> list[str]:

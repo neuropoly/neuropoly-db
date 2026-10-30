@@ -36,6 +36,24 @@
       "description": "Custom imaging modality with BIDS suffix 'WMn'.",
       "source": "generic_fallback",
       "added": "2026-04-28"
+    },
+    "CISS": {
+      "iri": "nb:CISSImage",
+      "description": "Custom imaging modality with BIDS suffix 'CISS'.",
+      "source": "generic_fallback",
+      "added": "2026-10-06"
+    },
+    "DESS": {
+      "iri": "nb:DESSImage",
+      "description": "Custom imaging modality with BIDS suffix 'DESS'.",
+      "source": "generic_fallback",
+      "added": "2026-10-06"
+    },
+    "T2TSE": {
+      "iri": "nb:T2TSEImage",
+      "description": "Custom imaging modality with BIDS suffix 'T2TSE'.",
+      "source": "generic_fallback",
+      "added": "2026-10-06"
     }
   }
 }

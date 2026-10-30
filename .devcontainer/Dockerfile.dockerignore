@@ -1,0 +1,12 @@
+**
+!tools/
+!tools/bids-validator-rust/
+!tools/bids-validator-rust/**
+tools/bids-validator-rust/target/
+tools/bids-validator-rust/.git
+!tools/build_validator.py
+!tools/bids-validator-source.json
+!tools/bids-schema-NOTICE
+!.devcontainer/
+!.devcontainer/Dockerfile
+!.devcontainer/Dockerfile.dockerignore

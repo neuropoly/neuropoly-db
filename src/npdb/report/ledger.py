@@ -56,6 +56,7 @@ class RunLedger:
         """
         if self.path is None:
             return
+
         payload = {
             "outcome": self.outcome,
             "warnings": self.warnings,
@@ -69,7 +70,7 @@ class LedgerObserver:
     """
     Observer adapter that forwards resolution warnings to a :class:`RunLedger`.
 
-    Register via :meth:`npdb.managers.annotation.AnnotationManager.add_observer`
+    Register via :meth:`npdb.annotation.annotator.Annotator.add_observer`
     so that any warning raised during column resolution is automatically
     captured in the ledger.
     """

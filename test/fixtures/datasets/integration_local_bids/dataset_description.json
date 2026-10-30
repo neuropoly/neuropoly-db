@@ -1,0 +1,9 @@
+{
+  "Name": "npdb integration local fixture",
+  "BIDSVersion": "1.9.0",
+  "DatasetType": "raw",
+  "License": "CC0",
+  "Authors": [
+    "NeuroPoly Integration Tests"
+  ]
+}

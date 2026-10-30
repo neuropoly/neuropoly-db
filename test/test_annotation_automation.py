@@ -1,7 +1,7 @@
 import pytest
 
 from npdb.annotation import AnnotationConfig
-from npdb.managers.annotation import NeurobagelAnnotator
+from npdb.annotators import NeurobagelAnnotator
 
 
 class TestAnnotationConfig:
@@ -29,35 +29,35 @@ class TestAnnotationConfig:
         assert config.ai_model == "neural-chat"
 
 
-class TestAnnotationManager:
-    """Tests for AnnotationManager initialization and routing."""
+class TestNeurobagelAnnotator:
+    """Tests for NeurobagelAnnotator initialization and routing."""
 
-    def test_manager_init_manual_mode(self):
-        """Test manager initializes in manual mode."""
+    def test_annotator_init_manual_mode(self):
+        """Test annotator initializes in manual mode."""
         config = AnnotationConfig(mode="manual")
-        manager = NeurobagelAnnotator(config)
-        assert manager.config.mode == "manual"
+        annotator = NeurobagelAnnotator(config)
+        assert annotator.config.mode == "manual"
 
-    def test_manager_rejects_ai_in_manual_mode(self):
+    def test_annotator_rejects_ai_in_manual_mode(self):
         """Test that AI config is rejected in manual mode."""
         config = AnnotationConfig(mode="manual", ai_provider="ollama")
         with pytest.raises(ValueError):
             NeurobagelAnnotator(config)
 
-    def test_manager_init_assist_mode(self):
-        """Test manager initializes in assist mode."""
+    def test_annotator_init_assist_mode(self):
+        """Test annotator initializes in assist mode."""
         config = AnnotationConfig(mode="assist")
-        manager = NeurobagelAnnotator(config)
-        assert manager.config.mode == "assist"
+        annotator = NeurobagelAnnotator(config)
+        assert annotator.config.mode == "assist"
 
-    def test_manager_init_auto_mode(self):
-        """Test manager initializes in auto mode."""
+    def test_annotator_init_auto_mode(self):
+        """Test annotator initializes in auto mode."""
         config = AnnotationConfig(mode="auto")
-        manager = NeurobagelAnnotator(config)
-        assert manager.config.mode == "auto"
+        annotator = NeurobagelAnnotator(config)
+        assert annotator.config.mode == "auto"
 
-    def test_manager_init_full_auto_mode(self):
-        """Test manager initializes in full-auto mode."""
+    def test_annotator_init_full_auto_mode(self):
+        """Test annotator initializes in full-auto mode."""
         config = AnnotationConfig(mode="full-auto")
-        manager = NeurobagelAnnotator(config)
-        assert manager.config.mode == "full-auto"
+        annotator = NeurobagelAnnotator(config)
+        assert annotator.config.mode == "full-auto"

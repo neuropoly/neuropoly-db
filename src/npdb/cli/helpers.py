@@ -4,34 +4,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
-import typer
-
-
-def show_help(ctx: typer.Context, value: bool):
-    if value:
-        typer.echo(ctx.get_help())
-        raise typer.Exit()
-
-
-OPTION_GROUP_NAMES = {
-    "input": "Input Options",
-    "output": "Output Options",
-    "behavior": "Behavior Options",
-    "automation": "Automation Options",
-    "ai": "AI Options",
-    "troubleshooting": "Troubleshooting",
-}
-
-
-def help_option():
-    return typer.Option(
-        False,
-        "--help",
-        "-h",
-        callback=show_help,
-        help="Show this message and exit.",
-        rich_help_panel=OPTION_GROUP_NAMES["troubleshooting"],
-    )
 
 
 def read_tsv(tsv_path: Path) -> list[dict]:
@@ -72,21 +44,22 @@ def normalize_repo_url_for_git(repo_url: str) -> str:
         repo_path = repo_path[:tree_idx]
     if not repo_path.endswith(".git"):
         repo_path += ".git"
+
     return f"{parsed.scheme}://{parsed.netloc}{repo_path}"
 
 
-def repo_has_git_annex(gitea_manager, repo_url: str) -> bool:
+def repo_has_git_annex(gitea_provider, repo_url: str) -> bool:
     git_url = normalize_repo_url_for_git(repo_url)
     cmd = (
         ["git"]
-        + gitea_manager.git_http_config()
+        + gitea_provider.git_http_config()
         + ["ls-remote", "--heads", git_url, "refs/heads/git-annex"]
     )
 
     try:
-        stdout, _ = gitea_manager._run_git(
+        stdout, _ = gitea_provider._run_git(
             cmd,
-            env=gitea_manager.git_env(),
+            env=gitea_provider.git_env(),
             context=f"probe git-annex metadata branch for '{repo_url}'",
         )
     except RuntimeError:
@@ -113,9 +86,12 @@ def extend_bids_description(
     Extend the dataset_description.json file using NeuroBagel standard.
     See : https://neurobagel.org/user_guide/dataset_description/#editable-template
     """
-    desc_path = Path(local_clone) / "dataset_description.json"
-    with open(desc_path, "r") as f:
-        description = json.load(f)
+    from bids_repair.description import (
+        read_dataset_description,
+        update_dataset_description,
+    )
+
+    description = read_dataset_description(Path(local_clone))
 
     description["Name"] = dataset
 
@@ -130,4 +106,4 @@ def extend_bids_description(
     description["AccessLink"] = description["RepositoryURL"]
     description["AccessType"] = access_type
 
-    return description
+    return update_dataset_description(Path(local_clone), description)

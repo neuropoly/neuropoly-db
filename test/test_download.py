@@ -15,7 +15,7 @@ from typer.testing import CliRunner
 
 from npdb.cli.cli import npdb
 from npdb.cli.helpers import fetch_url, read_tsv
-from npdb.managers.neuropoly import DataNeuroPolyMTL
+from npdb.providers.neuropoly import DataNeuroPolyMTL
 
 runner = CliRunner()
 
@@ -80,16 +80,16 @@ def _write_tsv(tmp_path: Path, rows: list[str]) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# GiteaManager — URL parsing and protocol helpers
+# GiteaProvider — URL parsing and protocol helpers
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
-def manager(tmp_path):
+def provider(tmp_path):
     """A DataNeuroPolyMTL instance with all network calls mocked (no server needed)."""
     with (
-        patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
-        patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None),
+        patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
+        patch("npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None),
     ):
         mock_client = MagicMock()
         mock_client.requests.verify = False
@@ -103,8 +103,8 @@ def manager(tmp_path):
         yield mgr
 
 
-class TestGiteaManagerURLParsing:
-    """GiteaManager correctly parses URLs with or without a scheme."""
+class TestGiteaProviderURLParsing:
+    """GiteaProvider correctly parses URLs with or without a scheme."""
 
     @pytest.mark.parametrize(
         "url,expected_host,expected_proto",
@@ -118,9 +118,9 @@ class TestGiteaManagerURLParsing:
     )
     def test_host_and_proto_extracted(self, url, expected_host, expected_proto):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -130,9 +130,9 @@ class TestGiteaManagerURLParsing:
 
     def test_http_base_constructed(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -143,9 +143,9 @@ class TestGiteaManagerURLParsing:
 
     def test_gitea_client_receives_normalised_url(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -200,28 +200,28 @@ class TestToSshUrl:
             ),
         ],
     )
-    def test_conversion(self, manager, http_url, expected):
-        assert manager._to_ssh_url(http_url) == expected
+    def test_conversion(self, provider, http_url, expected):
+        assert provider._to_ssh_url(http_url) == expected
 
 
 class TestGitHttpConfig:
     """git_http_config returns properly formatted -c flags."""
 
-    def test_contains_authorization_header(self, manager):
-        config = manager.git_http_config()
+    def test_contains_authorization_header(self, provider):
+        config = provider.git_http_config()
         joined = " ".join(config)
         assert "http.extraHeader=Authorization: Basic" in joined
 
-    def test_flag_pairs(self, manager):
-        config = manager.git_http_config()
+    def test_flag_pairs(self, provider):
+        config = provider.git_http_config()
         # Must come in ["-c", "key=val"] pairs
         assert len(config) % 2 == 0
         for i in range(0, len(config), 2):
             assert config[i] == "-c"
             assert "=" in config[i + 1]
 
-    def test_ssl_verify_false(self, manager):
-        config = manager.git_http_config()
+    def test_ssl_verify_false(self, provider):
+        config = provider.git_http_config()
         joined = " ".join(config)
         assert "http.sslVerify=false" in joined
 
@@ -229,13 +229,13 @@ class TestGitHttpConfig:
 class TestGitEnv:
     """git_env must disable interactive credential helpers."""
 
-    def test_overrides_vscode_askpass(self, manager, monkeypatch):
+    def test_overrides_vscode_askpass(self, provider, monkeypatch):
         monkeypatch.setenv("GIT_ASKPASS", "/tmp/vscode-askpass.sh")
         monkeypatch.setenv("VSCODE_GIT_ASKPASS_NODE", "node")
         monkeypatch.setenv("VSCODE_GIT_ASKPASS_MAIN", "main.js")
         monkeypatch.setenv("VSCODE_GIT_ASKPASS_EXTRA_ARGS", "")
 
-        env = manager.git_env()
+        env = provider.git_env()
 
         assert env["GIT_TERMINAL_PROMPT"] == "0"
         assert env["GIT_ASKPASS"] == "/bin/echo"
@@ -247,24 +247,24 @@ class TestGitEnv:
 
 
 # ---------------------------------------------------------------------------
-# GiteaManager — clone_sparse
+# GiteaProvider — clone_sparse
 # ---------------------------------------------------------------------------
 
 
 class TestCloneSparse:
     """clone_sparse issues the right sequence of git subprocesses."""
 
-    def test_raises_on_empty_paths(self, manager, tmp_path):
+    def test_raises_on_empty_paths(self, provider, tmp_path):
         with pytest.raises(
             ValueError, match="sparse_paths must contain at least one path"
         ):
-            manager.clone_sparse("https://example.com/repo", [], tmp_path / "dest")
+            provider.clone_sparse("https://example.com/repo", [], tmp_path / "dest")
 
-    def test_clone_then_sparse_checkout(self, manager, tmp_path):
+    def test_clone_then_sparse_checkout(self, provider, tmp_path):
         dest = tmp_path / "repo"
 
-        with patch.object(manager, "_run_git") as mock_run_git:
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git") as mock_run_git:
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP", "sub-amuLJ"],
                 dest,
@@ -290,13 +290,13 @@ class TestCloneSparse:
         )
         assert any(ctx.startswith("checkout") for ctx in contexts)
 
-    def test_skips_clone_when_git_dir_exists(self, manager, tmp_path):
+    def test_skips_clone_when_git_dir_exists(self, provider, tmp_path):
         dest = tmp_path / "repo"
         dest.mkdir()
         (dest / ".git").mkdir()  # simulate existing clone
 
-        with patch.object(manager, "_run_git") as mock_run_git:
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git") as mock_run_git:
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -307,12 +307,12 @@ class TestCloneSparse:
             ctx.startswith("clone ") for ctx in contexts
         ), f"Should not clone when .git already exists, contexts: {contexts}"
 
-    def test_url_normalised_to_https(self, manager, tmp_path):
+    def test_url_normalised_to_https(self, provider, tmp_path):
         """repo_url with bare host or http is upgraded to the configured https base."""
         dest = tmp_path / "repo"
 
-        with patch.object(manager, "_run_git") as mock_run_git:
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git") as mock_run_git:
+            provider.clone_sparse(
                 "data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -326,7 +326,7 @@ class TestCloneSparse:
         assert clone_cmds, "Expected a clone call"
         assert "https://data.neuro.polymtl.ca/datasets/whole-spine.git" in clone_cmds[0]
 
-    def test_subprocess_failure_raises_runtime_error(self, manager, tmp_path):
+    def test_subprocess_failure_raises_runtime_error(self, provider, tmp_path):
         dest = tmp_path / "repo"
         popen_proc = MagicMock()
         popen_proc.stdout = io.StringIO("")
@@ -334,7 +334,7 @@ class TestCloneSparse:
         popen_proc.wait.return_value = 128
         with patch("subprocess.Popen", return_value=popen_proc):
             with pytest.raises(RuntimeError, match="failed"):
-                manager.clone_sparse(
+                provider.clone_sparse(
                     "https://data.neuro.polymtl.ca/datasets/ds",
                     ["sub-01"],
                     dest,
@@ -342,14 +342,14 @@ class TestCloneSparse:
 
 
 # ---------------------------------------------------------------------------
-# GiteaManager — annex_get
+# GiteaProvider — annex_get
 # ---------------------------------------------------------------------------
 
 
 class TestAnnexGet:
     """annex_get issues the right sequence of git/git-annex subprocesses."""
 
-    def _run_annex_get(self, manager, tmp_path, paths=None):
+    def _run_annex_get(self, provider, tmp_path, paths=None):
         """Helper: run annex_get with all subprocess calls mocked."""
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
@@ -366,11 +366,11 @@ class TestAnnexGet:
             return proc
 
         with patch("subprocess.Popen", side_effect=fake_popen):
-            manager.annex_get(repo_dir, paths)
+            provider.annex_get(repo_dir, paths)
 
         return repo_dir
 
-    def _capture_commands(self, manager, tmp_path, paths=None):
+    def _capture_commands(self, provider, tmp_path, paths=None):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
         https_url = "https://data.neuro.polymtl.ca/datasets/whole-spine.git"
@@ -388,58 +388,58 @@ class TestAnnexGet:
             return proc
 
         with patch("subprocess.Popen", side_effect=fake_popen):
-            manager.annex_get(repo_dir, paths)
+            provider.annex_get(repo_dir, paths)
 
         return captured
 
-    def test_switches_origin_to_ssh(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+    def test_switches_origin_to_ssh(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         set_url_cmds = [c for c in cmds if "set-url" in c]
         assert set_url_cmds, "Expected a 'remote set-url' command"
         ssh_url = set_url_cmds[0][-1]
         assert ssh_url.startswith("git@"), f"Expected SSH URL, got: {ssh_url}"
         assert "datasets/whole-spine.git" in ssh_url
 
-    def test_fetches_git_annex_branch(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+    def test_fetches_git_annex_branch(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         fetch_cmds = [c for c in cmds if "fetch" in c]
         assert fetch_cmds, "Expected a git fetch command"
         fetch_args = " ".join(fetch_cmds[0])
         assert "git-annex" in fetch_args
         assert "refs/remotes/origin/git-annex" in fetch_args
 
-    def test_runs_annex_init(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+    def test_runs_annex_init(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         assert any("annex" in c and "init" in c for c in cmds)
 
-    def test_unsets_annex_ignore(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+    def test_unsets_annex_ignore(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         config_cmds = [
             c for c in cmds if "config" in c and "annex-ignore" in " ".join(c)
         ]
         assert config_cmds, "Expected a git config annex-ignore command"
         assert "false" in config_cmds[0]
 
-    def test_runs_annex_merge(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+    def test_runs_annex_merge(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         assert any("annex" in c and "merge" in c for c in cmds)
 
-    def test_runs_annex_get_with_paths(self, manager, tmp_path):
+    def test_runs_annex_get_with_paths(self, provider, tmp_path):
         paths = ["sub-amuAP", "sub-amuLJ"]
-        cmds = self._capture_commands(manager, tmp_path, paths)
+        cmds = self._capture_commands(provider, tmp_path, paths)
         get_cmds = [c for c in cmds if "annex" in c and "get" in c]
         assert get_cmds, "Expected a git annex get command"
         get_flat = " ".join(get_cmds[0])
         assert "sub-amuAP" in get_flat
         assert "sub-amuLJ" in get_flat
 
-    def test_default_path_is_dot(self, manager, tmp_path):
-        cmds = self._capture_commands(manager, tmp_path, None)
+    def test_default_path_is_dot(self, provider, tmp_path):
+        cmds = self._capture_commands(provider, tmp_path, None)
         get_cmds = [c for c in cmds if "annex" in c and "get" in c]
         assert get_cmds
         assert "." in get_cmds[0]
 
-    def test_switches_origin_to_ssh_when_already_ssh(self, manager, tmp_path):
+    def test_switches_origin_to_ssh_when_already_ssh(self, provider, tmp_path):
         """When origin is already SSH (repo reused from a previous run),
         annex_get must not mangle the URL further.
 
@@ -466,7 +466,7 @@ class TestAnnexGet:
             return proc
 
         with patch("subprocess.Popen", side_effect=fake_run):
-            manager.annex_get(repo_dir, ["sub-amuAP"])
+            provider.annex_get(repo_dir, ["sub-amuAP"])
 
         set_url_cmds = [c for c in captured if "set-url" in c]
         assert set_url_cmds, "Expected a 'remote set-url' command"
@@ -477,7 +477,7 @@ class TestAnnexGet:
             f"  stored: {stored_url}"
         )
 
-    def test_command_order(self, manager, tmp_path):
+    def test_command_order(self, provider, tmp_path):
         """fetch → SSH switch → init → config → merge → get (order is critical).
 
         The git-annex metadata branch fetch must happen over HTTPS (before the
@@ -485,7 +485,7 @@ class TestAnnexGet:
         transfer (annex get) needs SSH.
         """
 
-        cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
+        cmds = self._capture_commands(provider, tmp_path, ["sub-amuAP"])
         flat = [" ".join(c) for c in cmds]
 
         def idx(keyword):
@@ -516,7 +516,7 @@ class TestAnnexGet:
 @pytest.fixture()
 def dnp(tmp_path):
     """DataNeuroPolyMTL instance with Gitea client and git ops fully mocked."""
-    with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea:
+    with patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea:
         mock_client = MagicMock()
         mock_client.requests.verify = False
         MockGitea.return_value = mock_client
@@ -809,7 +809,7 @@ class TestFetchUrl:
 
 
 # ---------------------------------------------------------------------------
-# CLI — download command (integration with mocked manager)
+# CLI — download command (integration with mocked provider)
 # ---------------------------------------------------------------------------
 
 ENV_VARS = {
@@ -900,7 +900,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=False),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GiteaProviderFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
@@ -945,7 +945,7 @@ class TestDownloadCLI:
 
         with (
             patch("npdb.cli.helpers.httpx.stream", return_value=mock_response),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GiteaProviderFactory") as MockFactory,
         ):
             result = runner.invoke(
                 npdb, ["download", str(tsv), "--output-dir", str(tmp_path)]
@@ -960,7 +960,7 @@ class TestDownloadCLI:
         with (
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
-            patch("npdb.cli.cli.GiteaManagerFactory"),
+            patch("npdb.cli.cli.GiteaProviderFactory"),
         ):
             result = runner.invoke(
                 npdb,
@@ -976,7 +976,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=False),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GiteaProviderFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
@@ -997,7 +997,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=True),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GiteaProviderFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [

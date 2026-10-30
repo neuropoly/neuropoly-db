@@ -1,0 +1,1391 @@
+{
+  "@context": {
+    "nb": "http://neurobagel.org/vocab/",
+    "ncit": "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#",
+    "snomed": "http://purl.bioontology.org/ontology/SNOMEDCT/",
+    "nidm": "http://purl.org/nidash/nidm#",
+    "np": "https://github.com/nipoppy/pipeline-catalog/tree/main/processing/",
+    "Acquisition": "nb:Acquisition",
+    "identifier": "@id",
+    "hasContrastType": {
+      "@id": "nb:hasContrastType"
+    },
+    "schemaKey": "@type",
+    "Assessment": "nb:Assessment",
+    "Bagel": "nb:Bagel",
+    "BaseModel": "nb:BaseModel",
+    "CompletedPipeline": "nb:CompletedPipeline",
+    "hasPipelineVersion": {
+      "@id": "nb:hasPipelineVersion"
+    },
+    "hasPipelineName": {
+      "@id": "nb:hasPipelineName"
+    },
+    "ControlledTerm": "nb:ControlledTerm",
+    "Dataset": "nb:Dataset",
+    "hasLabel": {
+      "@id": "nb:hasLabel"
+    },
+    "hasAuthors": {
+      "@id": "nb:hasAuthors"
+    },
+    "hasReferencesAndLinks": {
+      "@id": "nb:hasReferencesAndLinks"
+    },
+    "hasKeywords": {
+      "@id": "nb:hasKeywords"
+    },
+    "hasRepositoryURL": {
+      "@id": "nb:hasRepositoryURL"
+    },
+    "hasAccessInstructions": {
+      "@id": "nb:hasAccessInstructions"
+    },
+    "hasAccessType": {
+      "@id": "nb:hasAccessType"
+    },
+    "hasAccessEmail": {
+      "@id": "nb:hasAccessEmail"
+    },
+    "hasAccessLink": {
+      "@id": "nb:hasAccessLink"
+    },
+    "hasSamples": {
+      "@id": "nb:hasSamples"
+    },
+    "Diagnosis": "nb:Diagnosis",
+    "Image": "nb:Image",
+    "ImagingSession": "nb:ImagingSession",
+    "hasFilePath": {
+      "@id": "nb:hasFilePath"
+    },
+    "hasAcquisition": {
+      "@id": "nb:hasAcquisition"
+    },
+    "hasCompletedPipeline": {
+      "@id": "nb:hasCompletedPipeline"
+    },
+    "PhenotypicSession": "nb:PhenotypicSession",
+    "hasAge": {
+      "@id": "nb:hasAge"
+    },
+    "hasSex": {
+      "@id": "nb:hasSex"
+    },
+    "isSubjectGroup": {
+      "@id": "nb:isSubjectGroup"
+    },
+    "hasDiagnosis": {
+      "@id": "nb:hasDiagnosis"
+    },
+    "hasAssessment": {
+      "@id": "nb:hasAssessment"
+    },
+    "Pipeline": "nb:Pipeline",
+    "Session": "nb:Session",
+    "Sex": "nb:Sex",
+    "Subject": "nb:Subject",
+    "hasSession": {
+      "@id": "nb:hasSession"
+    },
+    "SubjectGroup": "nb:SubjectGroup"
+  },
+  "identifier": "nb:uuid-00001",
+  "hasLabel": "openneuro_ds000102",
+  "hasAuthors": [
+    "Kelly AMC",
+    "Uddin LQ",
+    "Biswal BB",
+    "Castellanos FX",
+    "Milham MP"
+  ],
+  "hasReferencesAndLinks": [
+    "http://www.ncbi.nlm.nih.gov/pubmed/20974260",
+    "http://www.ncbi.nlm.nih.gov/pubmed/20079856",
+    "http://www.ncbi.nlm.nih.gov/pubmed/17919929"
+  ],
+  "hasKeywords": [
+    "openneuro_ds000102"
+  ],
+  "hasRepositoryURL": "https://openneuro.org/datasets/ds000102",
+  "hasAccessInstructions": "Refer to the access link provided with the repository.",
+  "hasAccessType": "public",
+  "hasAccessLink": "https://openneuro.org/datasets/ds000102",
+  "hasSamples": [
+    {
+      "identifier": "nb:uuid-00002",
+      "hasLabel": "sub-01",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00003",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 21.94,
+          "hasSex": {
+            "identifier": "snomed:248152002",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00004",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-01",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00005",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00006",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00007",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00008",
+      "hasLabel": "sub-02",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00009",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 22.79,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00010",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-02",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00011",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00012",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00013",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00014",
+      "hasLabel": "sub-03",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00015",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 19.65,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00016",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-03",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00017",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00018",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00019",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00020",
+      "hasLabel": "sub-04",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00021",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 25.98,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00022",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-04",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00023",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00024",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00025",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00026",
+      "hasLabel": "sub-05",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00027",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 23.24,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00028",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-05",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00029",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00030",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00031",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00032",
+      "hasLabel": "sub-06",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00033",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 23.27,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00034",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-06",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00035",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00036",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00037",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00038",
+      "hasLabel": "sub-07",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00039",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 34.72,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00040",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-07",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00041",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00042",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00043",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00044",
+      "hasLabel": "sub-08",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00045",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 22.22,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00046",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-08",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00047",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00048",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00049",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00050",
+      "hasLabel": "sub-09",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00051",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 22.7,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00052",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-09",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00053",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00054",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00055",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00056",
+      "hasLabel": "sub-10",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00057",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 25.24,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00058",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-10",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00059",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00060",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00061",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00062",
+      "hasLabel": "sub-11",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00063",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 21.8,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00064",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-11",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00065",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00066",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00067",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00068",
+      "hasLabel": "sub-12",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00069",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 26.0,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00070",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-12",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00071",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00072",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00073",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00074",
+      "hasLabel": "sub-13",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00075",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 25.72,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00076",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-13",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00077",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00078",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00079",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00080",
+      "hasLabel": "sub-14",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00081",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 49.79,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00082",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-14",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00083",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00084",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00085",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00086",
+      "hasLabel": "sub-15",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00087",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 34.06,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00088",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-15",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00089",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00090",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00091",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00092",
+      "hasLabel": "sub-16",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00093",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 49.03,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00094",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-16",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00095",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00096",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00097",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00098",
+      "hasLabel": "sub-17",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00099",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 35.77,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00100",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-17",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00101",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00102",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00103",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00104",
+      "hasLabel": "sub-18",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00105",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 24.03,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00106",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-18",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00107",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00108",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00109",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00110",
+      "hasLabel": "sub-19",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00111",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 24.67,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00112",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-19",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00113",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00114",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00115",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00116",
+      "hasLabel": "sub-20",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00117",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 34.19,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00118",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-20",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00119",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00120",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00121",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00122",
+      "hasLabel": "sub-21",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00123",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 26.22,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00124",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-21",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00125",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00126",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00127",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00128",
+      "hasLabel": "sub-22",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00129",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 27.0,
+          "hasSex": {
+            "identifier": "nb:Unresolved",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00130",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-22",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00131",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00132",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00133",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00134",
+      "hasLabel": "sub-23",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00135",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 22.79,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00136",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-23",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00137",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00138",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00139",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00140",
+      "hasLabel": "sub-24",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00141",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 27.24,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00142",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-24",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00143",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00144",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00145",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00146",
+      "hasLabel": "sub-25",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00147",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 34.56,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00148",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-25",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00149",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00150",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00151",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    },
+    {
+      "identifier": "nb:uuid-00152",
+      "hasLabel": "sub-26",
+      "hasSession": [
+        {
+          "identifier": "nb:uuid-00153",
+          "hasLabel": "ses-unnamed",
+          "hasAge": 32.16,
+          "hasSex": {
+            "identifier": "snomed:248153007",
+            "schemaKey": "Sex"
+          },
+          "schemaKey": "PhenotypicSession"
+        },
+        {
+          "identifier": "nb:uuid-00154",
+          "hasLabel": "ses-unnamed",
+          "hasFilePath": "sub-26",
+          "hasAcquisition": [
+            {
+              "identifier": "nb:uuid-00155",
+              "hasContrastType": {
+                "identifier": "nidm:T1Weighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00156",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            },
+            {
+              "identifier": "nb:uuid-00157",
+              "hasContrastType": {
+                "identifier": "nidm:FlowWeighted",
+                "schemaKey": "Image"
+              },
+              "schemaKey": "Acquisition"
+            }
+          ],
+          "schemaKey": "ImagingSession"
+        }
+      ],
+      "schemaKey": "Subject"
+    }
+  ],
+  "schemaKey": "Dataset"
+}

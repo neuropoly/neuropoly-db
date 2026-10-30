@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
+from bids_repair.utils import parse_tsv_columns
 from npdb.annotation import AnnotationConfig
-from npdb.annotation.utils import parse_tsv_columns
 from npdb.automation.mappings.resolvers import MappingResolver
 from npdb.external.neurobagel.automation import NBAnnotationToolBrowserSession
 from npdb.report.provenance import ProvenanceReport
@@ -93,6 +93,7 @@ class ManualStrategy(AnnotationStrategy):
         output_dir: Path,
         ctx: AnnotatorContext,
     ) -> bool:
+        output_dir.mkdir(parents=True, exist_ok=True)
         try:
             async with NBAnnotationToolBrowserSession(
                 headless=False,  # Manual always headed
@@ -394,6 +395,7 @@ class _ScriptedStrategy(AnnotationStrategy):
 
     def _add_mode_warnings(self, ctx: AnnotatorContext) -> None:
         """Hook for subclasses to inject mode-specific provenance warnings."""
+        _ = ctx
 
 
 class AutoStrategy(_ScriptedStrategy):

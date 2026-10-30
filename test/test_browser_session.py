@@ -220,3 +220,50 @@ class TestEdgeCases:
             await session.cleanup()  # Should not crash
 
         asyncio.run(test())
+
+
+class TestGetStartedClick:
+    """The landing button may need a while to settle on a cold browser start."""
+
+    @staticmethod
+    def _session_with_button(timeout: int):
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = NBAnnotationToolBrowserSession(timeout=timeout)
+        button = MagicMock()
+        button.wait_for = AsyncMock()
+        button.click = AsyncMock()
+        locator = MagicMock()
+        locator.count = AsyncMock(return_value=1)
+        locator.first = button
+        session.page = MagicMock()
+        session.page.locator.return_value = locator
+        return session, button
+
+    @pytest.mark.asyncio
+    async def test_existing_button_gets_settle_time(self, monkeypatch):
+        import npdb.external.neurobagel.automation as automation
+
+        monkeypatch.setattr(automation.asyncio, "sleep", AsyncMockSleep())
+        session, button = self._session_with_button(timeout=300)
+
+        await session.click_get_started()
+
+        button.wait_for.assert_awaited_once_with(timeout=30000)
+        button.click.assert_awaited_once_with(timeout=30000)
+
+    @pytest.mark.asyncio
+    async def test_settle_time_is_capped_by_session_timeout(self, monkeypatch):
+        import npdb.external.neurobagel.automation as automation
+
+        monkeypatch.setattr(automation.asyncio, "sleep", AsyncMockSleep())
+        session, button = self._session_with_button(timeout=10)
+
+        await session.click_get_started()
+
+        button.click.assert_awaited_once_with(timeout=10000)
+
+
+class AsyncMockSleep:
+    async def __call__(self, *_):
+        return None

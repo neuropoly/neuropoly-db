@@ -166,21 +166,27 @@ class TestApplyHeaderMap:
             "participant_id": {"aliases": ["SubjectID"]},
             "age": {"aliases": ["Age_Baseline"]},
         }
+
         renames = apply_header_map(tsv, hmap)
+
         assert renames == {"SubjectID": "participant_id", "Age_Baseline": "age"}
         assert _read_headers(tsv) == ["participant_id", "age", "notes"]
 
     def test_case_insensitive(self, tmp_path):
         tsv = _make_tsv(tmp_path, ["GENDER", "AGE"])
         hmap = {"sex": {"aliases": ["gender"]}, "age": {"aliases": ["age"]}}
+
         renames = apply_header_map(tsv, hmap)
+
         assert renames == {"GENDER": "sex", "AGE": "age"}
         assert _read_headers(tsv) == ["sex", "age"]
 
     def test_no_match_noop(self, tmp_path):
         tsv = _make_tsv(tmp_path, ["participant_id", "age", "sex"])
         hmap = {"diagnosis": {"aliases": ["condition", "disease_status"]}}
+
         renames = apply_header_map(tsv, hmap)
+
         assert renames == {}
         assert _read_headers(tsv) == ["participant_id", "age", "sex"]
 
@@ -189,7 +195,9 @@ class TestApplyHeaderMap:
             tmp_path, ["Subject", "Score"], [["sub-01", "10"], ["sub-02", "20"]]
         )
         hmap = {"participant_id": {"aliases": ["Subject"]}}
+
         apply_header_map(tsv, hmap)
+
         lines = tsv.read_text(encoding="utf-8").strip().split("\n")
         assert lines[0] == "participant_id\tScore"
         assert lines[1] == "sub-01\t10"
@@ -198,7 +206,9 @@ class TestApplyHeaderMap:
     def test_dry_run_no_write(self, tmp_path, capsys):
         tsv = _make_tsv(tmp_path, ["GENDER", "AGE"])
         hmap = {"sex": {"aliases": ["gender"]}, "age": {"aliases": ["age"]}}
+
         renames = apply_header_map(tsv, hmap, dry_run=True)
+
         assert renames == {"GENDER": "sex", "AGE": "age"}
         # Headers NOT changed on disk
         assert _read_headers(tsv) == ["GENDER", "AGE"]
@@ -209,6 +219,7 @@ class TestApplyHeaderMap:
         """Same variant listed under two different keys."""
         tsv = _make_tsv(tmp_path, ["Gender"])
         hmap = {"sex": {"aliases": ["Gender"]}, "other": {"aliases": ["Gender"]}}
+
         with pytest.raises(ValueError, match="Ambiguous"):
             apply_header_map(tsv, hmap)
 
@@ -216,6 +227,7 @@ class TestApplyHeaderMap:
         """Two TSV columns both map to the same target key."""
         tsv = _make_tsv(tmp_path, ["Gender", "biological_sex"])
         hmap = {"sex": {"aliases": ["Gender", "biological_sex"]}}
+
         with pytest.raises(ValueError, match="Conflicting"):
             apply_header_map(tsv, hmap)
 
@@ -226,7 +238,9 @@ class TestApplyHeaderMap:
             "age": {"aliases": ["age", "AGE"]},
             "sex": {"aliases": ["sex", "Gender"]},
         }
+
         renames = apply_header_map(tsv, hmap)
+
         # Both already match but are identical to target, no rename needed
         assert renames == {}
 
@@ -234,13 +248,17 @@ class TestApplyHeaderMap:
         tsv = tmp_path / "participants.tsv"
         tsv.write_text("", encoding="utf-8")
         hmap = {"age": {"aliases": ["AGE"]}}
+
         renames = apply_header_map(tsv, hmap)
+
         assert renames == {}
 
     def test_multiple_variants_first_match_wins(self, tmp_path):
         """A key has multiple variants; only the one present in TSV is used."""
         tsv = _make_tsv(tmp_path, ["age_at_baseline", "other"])
         hmap = {"age": {"aliases": ["age_years", "age_at_baseline", "AGE"]}}
+
         renames = apply_header_map(tsv, hmap)
+
         assert renames == {"age_at_baseline": "age"}
         assert _read_headers(tsv) == ["age", "other"]

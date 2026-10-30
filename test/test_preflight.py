@@ -1,5 +1,5 @@
 """
-Tests for pre-flight check functions in npdb.managers:
+Tests for pre-flight check functions in npdb.providers:
   - PreflightError: constructor, attributes, inheritance
   - check_bids_suffixes: supported/unsupported classification,
     extra_suffix_map, PreflightError raised correctly

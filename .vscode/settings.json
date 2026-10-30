@@ -20,11 +20,11 @@
     }
   },
 
-  // Black formatter args (add project-level overrides here if needed)
-  "black-formatter.args": [],
-
-  // isort — use the black-compatible profile so both tools agree
-  "isort.args": ["--profile", "black"],
+  // Use locked project tools; shared style settings live in pyproject.toml.
+  "black-formatter.path": ["${workspaceFolder}/.venv/bin/black"],
+  "black-formatter.cwd": "${workspaceFolder}",
+  "isort.path": ["${workspaceFolder}/.venv/bin/isort"],
+  "isort.cwd": "${workspaceFolder}",
 
   // Pylance type-checking acts as the in-editor linter
   "python.analysis.typeCheckingMode": "standard",

@@ -14,8 +14,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from npdb.annotation import AnnotationConfig
+from npdb.annotators import NeurobagelAnnotator
 from npdb.automation.mappings.resolvers import MappingResolver
-from npdb.managers.annotation import NeurobagelAnnotator
 
 
 @pytest.fixture
@@ -38,41 +38,41 @@ def output_dir() -> Generator[Path, None, None]:
         yield Path(tmpdir)
 
 
-class TestAnnotationManagerE2E:
-    """End-to-end tests for AnnotationManager."""
+class TestAnnotationProviderE2E:
+    """End-to-end tests for AnnotationProvider."""
 
-    def test_manager_initialization_manual_mode(
+    def test_provider_initialization_manual_mode(
         self, synthetic_tsv: Path, output_dir: Path
     ):
-        """Test AnnotationManager initializes correctly for manual mode."""
+        """Test AnnotationProvider initializes correctly for manual mode."""
         config = AnnotationConfig(mode="manual", headless=False)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
-        assert manager.config.mode == "manual"
-        assert manager.config.headless is False
-        assert manager.resolver is not None
-        assert manager.provenance is not None
+        assert provider.config.mode == "manual"
+        assert provider.config.headless is False
+        assert provider.resolver is not None
+        assert provider.provenance is not None
 
-    def test_manager_initialization_auto_mode(
+    def test_provider_initialization_auto_mode(
         self, synthetic_tsv: Path, output_dir: Path
     ):
-        """Test AnnotationManager initializes correctly for auto mode."""
+        """Test AnnotationProvider initializes correctly for auto mode."""
         config = AnnotationConfig(mode="auto", headless=True)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
-        assert manager.config.mode == "auto"
-        assert manager.config.headless is True
-        assert manager.resolver is not None
+        assert provider.config.mode == "auto"
+        assert provider.config.headless is True
+        assert provider.resolver is not None
 
-    def test_manager_initialization_full_auto_mode(
+    def test_provider_initialization_full_auto_mode(
         self, synthetic_tsv: Path, output_dir: Path
     ):
-        """Test AnnotationManager initializes correctly for full-auto mode."""
+        """Test AnnotationProvider initializes correctly for full-auto mode."""
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
-        assert manager.config.mode == "full-auto"
-        assert manager.config.headless is True
+        assert provider.config.mode == "full-auto"
+        assert provider.config.headless is True
 
     @pytest.mark.asyncio
     async def test_mapping_resolver_integration(self, synthetic_tsv: Path):
@@ -120,13 +120,13 @@ class TestAnnotationManagerE2E:
 
         try:
             config = AnnotationConfig(mode="assist", phenotype_dictionary=dict_path)
-            manager = NeurobagelAnnotator(config)
+            provider = NeurobagelAnnotator(config)
 
             # Verify resolver was initialized with user dict
-            assert manager.resolver is not None
+            assert provider.resolver is not None
 
             # Resolve with custom dictionary
-            resolved = manager.resolver.resolve_column("cognitive_score")
+            resolved = provider.resolver.resolve_column("cognitive_score")
             assert resolved.mapped_variable == "nb:Assessment"
 
         finally:
@@ -136,10 +136,10 @@ class TestAnnotationManagerE2E:
     async def test_file_not_found_error(self, output_dir: Path):
         """Test error handling for missing TSV file."""
         config = AnnotationConfig(mode="auto")
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         with pytest.raises(FileNotFoundError):
-            await manager.execute(
+            await provider.execute(
                 participants_tsv_path=Path("/nonexistent/file.tsv"),
                 output_dir=output_dir,
             )
@@ -151,15 +151,15 @@ class TestProvenance:
     def test_provenance_record_creation(self, synthetic_tsv: Path, output_dir: Path):
         """Test provenance object is created and tracked."""
         config = AnnotationConfig(mode="auto")
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         # Verify provenance was initialized
-        assert manager.provenance is not None
-        assert manager.provenance.mode == "auto"
+        assert provider.provenance is not None
+        assert provider.provenance.mode == "auto"
         assert (
-            manager.provenance.run_id is not None and len(manager.provenance.run_id) > 0
+            provider.provenance.run_id is not None and len(provider.provenance.run_id) > 0
         )
-        assert manager.provenance.timestamp is not None
+        assert provider.provenance.timestamp is not None
 
 
 class TestModeSpecificBehavior:
@@ -175,29 +175,29 @@ class TestModeSpecificBehavior:
 
     def test_confidence_thresholds_per_mode(self):
         """Test that modes are properly configured."""
-        # Verify managers can be created for each mode with correct settings
+        # Verify providers can be created for each mode with correct settings
 
         manual_config = AnnotationConfig(mode="manual")
         assist_config = AnnotationConfig(mode="assist")
         auto_config = AnnotationConfig(mode="auto")
         full_auto_config = AnnotationConfig(mode="full-auto")
 
-        manual_manager = NeurobagelAnnotator(manual_config)
-        assist_manager = NeurobagelAnnotator(assist_config)
-        auto_manager = NeurobagelAnnotator(auto_config)
-        full_auto_manager = NeurobagelAnnotator(full_auto_config)
+        manual_provider = NeurobagelAnnotator(manual_config)
+        assist_provider = NeurobagelAnnotator(assist_config)
+        auto_provider = NeurobagelAnnotator(auto_config)
+        full_auto_provider = NeurobagelAnnotator(full_auto_config)
 
-        # Verify all managers were initialized correctly
-        assert manual_manager.config.mode == "manual"
-        assert assist_manager.config.mode == "assist"
-        assert auto_manager.config.mode == "auto"
-        assert full_auto_manager.config.mode == "full-auto"
+        # Verify all providers were initialized correctly
+        assert manual_provider.config.mode == "manual"
+        assert assist_provider.config.mode == "assist"
+        assert auto_provider.config.mode == "auto"
+        assert full_auto_provider.config.mode == "full-auto"
 
         # Verify provenance tracking for each mode
-        assert manual_manager.provenance.mode == "manual"
-        assert assist_manager.provenance.mode == "assist"
-        assert auto_manager.provenance.mode == "auto"
-        assert full_auto_manager.provenance.mode == "full-auto"
+        assert manual_provider.provenance.mode == "manual"
+        assert assist_provider.provenance.mode == "assist"
+        assert auto_provider.provenance.mode == "auto"
+        assert full_auto_provider.provenance.mode == "full-auto"
 
 
 class TestSmokeE2E:
@@ -215,7 +215,7 @@ class TestSmokeE2E:
         Smoke test: Full-auto mode completes successfully with mocked browser.
 
         Validates:
-        - AnnotationManager.execute() returns True
+        - AnnotationProvider.execute() returns True
         - Provenance sidecar is created at expected path
         - Provenance contains resolved column mappings
         - Warnings are emitted for full-auto mode
@@ -223,9 +223,9 @@ class TestSmokeE2E:
         config = AnnotationConfig(
             mode="full-auto", headless=True, artifacts_dir=output_dir
         )
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
-        # Mock NBAnnotationToolBrowserSession context manager
+        # Mock NBAnnotationToolBrowserSession context provider
         with patch(
             "npdb.annotation.strategies.NBAnnotationToolBrowserSession"
         ) as mock_browser_class:
@@ -234,7 +234,7 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aexit__.return_value = None
 
             # Run execute
-            success = await manager.execute(
+            success = await provider.execute(
                 participants_tsv_path=synthetic_tsv, output_dir=output_dir
             )
 
@@ -265,7 +265,7 @@ class TestSmokeE2E:
         - Contains full-auto warning
         """
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         with patch(
             "npdb.annotation.strategies.NBAnnotationToolBrowserSession"
@@ -274,10 +274,10 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            success = await manager.execute(
+            success = await provider.execute(
                 participants_tsv_path=synthetic_tsv, output_dir=output_dir
             )
-            report = manager.provenance
+            report = provider.provenance
 
             assert success is True
             assert report is not None
@@ -302,7 +302,7 @@ class TestSmokeE2E:
         - Provenance tracks confidence values
         """
         config = AnnotationConfig(mode="auto", headless=True)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         with patch(
             "npdb.annotation.strategies.NBAnnotationToolBrowserSession"
@@ -311,10 +311,10 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            success = await manager.execute(
+            success = await provider.execute(
                 participants_tsv_path=synthetic_tsv, output_dir=output_dir
             )
-            report = manager.provenance
+            report = provider.provenance
 
             assert success is True
             assert report is not None
@@ -344,7 +344,7 @@ class TestSmokeE2E:
             headless=False,
             timeout=1,
         )
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         with patch(
             "npdb.annotation.strategies.NBAnnotationToolBrowserSession"
@@ -353,7 +353,7 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            success = await manager.execute(
+            success = await provider.execute(
                 participants_tsv_path=synthetic_tsv, output_dir=output_dir
             )
 
@@ -376,7 +376,7 @@ class TestSmokeE2E:
         original_content = synthetic_tsv.read_text()
 
         config = AnnotationConfig(mode="full-auto", headless=True)
-        manager = NeurobagelAnnotator(config)
+        provider = NeurobagelAnnotator(config)
 
         with patch(
             "npdb.annotation.strategies.NBAnnotationToolBrowserSession"
@@ -385,7 +385,7 @@ class TestSmokeE2E:
             mock_browser_class.return_value.__aenter__.return_value = mock_session
             mock_browser_class.return_value.__aexit__.return_value = None
 
-            await manager.execute(
+            await provider.execute(
                 participants_tsv_path=synthetic_tsv, output_dir=output_dir
             )
 

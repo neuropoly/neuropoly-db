@@ -14,12 +14,23 @@ from pathlib import Path
 from typing import Any
 
 from npdb.annotation import AnnotationConfig
-from npdb.managers.neuropoly import DataNeuroPolyMTL
+from npdb.annotation.modes import AnnotationMode
+from npdb.errors import ConfigurationError
+from npdb.providers.figshare import FigshareProvider
+from npdb.providers.git import GitProvider
+from npdb.providers.kaggle import KaggleProvider
+from npdb.providers.mendeley import MendeleyProvider
+from npdb.providers.midrc import MIDRCProvider
+from npdb.providers.model import ProviderName
+from npdb.providers.neuropoly import DataNeuroPolyMTL
+from npdb.providers.openneuro import OpenNeuroProvider
+from npdb.providers.zenodo import ZenodoProvider
 from npdb.report import RunLedger
 
-class GiteaManagerFactory:
+
+class GiteaProviderFactory:
     """
-    Creates :class:`~npdb.managers.DataNeuroPolyMTL` from environment variables.
+    Creates :class:`~npdb.providers.DataNeuroPolyMTL` from environment variables.
 
     Required variables:
     - ``NP_GITEA_APP_URL``   — base URL of the Gitea instance
@@ -51,8 +62,10 @@ class GiteaManagerFactory:
             if not val
         ]
         if missing:
-            raise ValueError(
-                f"Missing required environment variables: {', '.join(missing)}"
+            raise ConfigurationError(
+                f"Missing required environment variables: {', '.join(missing)}",
+                hint="Add them to a .env file in the folder where you run npdb (see docs/get-access.md).",
+                docs="Development-Provider-NeuroData#access",
             )
 
         return DataNeuroPolyMTL(
@@ -61,6 +74,72 @@ class GiteaManagerFactory:
             token=token,  # type: ignore[arg-type]
             ssl_verify=ssl_verify,
         )
+
+
+class ProviderFactory:
+    """Creates provider-backed dataset providers from CLI/env configuration."""
+
+    @staticmethod
+    def create(
+        provider: str | ProviderName,
+        *,
+        cache_dir: str | Path | None = None,
+        credentials_path: str | Path | None = None,
+        token: str | None = None,
+        endpoint: str | None = None,
+    ):
+        try:
+            provider_name = (
+                provider
+                if isinstance(provider, ProviderName)
+                else ProviderName(str(provider).lower())
+            )
+        except (TypeError, ValueError) as exc:
+            supported = ", ".join(item.value for item in ProviderName)
+            raise ValueError(
+                f"Unsupported provider '{provider}'. Supported providers: {supported}."
+            ) from exc
+
+        if provider_name == ProviderName.GIT:
+            return GitProvider(
+                repo_url="",
+                user=os.environ.get("NP_GIT_USER"),
+                token=os.environ.get("NP_GIT_TOKEN"),
+                cache_dir=cache_dir,
+            )
+        if provider_name == ProviderName.KAGGLE:
+            return KaggleProvider(cache_dir=cache_dir)
+        if provider_name == ProviderName.MENDELEY:
+            return MendeleyProvider(
+                access_token=token or os.environ.get("NP_MENDELEY_ACCESS_TOKEN"),
+                cache_dir=cache_dir,
+            )
+        if provider_name == ProviderName.MIDRC:
+            return MIDRCProvider(
+                cache_dir=cache_dir,
+                credentials_path=(
+                    str(credentials_path)
+                    if credentials_path
+                    else os.environ.get("NP_MIDRC_CREDENTIALS")
+                ),
+                endpoint=endpoint
+                or os.environ.get("NP_MIDRC_ENDPOINT", "https://data.midrc.org"),
+            )
+        if provider_name == ProviderName.OPENNEURO:
+            return OpenNeuroProvider(cache_dir=cache_dir)
+        if provider_name == ProviderName.ZENODO:
+            return ZenodoProvider(
+                token=token or os.environ.get("NP_ZENODO_TOKEN"), cache_dir=cache_dir
+            )
+        if provider_name == ProviderName.FIGSHARE:
+            return FigshareProvider(
+                token=token or os.environ.get("NP_FIGSHARE_TOKEN"),
+                cache_dir=cache_dir,
+            )
+        raise ValueError(
+            f"Unsupported provider '{provider}'. Supported providers: {', '.join(item.value for item in ProviderName)}."
+        )
+
 
 class AnnotationConfigFactory:
     """
@@ -73,7 +152,7 @@ class AnnotationConfigFactory:
     def create_from_cli_args(
         cls,
         *,
-        mode: str,
+        mode: str | AnnotationMode,
         headless: bool = True,
         timeout: int = 300,
         artifacts_dir: Path | None = None,
@@ -89,8 +168,9 @@ class AnnotationConfigFactory:
         Build an :class:`AnnotationConfig` from keyword arguments that mirror
         the CLI option names.
         """
+        mode_value = AnnotationMode(mode) if isinstance(mode, str) else mode
         return AnnotationConfig(
-            mode=mode,
+            mode=mode_value,
             headless=headless,
             timeout=timeout,
             artifacts_dir=artifacts_dir,
@@ -102,6 +182,7 @@ class AnnotationConfigFactory:
             keep_annotations=keep_annotations,
             no_new_columns=no_new_columns,
         )
+
 
 class AIClientFactory:
     """
@@ -127,6 +208,10 @@ class AIClientFactory:
             ImportError: if the required provider library is not installed.
         """
         provider_lower = provider.lower()
+        if not model:
+            raise ValueError(
+                f"AI provider '{provider}' requires a non-empty model name."
+            )
 
         if provider_lower == "ollama":
             try:
@@ -168,6 +253,7 @@ class AIClientFactory:
             f"Unsupported AI provider '{provider}'. "
             f"Supported providers: ollama, openai, azure_openai"
         )
+
 
 class LedgerFactory:
     """Creates :class:`~npdb.ledger.RunLedger` instances."""

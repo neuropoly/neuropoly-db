@@ -8,7 +8,9 @@ after the conversion and facade refactors.
 from unittest.mock import AsyncMock, patch
 
 from typer.testing import CliRunner
+from typer.testing import CliRunner as RepairRunner
 
+from bids_repair.cli import app as repair_app
 from npdb.annotation import AnnotationConfig
 from npdb.cli.cli import npdb
 
@@ -19,6 +21,13 @@ LOCAL_COMMAND = ["convert", "bagel", "local"]
 
 class TestCLIStructure:
     """Tests for CLI interface structure and help."""
+
+    def test_console_entry_delegates_to_app(self):
+        from npdb.cli.cli import run
+
+        with patch("npdb.cli.cli.npdb") as app:
+            run()
+        app.assert_called_once_with()
 
     def test_cli_app_exists(self):
         """Test that CLI app is properly initialized."""
@@ -52,6 +61,23 @@ class TestCLIStructure:
         result = runner.invoke(npdb, ["convert", "--help"])
         assert result.exit_code == 0
         assert "bagel" in result.stdout
+
+    def test_bagel_help_lists_provider_commands(self):
+        """Test that all provider-backed convert/bagel commands are exposed."""
+        result = runner.invoke(npdb, ["convert", "bagel", "--help"])
+        assert result.exit_code == 0
+        for command in [
+            "local",
+            "gitea",
+            "git",
+            "kaggle",
+            "mendeley",
+            "midrc",
+            "openneuro",
+            "zenodo",
+            "figshare",
+        ]:
+            assert command in result.stdout
 
     def test_gitea_help(self):
         """Test that the nested gitea help works."""
@@ -150,12 +176,9 @@ class TestCLINoRegressions:
         (input_dir / "dataset_description.json").write_text("{}", encoding="utf-8")
         output_dir = tmp_path / "output"
 
-        with (
-            patch("npdb.cli.cli.extend_bids_description") as mock_extend,
-            patch(
-                "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
-            ) as mock_run,
-        ):
+        with patch(
+            "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
+        ) as mock_run:
             result = runner.invoke(
                 npdb,
                 LOCAL_COMMAND
@@ -169,52 +192,48 @@ class TestCLINoRegressions:
             )
 
         assert result.exit_code == 0, result.output
-        mock_extend.assert_called_once_with(
-            input_dir.name,
-            str(input_dir),
-            "https://example.com/repo",
-            "restricted",
-        )
         mock_run.assert_awaited_once()
+        assert mock_run.await_args.kwargs["online_url"] == "https://example.com/repo"
+        assert mock_run.await_args.kwargs["access_type"] == "restricted"
         assert "Conversion complete!" in result.stdout
 
 
 class TestStandardizeSubcommand:
-    """Tests for the standardize subgroup and bids command."""
+    """Standardization moved to bids-repair, without Neurobagel automation."""
 
     def test_cli_has_standardize_subcommand(self):
-        """Test that standardize subcommand is listed in help."""
+        """BIDS-only standardization is no longer registered on npdb."""
         result = runner.invoke(npdb, ["--help"])
+        assert result.exit_code == 0
+        assert "standardize" not in result.stdout
+
+    def test_standardize_help(self):
+        """Standalone standardization is listed in bids-repair help."""
+        result = RepairRunner().invoke(repair_app, ["--help"])
         assert result.exit_code == 0
         assert "standardize" in result.stdout
 
-    def test_standardize_help(self):
-        """Test that 'npdb standardize --help' works."""
-        result = runner.invoke(npdb, ["standardize", "--help"])
-        assert result.exit_code == 0
-        assert "bids" in result.stdout
-
     def test_standardize_bids_help(self):
-        """Test that 'npdb standardize bids --help' works."""
-        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        """Standalone standardization accepts a dataset directory."""
+        result = RepairRunner().invoke(repair_app, ["standardize", "--help"])
         assert result.exit_code == 0
-        assert "BIDS_DIR" in result.stdout or "bids" in result.stdout.lower()
+        assert "DATASET" in result.stdout
 
     def test_standardize_bids_dry_run_flag(self):
         """Test that --dry-run flag is available."""
-        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        result = RepairRunner().invoke(repair_app, ["standardize", "--help"])
         assert result.exit_code == 0
         assert "--dry-run" in result.stdout
 
     def test_standardize_bids_keep_annotations_flag(self):
-        """Test that --keep-annotations flag is available."""
-        result = runner.invoke(npdb, ["standardize", "bids", "--help"])
+        """Neurobagel annotations are not a standalone BIDS option."""
+        result = RepairRunner().invoke(repair_app, ["standardize", "--help"])
         assert result.exit_code == 0
-        assert "--keep-annotations" in result.stdout
+        assert "--keep-annotations" not in result.stdout
 
     def test_standardize_bids_missing_dir(self):
         """Test error when BIDS dir doesn't exist."""
-        result = runner.invoke(npdb, ["standardize", "bids", "/nonexistent/path"])
+        result = RepairRunner().invoke(repair_app, ["standardize", "/nonexistent/path"])
         assert result.exit_code != 0
 
     def test_gitea_annotation_modes_accepted(self):
@@ -242,7 +261,7 @@ class TestStandardizeSubcommand:
 
     def test_annotation_config_available_in_cli(self):
         """Test that AnnotationConfig is available in CLI."""
-        from npdb.managers.annotation import NeurobagelAnnotator
+        from npdb.annotators import NeurobagelAnnotator
 
         assert NeurobagelAnnotator is not None
         assert AnnotationConfig is not None
@@ -251,5 +270,5 @@ class TestStandardizeSubcommand:
         config = AnnotationConfig(mode="manual")
         assert config.mode == "manual"
 
-        manager = NeurobagelAnnotator(config)
-        assert manager.config.mode == "manual"
+        provider = NeurobagelAnnotator(config)
+        assert provider.config.mode == "manual"

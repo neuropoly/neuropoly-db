@@ -12,15 +12,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from npdb.cli.observers import DownloadObserver
-from npdb.managers.neuropoly import DataNeuroPolyMTL
+from npdb.providers.neuropoly import DataNeuroPolyMTL
 
 
 @pytest.fixture()
-def manager(tmp_path):
+def provider(tmp_path):
     """A DataNeuroPolyMTL instance with all network calls mocked."""
     with (
-        patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
-        patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None),
+        patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
+        patch("npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None),
     ):
         mock_client = MagicMock()
         mock_client.requests.verify = False
@@ -44,11 +44,11 @@ class TestRunGitProgress:
     """_run_git notifies observers with typed file events when repo_name is set."""
 
     def test_on_file_progress_called_for_percent_done_events(
-        self, manager, observer, tmp_path
+        self, provider, observer, tmp_path
     ):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
         json_events = [
             json.dumps(
@@ -74,7 +74,7 @@ class TestRunGitProgress:
         popen_proc.wait.return_value = 0
 
         with patch("subprocess.Popen", return_value=popen_proc):
-            manager._run_git(
+            provider._run_git(
                 [
                     "git",
                     "-C",
@@ -86,7 +86,7 @@ class TestRunGitProgress:
                 ],
                 {},
                 context="test",
-                line_parser_hook=lambda line: manager._parse_annex_event_line(
+                line_parser_hook=lambda line: provider._parse_annex_event_line(
                     "whole-spine", line
                 ),
             )
@@ -98,11 +98,11 @@ class TestRunGitProgress:
         observer.on_file_complete.assert_not_called()
 
     def test_on_file_complete_called_for_success_events(
-        self, manager, observer, tmp_path
+        self, provider, observer, tmp_path
     ):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
         json_events = [
             json.dumps({"command": "get", "success": True, "file": "file1.nii.gz"})
@@ -113,7 +113,7 @@ class TestRunGitProgress:
         popen_proc.wait.return_value = 0
 
         with patch("subprocess.Popen", return_value=popen_proc):
-            manager._run_git(
+            provider._run_git(
                 [
                     "git",
                     "-C",
@@ -125,7 +125,7 @@ class TestRunGitProgress:
                 ],
                 {},
                 context="test",
-                line_parser_hook=lambda line: manager._parse_annex_event_line(
+                line_parser_hook=lambda line: provider._parse_annex_event_line(
                     "whole-spine", line
                 ),
             )
@@ -133,10 +133,10 @@ class TestRunGitProgress:
         observer.on_file_complete.assert_called_once_with("whole-spine", "file1.nii.gz")
         observer.on_file_progress.assert_not_called()
 
-    def test_no_file_events_when_repo_name_is_none(self, manager, observer, tmp_path):
+    def test_no_file_events_when_repo_name_is_none(self, provider, observer, tmp_path):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
         json_events = [
             json.dumps(
@@ -154,15 +154,15 @@ class TestRunGitProgress:
         popen_proc.wait.return_value = 0
 
         with patch("subprocess.Popen", return_value=popen_proc):
-            manager._run_git(["git", "clone", "..."], {}, context="test")
+            provider._run_git(["git", "clone", "..."], {}, context="test")
 
         observer.on_file_progress.assert_not_called()
         observer.on_file_complete.assert_not_called()
 
-    def test_malformed_json_lines_skipped(self, manager, observer, tmp_path):
+    def test_malformed_json_lines_skipped(self, provider, observer, tmp_path):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
         lines = [
             "not json at all",
@@ -183,7 +183,7 @@ class TestRunGitProgress:
         popen_proc.wait.return_value = 0
 
         with patch("subprocess.Popen", return_value=popen_proc):
-            manager._run_git(
+            provider._run_git(
                 [
                     "git",
                     "-C",
@@ -195,14 +195,14 @@ class TestRunGitProgress:
                 ],
                 {},
                 context="test",
-                line_parser_hook=lambda line: manager._parse_annex_event_line(
+                line_parser_hook=lambda line: provider._parse_annex_event_line(
                     "whole-spine", line
                 ),
             )
 
         assert observer.on_file_progress.call_count == 1
 
-    def test_non_zero_returncode_raises_error(self, manager, tmp_path):
+    def test_non_zero_returncode_raises_error(self, provider, tmp_path):
         cmd = ["git", "-C", str(tmp_path), "annex", "get", "--json", "--json-progress"]
 
         popen_proc = MagicMock()
@@ -212,19 +212,19 @@ class TestRunGitProgress:
 
         with patch("subprocess.Popen", return_value=popen_proc):
             with pytest.raises(RuntimeError, match="git annex get.*failed"):
-                manager._run_git(
+                provider._run_git(
                     cmd,
                     {},
                     context=f"git annex get in '{tmp_path}'",
-                    line_parser_hook=lambda line: manager._parse_annex_event_line(
+                    line_parser_hook=lambda line: provider._parse_annex_event_line(
                         "whole-spine", line
                     ),
                 )
 
-    def test_progress_events_from_stderr_are_parsed(self, manager, observer, tmp_path):
+    def test_progress_events_from_stderr_are_parsed(self, provider, observer, tmp_path):
         repo_dir = tmp_path / "repo"
         repo_dir.mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
         stderr_events = [
             json.dumps(
@@ -244,7 +244,7 @@ class TestRunGitProgress:
         popen_proc.wait.return_value = 0
 
         with patch("subprocess.Popen", return_value=popen_proc):
-            manager._run_git(
+            provider._run_git(
                 [
                     "git",
                     "-C",
@@ -256,7 +256,7 @@ class TestRunGitProgress:
                 ],
                 {},
                 context="test",
-                line_parser_hook=lambda line: manager._parse_annex_event_line(
+                line_parser_hook=lambda line: provider._parse_annex_event_line(
                     "whole-spine", line
                 ),
             )
@@ -270,12 +270,12 @@ class TestRunGitProgress:
 class TestCloneSparseProgress:
     """clone_sparse calls on_repo_step before each git operation."""
 
-    def test_repo_step_fired_for_clone(self, manager, observer, tmp_path):
+    def test_repo_step_fired_for_clone(self, provider, observer, tmp_path):
         dest = tmp_path / "repo"
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
-        with patch.object(manager, "_run_git"):
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git"):
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -285,12 +285,12 @@ class TestCloneSparseProgress:
         assert any("Cloning" in lbl for lbl in labels)
         assert any("whole-spine" in lbl for lbl in labels)
 
-    def test_repo_name_propagated_to_all_steps(self, manager, observer, tmp_path):
+    def test_repo_name_propagated_to_all_steps(self, provider, observer, tmp_path):
         dest = tmp_path / "repo"
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
-        with patch.object(manager, "_run_git"):
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git"):
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -299,12 +299,12 @@ class TestCloneSparseProgress:
         repos = {c.args[0] for c in observer.on_repo_step.call_args_list}
         assert repos == {"whole-spine"}
 
-    def test_sparse_checkout_steps_notified(self, manager, observer, tmp_path):
+    def test_sparse_checkout_steps_notified(self, provider, observer, tmp_path):
         dest = tmp_path / "repo"
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
-        with patch.object(manager, "_run_git"):
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git"):
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -314,14 +314,14 @@ class TestCloneSparseProgress:
         assert any("sparse" in lbl.lower() for lbl in labels)
         assert any("checkout" in lbl.lower() for lbl in labels)
 
-    def test_clone_step_skipped_when_git_dir_exists(self, manager, observer, tmp_path):
+    def test_clone_step_skipped_when_git_dir_exists(self, provider, observer, tmp_path):
         dest = tmp_path / "repo"
         dest.mkdir()
         (dest / ".git").mkdir()
-        manager.add_download_observer(observer)
+        provider.add_download_observer(observer)
 
-        with patch.object(manager, "_run_git"):
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git"):
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -330,10 +330,10 @@ class TestCloneSparseProgress:
         labels = [c.args[1] for c in observer.on_repo_step.call_args_list]
         assert not any("Cloning" in lbl for lbl in labels)
 
-    def test_no_observer_required(self, manager, tmp_path):
+    def test_no_observer_required(self, provider, tmp_path):
         dest = tmp_path / "repo"
-        with patch.object(manager, "_run_git"):
-            manager.clone_sparse(
+        with patch.object(provider, "_run_git"):
+            provider.clone_sparse(
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",
                 ["sub-amuAP"],
                 dest,
@@ -343,11 +343,11 @@ class TestCloneSparseProgress:
 class TestDownloadSubjectsObserver:
     """download_subjects fires on_repo_done for each repository processed."""
 
-    def _make_manager(self):
+    def _make_provider(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.providers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             mock_client = MagicMock()
@@ -361,7 +361,7 @@ class TestDownloadSubjectsObserver:
             )
 
     def test_on_repo_done_success_fired(self, tmp_path):
-        dnp = self._make_manager()
+        dnp = self._make_provider()
         obs = MagicMock(spec=DownloadObserver)
         dnp.add_download_observer(obs)
         subjects = [
@@ -378,7 +378,7 @@ class TestDownloadSubjectsObserver:
         obs.on_repo_done.assert_called_once_with("whole-spine", True)
 
     def test_on_repo_done_failure_fired_on_error(self, tmp_path):
-        dnp = self._make_manager()
+        dnp = self._make_provider()
         obs = MagicMock(spec=DownloadObserver)
         dnp.add_download_observer(obs)
         subjects = [
@@ -396,7 +396,7 @@ class TestDownloadSubjectsObserver:
         assert results[0][0] is False
 
     def test_on_repo_error_fired_on_error(self, tmp_path):
-        dnp = self._make_manager()
+        dnp = self._make_provider()
         obs = MagicMock(spec=DownloadObserver)
         dnp.add_download_observer(obs)
         subjects = [
@@ -413,7 +413,7 @@ class TestDownloadSubjectsObserver:
         obs.on_repo_error.assert_called_once_with("whole-spine", "clone boom")
 
     def test_on_repo_done_fired_per_unique_repo(self, tmp_path):
-        dnp = self._make_manager()
+        dnp = self._make_provider()
         obs = MagicMock(spec=DownloadObserver)
         dnp.add_download_observer(obs)
         subjects = [
@@ -442,7 +442,7 @@ class TestDownloadSubjectsObserver:
         assert called_repos == {"spine-ms", "whole-spine"}
 
     def test_no_observer_required_backward_compatible(self, tmp_path):
-        dnp = self._make_manager()
+        dnp = self._make_provider()
         subjects = [
             (
                 "https://data.neuro.polymtl.ca/datasets/whole-spine",

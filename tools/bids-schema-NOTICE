@@ -1,0 +1,11 @@
+BIDS schema attribution
+
+The bundled schema describes the Brain Imaging Data Structure specification
+(BIDS 1.11.1), copyright (c) 2018, BIDS Contributors.
+Specification source: https://github.com/bids-standard/bids-specification/tree/v1.11.1
+Specification license: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+License text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+The compiled schema is copied unchanged from the pinned rordenlab/bids-validator-rs
+source recorded in bids-validator-source.json. npdb does not modify that schema.
+The specification's authors do not endorse npdb or its validator.

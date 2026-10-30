@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from npdb.annotation import AnnotationConfig
-from npdb.managers.annotation import NeurobagelAnnotator
+from npdb.annotators import NeurobagelAnnotator
 
 
 @pytest.fixture
