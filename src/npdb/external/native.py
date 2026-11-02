@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -52,6 +53,27 @@ def verify_bundle(directory: Path) -> Path:
         for notice in ("LICENSE", "THIRD-PARTY-LICENSES"):
             if not (directory / notice).is_file():
                 raise ValueError(f"missing {notice}")
+        embedded_commit = identity["source_commit"]
+        if provenance.get("acquisition") == "appveyor":
+            manifest = json.loads(
+                Path(__file__).with_name("validator-artifacts.json").read_text(encoding="utf-8")
+            )
+            if not isinstance(manifest, dict) or any(manifest.get(key) != identity[key]
+                   for key in ("source_commit", "source_tree_sha256")):
+                raise ValueError("artifact approval does not match the pinned source")
+            target = provenance.get("target")
+            if not isinstance(target, str):
+                raise ValueError("artifact target is missing or invalid")
+            approved = manifest.get("artifacts", {}).get(target, [])
+            if not any(
+                item["archive_sha256"] == provenance.get("archive_sha256")
+                and item["executable_sha256"] == provenance["sha256"]
+                for item in approved
+            ):
+                raise ValueError("executable is not an approved AppVeyor artifact")
+            embedded_commit = identity["source_commit"][:12]
+            if provenance.get("embedded_source_commit") != embedded_commit:
+                raise ValueError("artifact embedded commit does not match approval")
         if not os.access(executable, os.X_OK):
             raise ValueError("validator is not executable")
         version = subprocess.run(
@@ -64,9 +86,8 @@ def verify_bundle(directory: Path) -> Path:
             f"{identity['upstream_version']} commit {identity['upstream_commit'][:7]} "
             f"rust {identity['rust_package_version']}"
         )
-        if expected not in version or (
-            f"rust git commit {identity['source_commit']}" not in version
-        ):
+        reported_commit = re.search(r"^rust git commit ([0-9a-f]+)$", version, re.MULTILINE)
+        if expected not in version or not reported_commit or reported_commit[1] != embedded_commit:
             raise ValueError("executable version does not match source identity")
         return executable
     except (OSError, ValueError, subprocess.SubprocessError) as exc:

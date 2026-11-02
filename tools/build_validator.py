@@ -84,13 +84,32 @@ def build_bundle(root: Path, destination: Path, target: str | None = None) -> Pa
     cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")).resolve()
     if destination.is_relative_to(source) or cargo_home.is_relative_to(source):
         raise RuntimeError("Build destinations and CARGO_HOME must be outside the submodule.")
+    identity = native_helpers(root)["source_identity"]()
+    artifacts = runpy.run_path(str(root / "tools/validator_artifacts.py"))
+    artifact_target = target or artifacts["host_target"]()
+    acquired = artifacts["acquire"](root, destination, artifact_target)
+    if acquired is not None:
+        executable, provenance = acquired
+        finish_bundle(source, destination, executable, artifact_target, identity, provenance)
+        source_directory(root)
+        return executable
+    host = artifacts["host_target"]()
+    if artifact_target != host and not (
+        host.endswith("-unknown-linux-gnu")
+        and artifact_target == "x86_64-pc-windows-msvc"
+        and os.environ.get("NPDB_CARGO_XWIN") == "1"
+    ):
+        raise RuntimeError(
+            f"No usable prebuilt validator for {artifact_target}; source fallback cannot "
+            f"build this target on {host}. Use a matching native host, or enable "
+            "cargo-xwin for a Windows build from Linux."
+        )
     cargo = shutil.which("cargo")
     if cargo is None:
         raise RuntimeError(
             "Building npdb from source requires Rust 1.90+ with Cargo. "
             "Install a prebuilt platform wheel to avoid compiling Rust."
         )
-    identity = native_helpers(root)["source_identity"]()
     output = root.resolve() / "build" / "cargo-validator"
     if output.resolve().is_relative_to(source):
         raise RuntimeError("The parent build directory must not point into the submodule.")
@@ -109,12 +128,25 @@ def build_bundle(root: Path, destination: Path, target: str | None = None) -> Pa
         ).stdout
         target = next(line.removeprefix("host: ") for line in host.splitlines()
                       if line.startswith("host: "))
+    cross_compile_windows = os.environ.get("NPDB_CARGO_XWIN") == "1"
+    if cross_compile_windows and target != "x86_64-pc-windows-msvc":
+        raise RuntimeError(
+            "NPDB_CARGO_XWIN can only build the x86_64-pc-windows-msvc target."
+        )
     if "windows" in target:
         environment["RUSTFLAGS"] = (
             environment.get("RUSTFLAGS", "") + " -C target-feature=+crt-static"
         ).strip()
+    build_command = [cargo, "build"]
+    if cross_compile_windows:
+        if shutil.which("cargo-xwin") is None:
+            raise RuntimeError(
+                "Cross-building Windows MSVC wheels requires cargo-xwin and Clang/LLVM. "
+                "Install cargo-xwin and accept its Windows SDK/CRT license terms."
+            )
+        build_command = [cargo, "xwin", "build"]
     subprocess.run(
-        [cargo, "build", "--release", "--locked", "--bin", "bids-validator",
+        [*build_command, "--release", "--locked", "--bin", "bids-validator",
          "--manifest-path", str(source / "Cargo.toml"), "--target-dir", str(output),
          "--target", target],
         env=environment, check=True,
@@ -130,18 +162,30 @@ def build_bundle(root: Path, destination: Path, target: str | None = None) -> Pa
     executable = destination / name
     shutil.copy2(output / target / "release" / name, executable)
     executable.chmod(0o755)
+    finish_bundle(source, destination, executable, target, identity, {"acquisition": "source"})
+    (destination / "THIRD-PARTY-LICENSES").write_text(third_party_notices(packages), encoding="utf-8")
+    source_directory(root)
+    return executable
+
+
+def finish_bundle(
+    source: Path, destination: Path, executable: Path,
+    target: str, identity: dict, acquisition: dict,
+) -> None:
     schema = source / "schemas/schema-1.2.1.json"
     shutil.copy2(schema, destination / "schema.json")
     provenance = {
-        **identity,
-        "target": target,
+        **identity, **acquisition, "target": target,
         "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "schema_sha256": hashlib.sha256(schema.read_bytes()).hexdigest(),
     }
     (destination / "provenance.json").write_text(
-        json.dumps(provenance, indent=2) + "\n", encoding="utf-8"
+        json.dumps(provenance, indent=2) + "\n", encoding="utf-8",
     )
     shutil.copy2(source / "LICENSE", destination / "LICENSE")
+
+
+def third_party_notices(packages: list[dict]) -> str:
     notices = [
         "Bundled BIDS schema 1.2.1 (BIDS 1.11.1): CC-BY-4.0.\n"
         "Source: https://github.com/bids-standard/bids-specification/tree/v1.11.1\n"
@@ -154,9 +198,7 @@ def build_bundle(root: Path, destination: Path, target: str | None = None) -> Pa
         for path in sorted(Path(package["manifest_path"]).parent.iterdir()):
             if path.is_file() and path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE")):
                 notices.append(path.read_text(encoding="utf-8"))
-    (destination / "THIRD-PARTY-LICENSES").write_text("\n".join(notices), encoding="utf-8")
-    source_directory(root)
-    return executable
+    return "\n".join(notices)
 
 
 def install(root: Path, prefix: Path) -> None:

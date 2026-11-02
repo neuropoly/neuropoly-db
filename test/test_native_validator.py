@@ -17,6 +17,11 @@ BUILD = runpy.run_path(str(ROOT / "tools/build_validator.py"))
 AUDIT = runpy.run_path(str(ROOT / "tools/audit_validator.py"))
 
 
+@pytest.fixture(autouse=True)
+def source_only_builds(monkeypatch):
+    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE_ONLY", "1")
+
+
 def _bundle(directory):
     directory.mkdir(parents=True)
     pin = source_identity()
@@ -139,6 +144,7 @@ def exported_validator_source(tmp_path):
         ).encode()).hexdigest(),
     }))
     shutil.copy2(ROOT / "tools/build_validator.py", tmp_path / "tools/build_validator.py")
+    shutil.copy2(ROOT / "tools/validator_artifacts.py", tmp_path / "tools/validator_artifacts.py")
     return tmp_path
 
 
@@ -150,6 +156,40 @@ def test_exported_source_is_verified_without_git_metadata(exported_validator_sou
     (root / "tools/bids-validator-rust/Cargo.toml").write_text("tampered\n")
     with pytest.raises(RuntimeError, match="pinned source digest"):
         BUILD["source_directory"](root)
+
+
+def test_windows_cross_build_uses_cargo_xwin(exported_validator_source, monkeypatch):
+    root = exported_validator_source
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        if "xwin" in command:
+            output = Path(command[command.index("--target-dir") + 1])
+            target = command[command.index("--target") + 1]
+            binary = output / target / "release/bids-validator.exe"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"fixture PE")
+            return subprocess.CompletedProcess(command, 0)
+        if "metadata" in command:
+            return subprocess.CompletedProcess(
+                command, 0, stdout=json.dumps({"packages": []}),
+            )
+        raise AssertionError(f"Unexpected command: {command}")
+
+    monkeypatch.setattr(BUILD["shutil"], "which", lambda name: f"/tools/{name}")
+    monkeypatch.setattr(BUILD["subprocess"], "run", run)
+    monkeypatch.setenv("NPDB_CARGO_XWIN", "1")
+
+    BUILD["build_bundle"](
+        root, root / "build/bundle", "x86_64-pc-windows-msvc",
+    )
+
+    build_command, build_options = calls[0]
+    assert build_command[:3] == ["/tools/cargo", "xwin", "build"]
+    assert build_options["env"]["RUSTFLAGS"].endswith("-C target-feature=+crt-static")
+    assert calls[1][0][1] == "metadata"
+    assert (root / "build/bundle/bids-validator.exe").is_file()
 
 
 @pytest.mark.parametrize("stage", ["rev-parse", "status", "-vV", "build", "metadata"])
@@ -262,6 +302,7 @@ def test_native_build_preserves_local_submodule_checkout_and_update(tmp_path):
     external = parent / "src/npdb/external"
     external.mkdir(parents=True)
     shutil.copy2(ROOT / "src/npdb/external/native.py", external / "native.py")
+    shutil.copy2(ROOT / "tools/validator_artifacts.py", parent / "tools/validator_artifacts.py")
 
     def record(revision):
         git(source, "checkout", revision)

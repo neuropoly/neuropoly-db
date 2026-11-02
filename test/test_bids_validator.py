@@ -62,10 +62,17 @@ def test_workspace_image_includes_only_native_validation_tools():
     dockerfile = " ".join(
         (root / ".devcontainer/Dockerfile").read_text().replace("\\\n", " ").split()
     )
+    devcontainer = json.loads((root / ".devcontainer/devcontainer.json").read_text())
+    rust_feature = devcontainer["features"]["ghcr.io/devcontainers/features/rust:1"]
     assert "FROM rust:1.90.0-bookworm AS validator" in dockerfile
     assert "build_validator.py --output /native/npdb-validator" in dockerfile
     assert "apt-get install -y --no-install-recommends dcm2niix" in dockerfile
+    assert all(package in dockerfile for package in ("clang", "lld", "llvm"))
+    assert rust_feature["version"] == "1.90.0"
+    assert rust_feature["targets"] == "x86_64-pc-windows-msvc"
     assert "COPY --from=validator /native/npdb-validator" in dockerfile
+    post_create = (root / ".devcontainer/postCreate.sh").read_text()
+    assert "cargo install --locked cargo-xwin" in post_create
     assert "npm" not in dockerfile
     assert "deno" not in dockerfile
     ignored = (root / ".dockerignore").read_text().splitlines()
@@ -73,6 +80,13 @@ def test_workspace_image_includes_only_native_validation_tools():
     assert "!tools/bids-validator-rust/Cargo.lock" in ignored
     assert "!tools/bids-validator-rust/crates/**" in ignored
     assert "!tools/bids-validator-rust/schemas/**" in ignored
+    for path in (
+        "tools/validator_artifacts.py", "tools/audit_validator.py",
+        "src/npdb/external/validator-artifacts.json",
+        "src/npdb/external/validator-artifact-notices.txt.gz",
+    ):
+        assert f"!{path}" in ignored
+        assert path in dockerfile
     assert ignored[-1] == "**/.git"
     assert not (root / ".devcontainer/Dockerfile.dockerignore").exists()
     assert not any(line.startswith("!tmp") for line in ignored)

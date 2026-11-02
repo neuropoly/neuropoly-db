@@ -10,6 +10,66 @@ def _output(*command: str) -> str:
     return subprocess.run(command, check=True, capture_output=True, text=True).stdout
 
 
+def audit_macho(data: bytes, expected: int) -> None:
+    """Check thin or universal Mach-O executables on any build host."""
+    try:
+        if data[:4] == b"\xca\xfe\xba\xbe":
+            count, = struct.unpack_from(">I", data, 4)
+            if count not in (1, 2):
+                raise RuntimeError("Expected one or two Mach-O architectures.")
+            slices = []
+            for index in range(count):
+                cpu, _, offset, size, _ = struct.unpack_from(">IIIII", data, 8 + index * 20)
+                if offset < 8 + count * 20 or offset + size > len(data):
+                    raise RuntimeError("Invalid Mach-O slice bounds.")
+                slices.append((cpu, data[offset:offset + size]))
+        else:
+            cpu, = struct.unpack_from("<I", data, 4)
+            slices = [(cpu, data)]
+        architectures = [cpu for cpu, _ in slices]
+        if (
+            expected not in architectures or len(set(architectures)) != len(architectures)
+            or not set(architectures) <= {0x01000007, 0x0100000C}
+        ):
+            raise RuntimeError("Mach-O architecture does not match the wheel tag.")
+        for cpu, image in slices:
+            if image[:4] != b"\xcf\xfa\xed\xfe":
+                raise RuntimeError("Expected a little-endian 64-bit Mach-O executable.")
+            actual_cpu, _, kind, count, size = struct.unpack_from("<IIIII", image, 4)
+            if actual_cpu != cpu or kind != 2 or 32 + size > len(image):
+                raise RuntimeError("Invalid Mach-O executable header.")
+            position = 32
+            minimums = []
+            for _ in range(count):
+                command, length = struct.unpack_from("<II", image, position)
+                if length < 8 or position + length > 32 + size:
+                    raise RuntimeError("Invalid Mach-O load command.")
+                payload = image[position:position + length]
+                if command == 0x24:
+                    minimum, = struct.unpack_from("<I", payload, 8)
+                    minimums.append(minimum)
+                elif command == 0x32:
+                    system, minimum = struct.unpack_from("<II", payload, 8)
+                    minimums.append(minimum)
+                    if system != 1:
+                        raise RuntimeError("Mach-O binary does not target macOS.")
+                elif command in {0xC, 0x80000018, 0x8000001F, 0x20, 0x80000023}:
+                    start, = struct.unpack_from("<I", payload, 8)
+                    if not 24 <= start < length or b"\0" not in payload[start:]:
+                        raise RuntimeError("Invalid Mach-O library load command.")
+                    library = payload[start:].split(b"\0", 1)[0].decode("utf-8")
+                    if not library.startswith(("/usr/lib/", "/System/Library/")):
+                        raise RuntimeError(f"Unbundled native dependency: {library}")
+                position += length
+            if (
+                position != 32 + size or not minimums
+                or any(minimum > 11 << 16 for minimum in minimums)
+            ):
+                raise RuntimeError("Executable exceeds macOS 11.0 baseline or has no deployment target.")
+    except (struct.error, UnicodeError) as error:
+        raise RuntimeError(f"Invalid Mach-O executable: {error}") from error
+
+
 def audit(binary: Path, wheel_platform: str) -> None:
     if wheel_platform.startswith(("manylinux_", "musllinux_")):
         if wheel_platform not in {
@@ -39,20 +99,8 @@ def audit(binary: Path, wheel_platform: str) -> None:
         if libraries - allowed:
             raise RuntimeError(f"Unbundled native dependencies: {libraries - allowed}")
     elif wheel_platform in {"macosx_11_0_x86_64", "macosx_11_0_arm64"}:
-        expected = "arm64" if wheel_platform.endswith("arm64") else "x86_64"
-        if _output("lipo", "-archs", str(binary)).strip() != expected:
-            raise RuntimeError("Mach-O architecture does not match the wheel tag.")
-        versions = _output("vtool", "-show-build", str(binary))
-        minimum = re.findall(r"\bminos\s+([0-9.]+)", versions)
-        if not minimum or any(
-            tuple((list(map(int, value.split("."))) + [0, 0])[:3]) > (11, 0, 0)
-            for value in minimum
-        ):
-            raise RuntimeError(f"Executable exceeds macOS 11.0 baseline: {versions}")
-        libraries = _output("otool", "-L", str(binary)).splitlines()[1:]
-        if any(not line.strip().startswith(("/usr/lib/", "/System/Library/"))
-               for line in libraries):
-            raise RuntimeError(f"Unbundled native dependencies: {libraries}")
+        expected = 0x0100000C if wheel_platform.endswith("arm64") else 0x01000007
+        audit_macho(binary.read_bytes(), expected)
     elif wheel_platform == "win_amd64":
         data = binary.read_bytes()
         pe = struct.unpack_from("<I", data, 0x3C)[0]

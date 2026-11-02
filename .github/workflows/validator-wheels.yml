@@ -25,50 +25,25 @@ jobs:
       matrix:
         include:
           - runner: ubuntu-24.04
-            image: quay.io/pypa/manylinux_2_28_x86_64
-            target: x86_64-unknown-linux-gnu
+            target: linux-x86_64
             tag: manylinux_2_28_x86_64
           - runner: ubuntu-24.04-arm
-            image: quay.io/pypa/manylinux_2_28_aarch64
-            target: aarch64-unknown-linux-gnu
+            target: linux-arm64
             tag: manylinux_2_28_aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Initialize only the pinned GitHub validator source
         run: git submodule update --init --recursive -- tools/bids-validator-rust
-      - name: Build and prepare dependency wheelhouse
-        run: |
-          docker run --rm -v "$PWD:/project" -w /project \
-            -e NPDB_RUST_TARGET=${{ matrix.target }} \
-            -e NPDB_WHEEL_PLATFORM=${{ matrix.tag }} \
-            ${{ matrix.image }} bash -euxc '
-              export PATH=/opt/python/cp312-cp312/bin:$PATH
-              python -m pip install uv
-              curl --fail --proto "=https" --tlsv1.2 https://sh.rustup.rs -o /tmp/rustup.sh
-              sh /tmp/rustup.sh -y --profile minimal --default-toolchain 1.90.0
-              export PATH=/root/.cargo/bin:$PATH
-              uv build --sdist
-              uv build --wheel
-              python -m pip wheel --prefer-binary --wheel-dir wheelhouse dist/*.whl
-              git -C tools/bids-validator-rust diff --exit-code
-              test -z "$(git -C tools/bids-validator-rust status --porcelain)"
-            '
-      - name: Disconnected installed-wheel acceptance
-        run: |
-          docker run --rm --network none -v "$PWD:/project" -w /project \
-            ${{ matrix.image }} bash -euxc '
-              export PATH=/opt/python/cp312-cp312/bin:$PATH
-              python tools/verify_validator_wheel.py dist/*.whl \
-                --wheelhouse wheelhouse --metrics validator-sizes.json
-            '
+      - name: Build wheels and run disconnected acceptance
+        run: python tools/build_wheels.py --targets ${{ matrix.target }} --verify
       - uses: actions/upload-artifact@v4
         with:
           name: npdb-${{ matrix.tag }}
           path: |
-            dist/*.whl
-            dist/*.tar.gz
-            validator-sizes.json
+            dist/wheels/${{ matrix.target }}/*.whl
+            dist/wheels/${{ matrix.target }}/*.tar.gz
+            dist/wheels/${{ matrix.target }}/validator-sizes.json
 
   desktop:
     strategy:
@@ -76,19 +51,15 @@ jobs:
       matrix:
         include:
           - runner: macos-15-intel
-            target: x86_64-apple-darwin
+            target: macos-x86_64
             tag: macosx_11_0_x86_64
           - runner: macos-14
-            target: aarch64-apple-darwin
+            target: macos-arm64
             tag: macosx_11_0_arm64
           - runner: windows-2022
-            target: x86_64-pc-windows-msvc
+            target: windows-x86_64
             tag: win_amd64
     runs-on: ${{ matrix.runner }}
-    env:
-      NPDB_RUST_TARGET: ${{ matrix.target }}
-      NPDB_WHEEL_PLATFORM: ${{ matrix.tag }}
-      MACOSX_DEPLOYMENT_TARGET: "11.0"
     defaults:
       run:
         shell: bash
@@ -100,23 +71,15 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@1.90.0
-      - name: Build and prepare dependency wheelhouse
-        run: |
-          uv build --sdist
-          uv build --wheel
-          python -m pip wheel --prefer-binary --wheel-dir wheelhouse dist/*.whl
-          git -C tools/bids-validator-rust diff --exit-code
-          test -z "$(git -C tools/bids-validator-rust status --porcelain)"
-      - name: Offline installed-wheel acceptance
-        run: |
-          python tools/verify_validator_wheel.py dist/*.whl \
-            --wheelhouse wheelhouse --metrics validator-sizes.json
+      - name: Build wheels and run offline acceptance
+        run: python tools/build_wheels.py --targets ${{ matrix.target }} --verify
       - uses: actions/upload-artifact@v4
         with:
           name: npdb-${{ matrix.tag }}
           path: |
-            dist/*.whl
-            validator-sizes.json
+            dist/wheels/${{ matrix.target }}/*.whl
+            dist/wheels/${{ matrix.target }}/*.tar.gz
+            dist/wheels/${{ matrix.target }}/validator-sizes.json
 
   python-compatibility:
     needs: linux
@@ -135,8 +98,8 @@ jobs:
           name: npdb-manylinux_2_28_x86_64
           path: wheel-artifact
       - name: Prepare interpreter-specific dependency wheelhouse
-        run: python -m pip wheel --prefer-binary --wheel-dir wheelhouse wheel-artifact/dist/*.whl
+        run: python -m pip wheel --prefer-binary --wheel-dir wheelhouse wheel-artifact/*.whl
       - name: Offline installed-wheel acceptance
         run: |
-          python tools/verify_validator_wheel.py wheel-artifact/dist/*.whl \
+          python tools/verify_validator_wheel.py wheel-artifact/*.whl \
             --wheelhouse wheelhouse --metrics validator-python-sizes.json
