@@ -1,7 +1,6 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from bagel.cli import bagel
 from typer.testing import CliRunner
 
 from npdb.external.bids import BidsSeverity, validate_and_repair_bids_dataset
@@ -74,6 +73,8 @@ class BagelMixin:
         )
 
     def _run_bagel_cli(self, *args):
+        from bagel.cli import bagel
+
         result = self.cli.invoke(bagel, args)
         if result.exit_code != 0:
             output = result.output

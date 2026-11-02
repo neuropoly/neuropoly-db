@@ -392,7 +392,7 @@ def classify_bagel_error(plain_text: str) -> list[dict]:
                     ),
                     _step(
                         "Validate the BIDS dataset",
-                        "Run: bids-validator-rust <bids_dir>\n"
+                        "Run: bids-validator <bids_dir> --format json --recursive\n"
                         "Fix all reported errors before re-running gitea2bagel. "
                         "Common issues: missing required files, invalid file naming, "
                         "or malformed JSON sidecars.",

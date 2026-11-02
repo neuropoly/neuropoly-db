@@ -1,29 +1,45 @@
 import json
-import os
-import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
-from npdb.external.bids import validate_bids_dataset
+from npdb.external.bids import (
+    _adapt_report,
+    get_bids_validation_report,
+    validate_bids_dataset,
+)
 
 
 def test_uses_only_the_rust_validator(tmp_path):
-    report = {"datasets": [{"errors": 0, "warnings": 1}]}
+    upstream = {
+        "issues": {
+            "issues": [{"code": "WARN", "severity": "warning"}],
+            "codeMessages": {"WARN": "A warning"},
+        }
+    }
     with (
         patch(
-            "npdb.external.bids.shutil.which", return_value="/tools/bids-validator-rust"
+            "npdb.external.bids.validator_executable",
+            return_value="/tools/bids-validator",
         ) as which,
         patch(
             "npdb.external.bids.subprocess.run",
-            return_value=Mock(returncode=0, stdout=json.dumps(report)),
+            return_value=Mock(returncode=0, stdout=json.dumps(upstream)),
         ) as run,
     ):
-        assert validate_bids_dataset(tmp_path) == report
-    which.assert_called_once_with("bids-validator-rust")
+        report = validate_bids_dataset(tmp_path)
+        assert report["datasets"][0]["warnings"] == 1
+        assert report["upstream_report"] == upstream
+    which.assert_called_once_with()
     run.assert_called_once_with(
-        ["/tools/bids-validator-rust", str(tmp_path.resolve())],
+        [
+            "/tools/bids-validator",
+            str(tmp_path.resolve()),
+            "--format",
+            "json",
+            "--recursive",
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -32,8 +48,8 @@ def test_uses_only_the_rust_validator(tmp_path):
 
 def test_missing_rust_validator_does_not_fall_back(tmp_path):
     with (
-        patch("npdb.external.bids.shutil.which", return_value=None),
-        patch("npdb.external.bids.sys.executable", str(tmp_path / "python")),
+        patch("npdb.external.native.shutil.which", return_value=None),
+        patch("npdb.external.native.sys.executable", str(tmp_path / "python")),
         patch("npdb.external.bids.subprocess.run") as run,
         pytest.raises(RuntimeError, match="install_bids_validator.sh"),
     ):
@@ -41,59 +57,24 @@ def test_missing_rust_validator_does_not_fall_back(tmp_path):
     run.assert_not_called()
 
 
-def test_finds_rust_validator_beside_interpreter(tmp_path):
-    executable = tmp_path / "bids-validator-rust"
-    executable.write_text("binary fixture")
-    executable.chmod(0o755)
-    report = {"datasets": [{"errors": 0}]}
-    with (
-        patch("npdb.external.bids.shutil.which", return_value=None),
-        patch("npdb.external.bids.sys.executable", str(tmp_path / "python")),
-        patch(
-            "npdb.external.bids.subprocess.run",
-            return_value=Mock(returncode=0, stdout=json.dumps(report)),
-        ) as run,
-    ):
-        assert validate_bids_dataset(tmp_path) == report
-    assert run.call_args.args[0][0] == str(executable)
-
-
-def test_installer_reuses_existing_rust_binary_without_cargo(tmp_path):
-    source = tmp_path / "bin"
-    source.mkdir()
-    executable = source / "bids-validator-rust"
-    executable.write_text(
-        "#!/bin/sh\nprintf '%s\\n' 'bids-validator-rust 0.0.3 (bids-validate 0.0.3)'\n"
-    )
-    executable.chmod(0o755)
-    prefix = tmp_path / "environment"
-    installer = (
-        Path(__file__).resolve().parents[1] / "scripts/install_bids_validator.sh"
-    )
-    result = subprocess.run(
-        ["bash", str(installer), str(prefix)],
-        env={**os.environ, "PATH": f"{source}:/usr/bin:/bin"},
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert "already installed" in result.stdout
-    assert (prefix / "bin/bids-validator-rust").read_bytes() == executable.read_bytes()
-    assert os.access(prefix / "bin/bids-validator-rust", os.X_OK)
-
-
 def test_workspace_image_includes_only_native_validation_tools():
     root = Path(__file__).resolve().parents[1]
-    dockerfile = (root / ".devcontainer/Dockerfile").read_text()
+    dockerfile = " ".join(
+        (root / ".devcontainer/Dockerfile").read_text().replace("\\\n", " ").split()
+    )
     assert "FROM rust:1.90.0-bookworm AS validator" in dockerfile
-    assert "cargo install --locked" in dockerfile
+    assert "build_validator.py --output /native/npdb-validator" in dockerfile
     assert "apt-get install -y --no-install-recommends dcm2niix" in dockerfile
-    assert "bids-validator-rust /usr/local/bin/bids-validator-rust" in dockerfile
+    assert "COPY --from=validator /native/npdb-validator" in dockerfile
     assert "npm" not in dockerfile
     assert "deno" not in dockerfile
-    ignored = (root / ".devcontainer/Dockerfile.dockerignore").read_text().splitlines()
+    ignored = (root / ".dockerignore").read_text().splitlines()
     assert ignored[0] == "**"
     assert "!tools/bids-validator-rust/Cargo.lock" in ignored
+    assert "!tools/bids-validator-rust/crates/**" in ignored
+    assert "!tools/bids-validator-rust/schemas/**" in ignored
+    assert ignored[-1] == "**/.git"
+    assert not (root / ".devcontainer/Dockerfile.dockerignore").exists()
     assert not any(line.startswith("!tmp") for line in ignored)
 
 
@@ -131,13 +112,19 @@ def test_neurobagel_validation_gate_uses_rust_instead_of_pybids(tmp_path):
         (1, "validation failed"),
         (0, "not json"),
         (0, '{"datasets": [{"errors": 1}]}'),
-        (0, '{"datasets": []}'),
+        (2, '{"issues": {"issues": [], "codeMessages": {}}}'),
+        (1, '{"issues": {"issues": [], "codeMessages": {}}}'),
+        (
+            0,
+            '{"issues": {"issues": [{"code": "ERR", "severity": "error"}], "codeMessages": {}}}',
+        ),
     ],
 )
 def test_rejects_failed_or_invalid_validator_results(tmp_path, code, stdout):
     with (
         patch(
-            "npdb.external.bids.shutil.which", return_value="/tools/bids-validator-rust"
+            "npdb.external.bids.validator_executable",
+            return_value="/tools/bids-validator",
         ),
         patch(
             "npdb.external.bids.subprocess.run",
@@ -146,3 +133,90 @@ def test_rejects_failed_or_invalid_validator_results(tmp_path, code, stdout):
         pytest.raises(RuntimeError),
     ):
         validate_bids_dataset(tmp_path)
+
+
+def test_recursive_reports_preserve_upstream_evidence_and_derivative_ownership(
+    tmp_path,
+):
+    child = tmp_path / "derivatives" / "pipeline"
+    child.mkdir(parents=True)
+    nested = child / "derivatives" / "nested"
+    nested.mkdir(parents=True)
+    raw = {"issues": {"issues": [], "codeMessages": {}}}
+    upstream = {
+        **raw,
+        "derivativesSummary": {
+            "pipeline": {
+                "issues": {
+                    "issues": [
+                        {
+                            "code": "NIFTI_HEADER_UNREADABLE",
+                            "severity": "error",
+                            "location": "/sub-01/anat/sub-01_T1w.nii.gz",
+                            "issueMessage": "Bad header",
+                            "subCode": "DETAIL",
+                        }
+                    ],
+                    "codeMessages": {"NIFTI_HEADER_UNREADABLE": "Cannot parse"},
+                },
+                "derivativesSummary": {"nested": raw},
+            }
+        },
+    }
+    with (
+        patch(
+            "npdb.external.bids.validator_executable",
+            return_value="/tools/bids-validator",
+        ),
+        patch(
+            "npdb.external.bids.subprocess.run",
+            return_value=Mock(returncode=1, stdout=json.dumps(upstream)),
+        ),
+    ):
+        report = validate_bids_dataset(tmp_path)
+    assert len(report["datasets"]) == 3
+    assert report["datasets"][1]["dataset"] == str(child)
+    assert report["datasets"][2]["dataset"] == str(nested)
+    issue = report["datasets"][1]["issues"][0]
+    assert issue["code"] == "NIFTI_HEADER_UNREADABLE"
+    assert issue["subCode"] == "DETAIL"
+    assert issue["severity"] == "error"
+    assert issue["message"] == "Cannot parse: Bad header"
+    assert issue["path"] == str(child / "sub-01/anat/sub-01_T1w.nii.gz")
+    assert report["upstream_report"] == upstream
+
+
+@pytest.mark.parametrize(
+    "issue",
+    [
+        {"code": "ERR", "severity": "unknown"},
+        {"code": "ERR", "severity": []},
+        {"code": "ERR", "severity": "error", "location": "/../outside"},
+        {"code": "", "severity": "error"},
+    ],
+)
+def test_malformed_findings_are_not_success(tmp_path, issue):
+    with pytest.raises(RuntimeError):
+        _adapt_report(tmp_path, {"issues": {"issues": [issue], "codeMessages": {}}})
+
+
+def test_unsafe_recursive_dataset_is_rejected(tmp_path):
+    with pytest.raises(RuntimeError, match="Unsafe derivative"):
+        _adapt_report(
+            tmp_path,
+            {
+                "issues": {"issues": [], "codeMessages": {}},
+                "derivativesSummary": {"../outside": {}},
+            },
+        )
+
+
+def test_validator_execution_failure_is_actionable(tmp_path):
+    with (
+        patch("npdb.external.bids.validator_executable", return_value="/bad/binary"),
+        patch(
+            "npdb.external.bids.subprocess.run", side_effect=OSError("bad architecture")
+        ),
+        pytest.raises(RuntimeError, match="Cannot execute.*bad architecture"),
+    ):
+        get_bids_validation_report(tmp_path)

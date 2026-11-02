@@ -14,6 +14,7 @@ from typing import Any
 
 from bids.layout import Config
 
+from npdb.external.bids_issues import repair_kind
 from npdb.external.bids_version import resolve_bids_version
 
 
@@ -123,6 +124,7 @@ def _plan_from_report(
     owner_roots: dict[str, str] = {}
     rename_source_findings: dict[str, list[dict[str, Any]]] = {}
     blocked_rename_sources: set[str] = set()
+    descriptions: dict[Path, tuple[dict[str, Any] | None, str]] = {}
     issue_records = list(_iter_issues(report))
 
     for issue, owner in issue_records:
@@ -135,12 +137,16 @@ def _plan_from_report(
         if _contains_symlink(root, owner):
             finding["resolution"] = "The validator-reported dataset path contains a symlink."
             continue
-        if finding["code"] == "INVALID_DATASET_DESCRIPTION":
+        if repair_kind(finding) == "description":
             finding["diagnostics"] = inspect_dataset_description(owner)
-            operation, explanation = _description_repair(owner, bids_version)
+            first = owner not in descriptions
+            if first:
+                descriptions[owner] = _description_repair(owner, bids_version)
+            operation, explanation = descriptions[owner]
             if operation:
-                operation["original_finding"] = dict(issue)
-                operations.append(operation)
+                if first:
+                    operation["original_finding"] = dict(issue)
+                    operations.append(operation)
                 finding.update(
                     action="normalize_dataset_description",
                     resolution="planned",
@@ -194,7 +200,7 @@ def _plan_from_report(
                         resolution="The invalid field requires user correction.",
                     )
                 )
-        elif finding["code"] == "INVALID_FILENAME":
+        elif repair_kind(finding) == "filename":
             source = _issue_file_path(owner, finding.get("path"))
             target, reason = _normalized_filename(
                 source, owner, suffix_aliases
@@ -257,7 +263,7 @@ def _plan_from_report(
                 target,
                 expected_sha256=source_hash,
                 affected_paths=[str(source), str(target)],
-                evidence="Validator reported INVALID_FILENAME; entity values came only from filename syntax or enclosing sub-/ses- directories.",
+                evidence="Validator reported a filename issue; entity values came only from filename syntax or enclosing sub-/ses- directories.",
                 diagnostic={
                     "code": "REPAIRED_FILENAME",
                     "severity": "info",
@@ -559,6 +565,7 @@ def _normalise_finding(issue: dict[str, Any], owner: Path) -> dict[str, Any]:
     if severity not in {"error", "warning", "info"}:
         severity = "info"
     finding = {
+        **issue,
         "dataset": str(owner),
         "code": code,
         "severity": severity,
@@ -566,7 +573,7 @@ def _normalise_finding(issue: dict[str, Any], owner: Path) -> dict[str, Any]:
     }
     if issue.get("path") is not None:
         finding["path"] = str(issue["path"])
-    if code not in {"INVALID_DATASET_DESCRIPTION", "INVALID_FILENAME"}:
+    if repair_kind(finding) is None:
         finding["resolution"] = "No automatic repair rule supports this validator issue."
     return finding
 

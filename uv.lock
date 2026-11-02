@@ -2319,11 +2319,16 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "bagel" },
+    { name = "gen3" },
     { name = "httpx" },
     { name = "ipywidgets" },
     { name = "jupyter" },
+    { name = "kagglehub" },
     { name = "nibabel" },
+    { name = "openneuro-py" },
     { name = "pandas" },
+    { name = "playwright" },
+    { name = "py-gitea" },
     { name = "pybids" },
     { name = "pydantic" },
     { name = "pydicom" },
@@ -2333,43 +2338,6 @@ dependencies = [
     { name = "tenacity" },
     { name = "tqdm" },
     { name = "typer" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "gen3" },
-    { name = "kagglehub" },
-    { name = "openneuro-py" },
-    { name = "py-gitea" },
-    { name = "zenodo-get" },
-]
-annotation-automation = [
-    { name = "playwright" },
-]
-download = [
-    { name = "py-gitea" },
-]
-full = [
-    { name = "gen3" },
-    { name = "kagglehub" },
-    { name = "openneuro-py" },
-    { name = "playwright" },
-    { name = "py-gitea" },
-    { name = "zenodo-get" },
-]
-gitea = [
-    { name = "py-gitea" },
-]
-kaggle = [
-    { name = "kagglehub" },
-]
-midrc = [
-    { name = "gen3" },
-]
-openneuro = [
-    { name = "openneuro-py" },
-]
-zenodo = [
     { name = "zenodo-get" },
 ]
 
@@ -2383,19 +2351,16 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bagel", specifier = "==0.11.4" },
-    { name = "gen3", marker = "extra == 'midrc'", specifier = "==4.28.4" },
+    { name = "gen3", specifier = "==4.28.4" },
     { name = "httpx", specifier = ">=0.25.0" },
     { name = "ipywidgets" },
     { name = "jupyter" },
-    { name = "kagglehub", marker = "extra == 'kaggle'", specifier = "==1.0.2" },
+    { name = "kagglehub", specifier = "==1.0.2" },
     { name = "nibabel" },
-    { name = "npdb", extras = ["all", "annotation-automation"], marker = "extra == 'full'" },
-    { name = "npdb", extras = ["git", "gitea", "kaggle", "mendeley", "figshare", "midrc", "openneuro", "zenodo"], marker = "extra == 'all'" },
-    { name = "npdb", extras = ["gitea"], marker = "extra == 'download'" },
-    { name = "openneuro-py", marker = "extra == 'openneuro'", specifier = "==2026.9.1" },
+    { name = "openneuro-py", specifier = "==2026.9.1" },
     { name = "pandas" },
-    { name = "playwright", marker = "extra == 'annotation-automation'", specifier = ">=1.58.0" },
-    { name = "py-gitea", marker = "extra == 'gitea'", specifier = "==0.2.10" },
+    { name = "playwright", specifier = ">=1.58.0" },
+    { name = "py-gitea", specifier = "==0.2.10" },
     { name = "pybids", specifier = ">=0.16" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydicom", specifier = ">=2.4" },
@@ -2405,9 +2370,8 @@ requires-dist = [
     { name = "tenacity", specifier = ">=8.0" },
     { name = "tqdm" },
     { name = "typer", specifier = ">=0.24.1" },
-    { name = "zenodo-get", marker = "extra == 'zenodo'", specifier = "==3.1.0" },
+    { name = "zenodo-get", specifier = "==3.1.0" },
 ]
-provides-extras = ["annotation-automation", "git", "gitea", "kaggle", "mendeley", "figshare", "midrc", "openneuro", "zenodo", "download", "all", "full"]
 
 [package.metadata.requires-dev]
 dev = [

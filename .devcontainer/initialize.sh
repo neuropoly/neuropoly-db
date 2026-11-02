@@ -13,6 +13,10 @@ error_exit() {
   exit 1
 }
 
+if [ ! -f "$ROOT_DIR/tools/bids-validator-rust/Cargo.toml" ]; then
+  error_exit "Missing validator source. Run: git submodule update --init --recursive -- tools/bids-validator-rust"
+fi
+
 ensure_template_marker() {
   local template_file="$1"
   local marker="$2"

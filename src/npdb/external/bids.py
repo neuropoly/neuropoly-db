@@ -1,13 +1,13 @@
 import json
-import os
-import shutil
 import subprocess
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from npdb.external.bids_issues import repair_kind
 from npdb.external.bids_version import resolve_bids_version
+from npdb.external.native import validator_executable
 
 
 class BidsSeverity(str, Enum):
@@ -75,9 +75,8 @@ def _is_derivative_finding(
         if owner == dataset_root and dataset_root.parent.name == "derivatives":
             return True
     path_candidate = _path_candidate(finding, dataset_root=dataset_root)
-    return (
-        path_candidate is not None
-        and _is_within_path(derivatives_root, path_candidate)
+    return path_candidate is not None and _is_within_path(
+        derivatives_root, path_candidate
     )
 
 
@@ -92,9 +91,8 @@ def _effective_severity(
         raise RuntimeError(
             f"Unknown BIDS finding severity: {finding.get('severity')!r}"
         ) from exc
-    if (
-        severity == BidsSeverity.ERROR
-        and _is_derivative_finding(finding, dataset_root=dataset_root)
+    if severity == BidsSeverity.ERROR and _is_derivative_finding(
+        finding, dataset_root=dataset_root
     ):
         return BidsSeverity.WARNING
     return severity
@@ -144,7 +142,9 @@ def findings_above_threshold(
         ):
             count = dataset_report.get(count_key, 0)
             if not isinstance(count, int) or isinstance(count, bool) or count < 0:
-                raise RuntimeError(f"Invalid BIDS validator {count_key} count: {count!r}")
+                raise RuntimeError(
+                    f"Invalid BIDS validator {count_key} count: {count!r}"
+                )
             listed = sum(
                 str(issue.get("severity", "")).lower() == severity.value
                 for issue in issues
@@ -167,9 +167,7 @@ def findings_above_threshold(
     exceeding = {}
     for finding in findings:
         try:
-            severity = _effective_severity(
-                finding, dataset_root=dataset_root
-            )
+            severity = _effective_severity(finding, dataset_root=dataset_root)
         except ValueError as exc:
             raise RuntimeError(
                 f"Unknown BIDS finding severity: {finding.get('severity')!r}"
@@ -181,39 +179,125 @@ def findings_above_threshold(
 
 def get_bids_validation_report(dataset: str | Path) -> dict[str, Any]:
     """Return the validator's structured report, including reports with findings."""
-    executable = _validator_executable()
-    result = subprocess.run(
-        [executable, str(Path(dataset).resolve())],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    root = Path(dataset).resolve()
+    executable = validator_executable()
     try:
-        report = json.loads(result.stdout)
+        result = subprocess.run(
+            [executable, str(root), "--format", "json", "--recursive"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Cannot execute the Rust BIDS validator: {exc}") from exc
+    try:
+        upstream = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         detail = result.stdout or result.stderr or "no output"
         raise RuntimeError(
             f"Rust BIDS validator did not return a structured report: {detail}"
         ) from exc
-    if (
-        not isinstance(report, dict)
-        or not isinstance(report.get("datasets"), list)
-        or not report["datasets"]
-        or any(not isinstance(item, dict) for item in report["datasets"])
-    ):
-        raise RuntimeError(f"Rust BIDS validator returned an invalid report: {result.stdout}")
-    errors = sum(
-        int(item.get("errors", 0))
-        for item in report["datasets"]
-        if isinstance(item.get("errors", 0), (int, float))
-    )
-    if result.returncode and errors == 0:
+    report = _adapt_report(root, upstream)
+    errors = sum(item["errors"] for item in report["datasets"])
+    if result.returncode not in (0, 1) or bool(result.returncode) != bool(errors):
         raise RuntimeError(
-            "Rust BIDS validator exited unsuccessfully without reporting validation "
-            f"errors: {result.stdout or result.stderr}"
+            f"Rust BIDS validator returned inconsistent exit status {result.returncode} "
+            f"for {errors} error(s): {result.stderr or result.stdout}"
         )
-    _explain_description_findings(Path(dataset), report)
+    _explain_description_findings(root, report)
     return report
+
+
+def _adapt_report(root: Path, upstream: Any) -> dict[str, Any]:
+    datasets: list[dict[str, Any]] = []
+
+    def visit(owner: Path, payload: Any) -> None:
+        if not isinstance(payload, dict) or not isinstance(payload.get("issues"), dict):
+            raise RuntimeError("Rust BIDS validator returned an invalid report object.")
+        collection = payload["issues"]
+        issues = collection.get("issues")
+        messages = collection.get("codeMessages")
+        derivatives = payload.get("derivativesSummary", {})
+        if (
+            not isinstance(issues, list)
+            or not isinstance(messages, dict)
+            or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in messages.items()
+            )
+            or not isinstance(derivatives, dict)
+        ):
+            raise RuntimeError(
+                "Rust BIDS validator returned invalid issues or derivatives."
+            )
+        normalized = []
+        for issue in issues:
+            if (
+                not isinstance(issue, dict)
+                or not isinstance(issue.get("code"), str)
+                or not issue["code"]
+                or not isinstance(issue.get("severity"), str)
+                or issue["severity"] not in {"error", "warning"}
+                or not isinstance(issue.get("location", ""), str)
+                or (
+                    "issueMessage" in issue
+                    and not isinstance(issue["issueMessage"], str)
+                )
+            ):
+                raise RuntimeError(
+                    f"Rust BIDS validator returned an invalid issue: {issue!r}"
+                )
+            location = issue.get("location", "")
+            # Upstream locations start with '/', but are relative to the owning dataset.
+            relative = Path(location.lstrip("/"))
+            if "\\" in location or relative.is_absolute() or ".." in relative.parts:
+                raise RuntimeError(f"Unsafe BIDS validator location: {location!r}")
+            path = owner / relative
+            if not path.resolve().is_relative_to(root):
+                raise RuntimeError(
+                    f"BIDS validator location escapes the dataset: {location!r}"
+                )
+            message = messages.get(issue["code"], "")
+            detail = issue.get("issueMessage", "")
+            normalized.append(
+                {
+                    **issue,
+                    "message": ": ".join(part for part in (message, detail) if part)
+                    or f"Validator reported {issue['code']}.",
+                    "path": str(path),
+                }
+            )
+        datasets.append(
+            {
+                "dataset": str(owner),
+                "errors": sum(item["severity"] == "error" for item in normalized),
+                "warnings": sum(item["severity"] == "warning" for item in normalized),
+                "issues": normalized,
+            }
+        )
+        for name, child in sorted(derivatives.items()):
+            if (
+                not isinstance(name, str)
+                or name in {"", ".", ".."}
+                or "/" in name
+                or "\\" in name
+            ):
+                raise RuntimeError(f"Unsafe derivative dataset name: {name!r}")
+            child_root = owner / "derivatives" / name
+            if not child_root.resolve().is_relative_to(root):
+                raise RuntimeError(
+                    f"Derivative dataset escapes requested root: {name!r}"
+                )
+            visit(child_root, child)
+
+    visit(root, upstream)
+    return {
+        "validator": "rordenlab/bids-validator-rs",
+        "coverage": "Pinned Rust beta: filename, metadata, TSV and NIfTI checks; "
+        "not certification of complete official-validator parity.",
+        "datasets": datasets,
+        "upstream_report": upstream,
+    }
 
 
 def _explain_description_findings(root: Path, report: dict[str, Any]) -> None:
@@ -226,12 +310,12 @@ def _explain_description_findings(root: Path, report: dict[str, Any]) -> None:
             owner = root / owner
         _assert_safe_path(root, owner, must_exist=True)
         for issue in dataset_report.get("issues", []):
-            if issue.get("code") != "INVALID_DATASET_DESCRIPTION":
+            if repair_kind(issue) != "description":
                 continue
             diagnostics = inspect_dataset_description(owner)
             issue["diagnostics"] = diagnostics
             detail = "; ".join(diagnostics["problems"]) or (
-                "JSON syntax and basic field checks passed; the structural "
+                "JSON syntax and basic field checks passed; the pinned native "
                 "validator still rejects this description. This is not a full "
                 "schema compliance check."
             )
@@ -266,9 +350,7 @@ def validate_and_repair_bids_dataset(
     root = _validate_dataset_root(dataset)
     requested_bids_version = bids_version
     bids_version = resolve_bids_version(bids_version)
-    aliases = _validate_aliases(
-        suffix_aliases if suffix_aliases is not None else {}
-    )
+    aliases = _validate_aliases(suffix_aliases if suffix_aliases is not None else {})
     try:
         original_report = get_bids_validation_report(root)
     except RuntimeError as exc:
@@ -331,15 +413,11 @@ def validate_and_repair_bids_dataset(
     )
     resolved = [
         finding
-        for finding in _normalised_report_issues(
-            original_report, dataset_root=root
-        )
+        for finding in _normalised_report_issues(original_report, dataset_root=root)
         if _finding_key(finding) not in final_keys
     ]
     newly_introduced = [
-        finding
-        for finding in unresolved
-        if _finding_key(finding) not in original_keys
+        finding for finding in unresolved if _finding_key(finding) not in original_keys
     ]
     repair_summary = {
         "requested_bids_version": requested_bids_version,
@@ -357,9 +435,7 @@ def validate_and_repair_bids_dataset(
     }
     final_report = dict(current_report)
     final_report["repair"] = repair_summary
-    exceeding = findings_above_threshold(
-        final_report, threshold, dataset_root=root
-    )
+    exceeding = findings_above_threshold(final_report, threshold, dataset_root=root)
     repair_summary["severity_gate"] = {
         "threshold": threshold.value,
         "passed": not exceeding,
@@ -396,17 +472,13 @@ def _final_finding_counts(
         for finding in [
             *_normalised_report_issues(report, dataset_root=dataset_root),
             *(
-                _effective_finding(
-                    item, dataset_root=dataset_root
-                )
+                _effective_finding(item, dataset_root=dataset_root)
                 for item in report["repair"]["unresolved"]
             ),
         ]
     }
     for finding in findings.values():
-        severity = _effective_severity(
-            finding, dataset_root=dataset_root
-        )
+        severity = _effective_severity(finding, dataset_root=dataset_root)
         counts[severity.value] += 1
     for dataset_report in report["datasets"]:
         dataset = str(dataset_report.get("dataset", ""))
@@ -493,17 +565,10 @@ def _remaining_findings(
                 finding["resolution"] = (
                     "The finding remains after the bounded automatic repair pass."
                 )
-            remaining.append(
-                _effective_finding(finding, dataset_root=dataset_root)
-            )
+            remaining.append(_effective_finding(finding, dataset_root=dataset_root))
     for finding in candidates:
-        if finding.get("code") not in {
-            "INVALID_DATASET_DESCRIPTION",
-            "INVALID_FILENAME",
-        }:
-            remaining.append(
-                _effective_finding(finding, dataset_root=dataset_root)
-            )
+        if repair_kind(finding) is None:
+            remaining.append(_effective_finding(finding, dataset_root=dataset_root))
     deduplicated = {
         (
             str(item.get("dataset", "")),
@@ -542,9 +607,7 @@ def _normalised_report_issues(
             }
             if issue.get("path") is not None:
                 finding["path"] = str(issue["path"])
-            findings.append(
-                _effective_finding(finding, dataset_root=dataset_root)
-            )
+            findings.append(_effective_finding(finding, dataset_root=dataset_root))
     return findings
 
 
@@ -557,17 +620,3 @@ def _report_issue_keys(
         _finding_key(item)
         for item in _normalised_report_issues(report, dataset_root=dataset_root)
     }
-
-
-def _validator_executable() -> str:
-    executable = shutil.which("bids-validator-rust")
-    if executable is None:
-        candidate = Path(sys.executable).parent / "bids-validator-rust"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            executable = str(candidate)
-    if executable is None:
-        raise RuntimeError(
-            "The Rust BIDS validator is required. Run "
-            "bash scripts/install_bids_validator.sh after installing Rust 1.85+."
-        )
-    return executable

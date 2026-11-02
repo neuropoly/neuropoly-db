@@ -11,6 +11,7 @@ from npdb.external.bids import (
     get_bids_validation_report,
     validate_and_repair_bids_dataset,
 )
+from npdb.external.bids_issues import repair_kind
 from npdb.external.bids_version import LATEST_RELEASE_URL, resolve_bids_version
 
 
@@ -85,7 +86,9 @@ def test_latest_failures_are_explicit_and_do_not_modify_dataset(tmp_path, failur
         patch(
             "npdb.external.bids_version.httpx.get",
             return_value=response,
-            side_effect=httpx.TimeoutException("offline") if failure == "timeout" else None,
+            side_effect=(
+                httpx.TimeoutException("offline") if failure == "timeout" else None
+            ),
         ),
         patch("npdb.external.bids.get_bids_validation_report") as validate,
         pytest.raises(RuntimeError),
@@ -126,12 +129,12 @@ def test_latest_real_validator_apply_records_concrete_version(tmp_path):
     assert report["repair"]["resolved_bids_version"] == "1.11.2"
     assert report["repair"]["severity_gate"]["passed"]
     assert not any(
-        finding["code"] == "INVALID_DATASET_DESCRIPTION"
+        repair_kind(finding) == "description"
         for finding in report["repair"]["unresolved"]
     )
     initial = report["repair"]["original_report"]["datasets"][0]["issues"]
     description_issue = next(
-        issue for issue in initial if issue["code"] == "INVALID_DATASET_DESCRIPTION"
+        issue for issue in initial if repair_kind(issue) == "description"
     )
     assert description_issue["diagnostics"]["json_valid"]
     assert "BIDSVersion is missing" in description_issue["message"]
@@ -139,7 +142,9 @@ def test_latest_real_validator_apply_records_concrete_version(tmp_path):
 
 
 def test_latest_dry_run_preserves_files_and_existing_valid_version(tmp_path):
-    root = _dataset(tmp_path, {"Name": "Example", "BIDSVersion": "1.9.0", "Authors": "Author"})
+    root = _dataset(
+        tmp_path, {"Name": "Example", "BIDSVersion": "1.9.0", "Authors": "Author"}
+    )
     original = (root / "dataset_description.json").read_bytes()
     with patch(
         "npdb.external.bids_version.httpx.get",
@@ -163,13 +168,23 @@ def test_latest_local_conversion_records_version_before_downstream_conversion(tm
             ),
         ) as get,
         patch("npdb.cli.facade.NeurobagelAnnotator.execute", return_value=True),
-        patch("npdb.cli.facade.BagelNeuroPolyMTL.convert_bids", return_value=None) as convert,
+        patch(
+            "npdb.cli.facade.BagelNeuroPolyMTL.convert_bids", return_value=None
+        ) as convert,
     ):
         result = CliRunner().invoke(
             npdb,
             [
-                "convert", "bagel", "local", str(root), "https://example.com/dataset",
-                str(tmp_path / "output"), "--mode", "manual", "--bids-version", "latest",
+                "convert",
+                "bagel",
+                "local",
+                str(root),
+                "https://example.com/dataset",
+                str(tmp_path / "output"),
+                "--mode",
+                "manual",
+                "--bids-version",
+                "latest",
             ],
         )
     assert result.exit_code == 0, result.output
@@ -186,14 +201,20 @@ def test_latest_local_conversion_records_version_before_downstream_conversion(tm
 def test_empty_version_is_repaired_with_explicit_latest(tmp_path):
     root = _dataset(tmp_path, {"Name": "Example", "BIDSVersion": ""})
     report = {
-        "datasets": [{
-            "dataset": str(root), "errors": 1, "warnings": 0,
-            "issues": [{
-                "code": "INVALID_DATASET_DESCRIPTION",
-                "severity": "error",
-                "message": "Invalid description",
-            }],
-        }]
+        "datasets": [
+            {
+                "dataset": str(root),
+                "errors": 1,
+                "warnings": 0,
+                "issues": [
+                    {
+                        "code": "INVALID_DATASET_DESCRIPTION",
+                        "severity": "error",
+                        "message": "Invalid description",
+                    }
+                ],
+            }
+        ]
     }
     with (
         patch(
@@ -215,16 +236,23 @@ def test_empty_version_is_repaired_with_explicit_latest(tmp_path):
         ({}, "Name is missing"),
         ({"Name": 3, "BIDSVersion": "1.9.0"}, "Name must be a non-empty string"),
         ({"Name": "Example"}, "BIDSVersion is missing"),
-        ({"Name": "Example", "BIDSVersion": "1.9.0", "Authors": 3}, "Authors must be an array"),
-        ({"Name": "Example", "BIDSVersion": "1.9.0", "GeneratedBy": [{}]}, "GeneratedBy[0].Name"),
+        (
+            {"Name": "Example", "BIDSVersion": "1.9.0", "Authors": 3},
+            "Authors must be an array",
+        ),
+        (
+            {"Name": "Example", "BIDSVersion": "1.9.0", "GeneratedBy": [{}]},
+            "GeneratedBy[0].Name",
+        ),
     ],
 )
 def test_valid_json_description_errors_explain_fields(tmp_path, description, problem):
     root = _dataset(tmp_path, description)
     report = get_bids_validation_report(root)
     issue = next(
-        item for item in report["datasets"][0]["issues"]
-        if item["code"] == "INVALID_DATASET_DESCRIPTION"
+        item
+        for item in report["datasets"][0]["issues"]
+        if repair_kind(item) == "description"
     )
     assert issue["diagnostics"]["json_valid"]
     assert problem in issue["message"]
@@ -235,8 +263,9 @@ def test_malformed_json_includes_parse_location(tmp_path):
     (root / "dataset_description.json").write_text('{\n"Name":\n}')
     report = get_bids_validation_report(root)
     issue = next(
-        item for item in report["datasets"][0]["issues"]
-        if item["code"] == "INVALID_DATASET_DESCRIPTION"
+        item
+        for item in report["datasets"][0]["issues"]
+        if repair_kind(item) == "description"
     )
     assert issue["diagnostics"]["json_valid"] is False
     assert "line 3, column 1" in issue["message"]
@@ -248,22 +277,32 @@ def test_valid_basic_fields_do_not_silently_override_validator_error(tmp_path):
     assert diagnostics["json_valid"]
     assert diagnostics["problems"] == []
     report = {
-        "datasets": [{
-            "dataset": str(root),
-            "errors": 1,
-            "issues": [{
-                "code": "INVALID_DATASET_DESCRIPTION",
-                "message": "dataset_description.json cannot be parsed",
-                "severity": "error",
-            }],
-        }]
+        "issues": {
+            "issues": [
+                {
+                    "code": "JSON_SCHEMA_VALIDATION_ERROR",
+                    "location": "/dataset_description.json",
+                    "issueMessage": "dataset_description.json cannot be parsed",
+                    "severity": "error",
+                }
+            ],
+            "codeMessages": {},
+        }
     }
     from subprocess import CompletedProcess
 
-    with patch(
-        "npdb.external.bids.subprocess.run",
-        return_value=CompletedProcess([], 1, json.dumps(report), ""),
+    with (
+        patch(
+            "npdb.external.bids.validator_executable",
+            return_value="/tools/bids-validator",
+        ),
+        patch(
+            "npdb.external.bids.subprocess.run",
+            return_value=CompletedProcess([], 1, json.dumps(report), ""),
+        ),
     ):
         inspected = get_bids_validation_report(root)
     assert inspected["datasets"][0]["errors"] == 1
-    assert "basic field checks passed" in inspected["datasets"][0]["issues"][0]["message"]
+    assert (
+        "basic field checks passed" in inspected["datasets"][0]["issues"][0]["message"]
+    )

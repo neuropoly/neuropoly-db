@@ -15,8 +15,11 @@ New here? Read **[What&#39;s available to you](docs/overview.md)** first.
 2. **[Install npdb](docs/install.md)**: one command with [uv](https://docs.astral.sh/uv/):
 
    ```bash
-   uv tool install "npdb[all] @ git+https://github.com/neuropoly/neuropoly-db"
+   uv tool install "/path/to/npdb-<version>-py3-none-<platform>.whl"
    ```
+   Use a matching prebuilt wheel to include the native validator without Rust.
+   [Source installation](docs/install.md#install-from-source) requires an initialized
+   validator submodule and Rust; installing a GitHub source archive is not equivalent.
 3. **[Find data](docs/find-data.md)** on Neurobagel: [https://data.neuro.polymtl.ca/bagel](https://data.neuro.polymtl.ca/bagel).
 4. **[Download data](docs/download-data.md)**:
 

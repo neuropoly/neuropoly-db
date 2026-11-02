@@ -14,3 +14,9 @@ wg0.conf
 __pycache__/
 
 npdb-error*
+
+Cargo.lock
+
+# Parent-owned native build outputs (never write into the validator submodule).
+/build/
+/dist/
