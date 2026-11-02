@@ -33,6 +33,12 @@ echo ""
 echo "==> Syncing project and development dependencies with uv..."
 uv sync --active --quiet --dev --all-extras
 
+# ── 2a. Windows wheel cross-compilation ──────────────────────────────────
+if ! command -v cargo-xwin >/dev/null 2>&1; then
+    echo "==> Installing cargo-xwin for Windows MSVC cross-compilation..."
+    cargo install --locked cargo-xwin
+fi
+
 # ── 3. Playwright browser installation ────────────────────────────────────
 # Install system dependencies and browser binaries for Playwright automation.
 # Required for annotation automation features.

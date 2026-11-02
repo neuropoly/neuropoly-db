@@ -15,11 +15,15 @@
 !tools/bids-validator-rust/benches/
 !tools/bids-validator-rust/benches/**
 !tools/build_validator.py
+!tools/validator_artifacts.py
+!tools/audit_validator.py
 !src/
 !src/npdb/
 !src/npdb/external/
 !src/npdb/external/native.py
 !src/npdb/external/validator-source.json
+!src/npdb/external/validator-artifacts.json
+!src/npdb/external/validator-artifact-notices.txt.gz
 !.devcontainer/
 !.devcontainer/Dockerfile
 !.dockerignore
