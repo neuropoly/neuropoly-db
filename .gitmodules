@@ -4,3 +4,6 @@
 [submodule "seed-datasets"]
 	path = seed-datasets
 	url = https://github.com/neuropoly/neurobagel-datasets.git
+[submodule "tools/bids-validator-rust"]
+	path = tools/bids-validator-rust
+	url = https://github.com/rordenlab/bids-validator-rs.git
