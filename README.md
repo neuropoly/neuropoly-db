@@ -19,7 +19,8 @@ New here? Read **[What&#39;s available to you](docs/overview.md)** first.
    ```
    Use a matching prebuilt wheel to include the native validator without Rust.
    [Source installation](docs/install.md#install-from-source) requires an initialized
-   validator submodule and Rust; installing a GitHub source archive is not equivalent.
+   validator submodule, with Rust needed if no compatible approved validator artifact
+   is available; installing a GitHub source archive is not equivalent.
 3. **[Find data](docs/find-data.md)** on Neurobagel: [https://data.neuro.polymtl.ca/bagel](https://data.neuro.polymtl.ca/bagel).
 4. **[Download data](docs/download-data.md)**:
 
