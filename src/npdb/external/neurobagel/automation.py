@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from npdb.extras import MissingExtraError
+from npdb.errors import MissingDependencyError
 
 try:
     from playwright.async_api import async_playwright
@@ -83,8 +83,9 @@ class NBAnnotationToolBrowserSession:
             RuntimeError: If browser launch fails.
         """
         if async_playwright is None:
-            raise MissingExtraError(
-                "Browser automation (--mode assist|auto|full-auto)", "annotation-automation"
+            raise MissingDependencyError(
+                "Browser automation requires Playwright.",
+                hint="Reinstall npdb dependencies, then run playwright install chromium.",
             )
         try:
             self.playwright = await async_playwright().start()

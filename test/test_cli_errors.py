@@ -19,7 +19,7 @@ from npdb.cli.errors import ISSUE_URL_LIMIT, diagnose, issue_url
 from npdb.errors import ConfigurationError, GitCommandError, UsageError, redact
 from npdb.external.bids import BidsValidationError
 from npdb.external.neurobagel.errors import BagelCLIError
-from npdb.extras import MissingExecutableError, MissingExtraError
+from npdb.extras import MissingExecutableError
 
 runner = CliRunner()
 
@@ -74,14 +74,6 @@ CASES = [
         "Configuration error",
         1,
         "set it",
-        False,
-    ),
-    (
-        "missing-extra",
-        MissingExtraError("Kaggle", "kaggle"),
-        "Missing dependency",
-        1,
-        "npdb[kaggle]",
         False,
     ),
     (

@@ -2,11 +2,9 @@ import gzip
 import hashlib
 import io
 import json
-import sys
 import zipfile
 from contextlib import closing
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import Mock, patch
 
 import httpx
@@ -30,21 +28,23 @@ URL = f"https://data.midrc.org/discovery/{DATASET}/"
 
 @pytest.fixture
 def sdk(monkeypatch):
-    monkeypatch.setitem(sys.modules, "gen3", ModuleType("gen3"))
     clients = {}
     for name, cls in (
         ("auth", "Gen3Auth"),
         ("index", "Gen3Index"),
         ("file", "Gen3File"),
     ):
-        module = ModuleType(f"gen3.{name}")
         client = Mock()
         factory = Mock(return_value=client)
-        setattr(module, cls, factory)
-        monkeypatch.setitem(sys.modules, f"gen3.{name}", module)
+        monkeypatch.setattr(f"npdb.managers.midrc.{cls}", factory)
         clients[name] = client
         clients[f"{name}_factory"] = factory
     yield clients
+
+
+@pytest.fixture(autouse=True)
+def isolated_debug_env(monkeypatch):
+    monkeypatch.delenv("NPDB_DEBUG", raising=False)
 
 
 @pytest.fixture
@@ -275,6 +275,10 @@ def test_streams_signed_url_creates_nested_files_and_reuses_cache(
     sdk["file"].get_presigned_url.assert_called_once_with(GUIDS[0])
     assert (output / "nested/bundle.zip").read_bytes() == data
     assert next(manager.cache_dir.rglob("bundle.zip")).read_bytes() == data
+    sdk["auth_factory"].assert_called_with(
+        manager.endpoint, manager.credentials_path
+    )
+    sdk["index_factory"].assert_called_with(manager.endpoint, sdk["auth"])
     sdk["file_factory"].assert_called_with(manager.endpoint, sdk["auth"])
 
 

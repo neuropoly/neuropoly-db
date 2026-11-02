@@ -28,22 +28,10 @@ else
 fi
 
 # ── 2. Project installation ───────────────────────────────────────────────
-# Hash-based check: reinstalls automatically when pyproject.toml / uv.lock change.
-# This ensures stale venv-data volumes are refreshed when project dependencies change.
+# Always reconcile the persistent venv, including missing development tools.
 echo ""
-if [ -f "uv.lock" ]; then
-    _REQ_HASH="$(cat pyproject.toml uv.lock | md5sum | awk '{print $1}')"
-else
-    _REQ_HASH="$(md5sum pyproject.toml | awk '{print $1}')"
-fi
-_REQ_HASH_FILE=".venv/.req-hash"
-if [ -f "$_REQ_HASH_FILE" ] && [ "$(cat "$_REQ_HASH_FILE")" = "$_REQ_HASH" ]; then
-    echo "==> Project install up to date (pyproject.toml/uv.lock unchanged) — skipping."
-else
-    echo "==> Syncing project with uv..."
-    uv sync --active --quiet --dev --all-extras
-    echo "$_REQ_HASH" > "$_REQ_HASH_FILE"
-fi
+echo "==> Syncing project and development dependencies with uv..."
+uv sync --active --quiet --dev --all-extras
 
 # ── 3. Playwright browser installation ────────────────────────────────────
 # Install system dependencies and browser binaries for Playwright automation.
@@ -51,11 +39,8 @@ fi
 echo ""
 echo "==> Installing Playwright system dependencies and browsers..."
 
-# Sync project with all extras (providers + annotation-automation)
-uv sync --active --quiet --all-extras
-
 # Run playwright installation tool from chromium browser package
-uv run playwright install chromium --with-deps > /dev/null 2>&1 || {
+uv run --no-sync playwright install chromium --with-deps > /dev/null 2>&1 || {
     echo "   WARNING: Playwright browser installation had issues (may still work)"
 }
 echo "   ✓ Playwright system dependencies and browsers ready"

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import importlib
 import shutil
-from types import ModuleType
 
 from npdb.errors import MissingDependencyError
 

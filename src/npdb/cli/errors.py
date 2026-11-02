@@ -46,15 +46,7 @@ _PROVIDER_PAGES = {
     "zenodo": "Development-Provider-Zenodo",
     "figshare": "Development-Provider-Figshare",
 }
-_EXTRA_MODULES = {
-    "gitea": "gitea",
-    "kaggle": "kagglehub",
-    "midrc": "gen3",
-    "openneuro": "openneuro",
-    "zenodo": "zenodo_get",
-    "annotation-automation": "playwright",
-}
-_TOOLS = ("git", "git-annex", "dcm2niix", "bids-validator-rust")
+_TOOLS = ("git", "git-annex", "dcm2niix")
 
 _GIT_HINTS = [
     (
@@ -297,8 +289,9 @@ def _command_line(ctx: click.Context | None) -> str:
 
 
 def _environment() -> list[tuple[str, str]]:
-    import importlib.util
     import shutil
+
+    from npdb.external.native import validator_executable
 
     try:
         dist = metadata.distribution("npdb")
@@ -311,19 +304,19 @@ def _environment() -> list[tuple[str, str]]:
             version += f" (commit {commit[:10]})"
     except metadata.PackageNotFoundError:
         version = "not installed (source checkout)"
-    extras = ", ".join(
-        f"{extra} {'yes' if importlib.util.find_spec(module) else 'no'}"
-        for extra, module in _EXTRA_MODULES.items()
-    )
     tools = ", ".join(
         f"{tool} {'yes' if shutil.which(tool) else 'no'}" for tool in _TOOLS
     )
+    try:
+        validator = validator_executable()
+    except RuntimeError as exc:
+        validator = str(exc)
     return [
         ("npdb", version),
         ("Python", platform.python_version()),
         ("Platform", platform.platform()),
-        ("Extras", extras),
         ("Tools", tools),
+        ("Native validator", validator),
     ]
 
 
