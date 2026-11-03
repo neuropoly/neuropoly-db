@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
+
+import gitea
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+if TYPE_CHECKING:
+    import gitea as gt_client
+
+_RETRY = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(min=1, max=10),
+    reraise=True,
+)
+
+
+class OrganizationMixin:
+    def __init__(self, organization: str, client: gt_client.Gitea):
+        self.organization = self._fetch_organization(client, organization)
+
+    @_RETRY
+    def _fetch_organization(self, client: gt_client.Gitea, organization: str):
+        # gitea = require_module("gitea", extra="gitea", feature="NeuroData access")
+        return gitea.Organization.request(client, organization)
+
+    @property
+    def datasets(self) -> Sequence[object]:
+        return self._fetch_repositories()
+
+    @_RETRY
+    def _fetch_repositories(self):
+        return self.organization.get_repositories()

@@ -93,6 +93,7 @@ class ManualStrategy(AnnotationStrategy):
         output_dir: Path,
         ctx: AnnotatorContext,
     ) -> bool:
+        output_dir.mkdir(parents=True, exist_ok=True)
         try:
             async with NBAnnotationToolBrowserSession(
                 headless=False,  # Manual always headed
@@ -394,6 +395,7 @@ class _ScriptedStrategy(AnnotationStrategy):
 
     def _add_mode_warnings(self, ctx: AnnotatorContext) -> None:
         """Hook for subclasses to inject mode-specific provenance warnings."""
+        _ = ctx
 
 
 class AutoStrategy(_ScriptedStrategy):

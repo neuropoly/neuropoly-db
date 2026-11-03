@@ -1,34 +1,100 @@
+import functools
+import json
 import os
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Callable, Optional
 
+import click
 import typer
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from rich.live import Live
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-)
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from npdb.annotation.modes import AnnotationMode
 from npdb.cli.display import RepoDownloadDisplay
+from npdb.cli.errors import report_exception
 from npdb.cli.helpers import (
-    OPTION_GROUP_NAMES,
-    extend_bids_description,
     fetch_url,
-    help_option,
     is_http_url,
     looks_like_non_git_repo_error,
     read_tsv,
     repo_has_git_annex,
 )
-from npdb.factories import GiteaManagerFactory
+from npdb.errors import ConfigurationError, UsageError
+from npdb.external.bids import BidsSeverity, BidsValidationError
+from npdb.factories import GiteaManagerFactory, ProviderManagerFactory
+from npdb.managers.git import GitProviderManager
+from npdb.managers.mendeley import MendeleyProviderManager
+from npdb.managers.midrc import MIDRCProviderManager
+from npdb.managers.model import ProviderName
 
-npdb = typer.Typer(
+OPTION_GROUP_NAMES = {
+    "input": "Input Options",
+    "output": "Output Options",
+    "behavior": "Behavior Options",
+    "automation": "Automation Options",
+    "ai": "AI Options",
+    "troubleshooting": "Troubleshooting",
+}
+
+BIDS_VERSION_HELP = (
+    "BIDSVersion to supply when missing or invalid; use 'latest' to resolve "
+    "the latest stable official BIDS release (requires network access)."
+)
+
+BidsSeverityOption = Annotated[
+    BidsSeverity,
+    typer.Option(
+        "--bids-severity-threshold",
+        help=(
+            "Highest allowed severity after all BIDS repairs: info, warning, or error. "
+            "Derivative findings are treated as warnings by default. "
+            "Only findings strictly above this level fail final validation."
+        ),
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+]
+
+
+def handle_errors(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (
+            click.exceptions.Exit,
+            click.exceptions.ClickException,
+            click.exceptions.Abort,
+            SystemExit,
+        ):
+            raise
+        except (Exception, KeyboardInterrupt) as exc:
+            raise typer.Exit(report_exception(exc)) from exc
+
+    return wrapper
+
+
+class NpdbTyper(typer.Typer):
+    """Typer app whose commands all report errors through :func:`handle_errors`."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("pretty_exceptions_enable", False)
+        super().__init__(*args, **kwargs)
+
+    def command(self, *args, **kwargs):
+        register = super().command(*args, **kwargs)
+
+        def decorator(func: Callable) -> Callable:
+            register(handle_errors(func))
+            return func
+
+        return decorator
+
+
+npdb = NpdbTyper(
     help="NeuroPoly Database CLI for converting, standardizing, and downloading BIDS datasets.",
     context_settings={"help_option_names": ["--help", "-h"]},
     no_args_is_help=True,
@@ -42,20 +108,222 @@ def main():
     return
 
 
-convert = typer.Typer(
-    help="Conversion commands for neuroimaging dataset metadata and formats.",
+convert = NpdbTyper(
+    help=(
+        "Dataset conversion workflows for standardizing and ingesting BIDS data "
+        "into the Neurobagel JSON-LD format."
+    ),
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
 npdb.add_typer(convert, name="convert")
 
+repair = NpdbTyper(
+    help="Plan, apply, and recover safe BIDS dataset repairs.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+npdb.add_typer(repair, name="repair")
 
-bagel = typer.Typer(
-    help="Convert BIDS datasets to Neurobagel JSON-LD (from local folders or NeuroGitea).",
+
+bagel = NpdbTyper(
+    help=(
+        "Convert dataset metadata into Neurobagel JSON-LD. The pipeline downloads or "
+        "loads the source dataset, normalizes the tabular metadata, and writes the "
+        "resulting Neurobagel output. Dataset access requirements vary by backend; "
+        "see the provider guide at "
+        "https://github.com/neuropoly/neuropoly-db/wiki/Development-Providers "
+        "and the environment template in template.env."
+    ),
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
 convert.add_typer(bagel, name="bagel")
+
+
+def _load_env() -> None:
+    # A .env in the working directory wins; the repo-root .env is a fallback for source checkouts.
+    load_dotenv(find_dotenv(usecwd=True))
+    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+
+
+def _parse_suffix_aliases(values: list[str] | None) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for value in values or []:
+        source, separator, target = value.partition("=")
+        source = source.strip()
+        target = target.strip()
+        if not separator or not source or not target:
+            raise UsageError(
+                f"Invalid suffix alias '{value}'. Use --suffix-alias OLD=NEW."
+            )
+        if source in aliases and aliases[source] != target:
+            raise UsageError(
+                f"Conflicting suffix aliases for '{source}': "
+                f"'{aliases[source]}' and '{target}'."
+            )
+        aliases[source] = target
+    return aliases
+
+
+def _echo_repair_plan(plan: dict, output_format: str) -> None:
+    if output_format == "json":
+        typer.echo(json.dumps(plan, indent=2, sort_keys=True))
+        return
+
+    if "application" in plan:
+        application = plan["application"]
+        gate = application["severity_gate"]
+        status = "passed" if gate["passed"] else "failed"
+        typer.echo(f"Final severity check (above {gate['threshold']}): {status}")
+        return
+
+    typer.echo(f"BIDS repair plan for {plan.get('dataset', 'dataset')}")
+    operations = plan.get("operations", [])
+    findings = plan.get("findings", [])
+    typer.echo(f"Proposed operations: {len(operations)}")
+    for operation in operations:
+        source = operation.get("source", "")
+        target = operation.get("target", "")
+        detail = f"{source} -> {target}" if target else source
+        typer.echo(f"  - {operation.get('kind', 'repair')}: {detail}")
+    typer.echo(f"Findings: {len(findings)}")
+    for finding in findings:
+        location = f" [{finding['path']}]" if finding.get("path") else ""
+        resolution = finding.get("resolution") or finding.get("action")
+        detail = f" — {resolution}" if resolution else ""
+        typer.echo(
+            f"  - {finding.get('severity', 'info').upper()} "
+            f"{finding.get('code', 'UNKNOWN')}{location}: "
+            f"{finding.get('message', '')}{detail}"
+        )
+    if plan.get("blocking") and "application" not in plan:
+        typer.echo(
+            "Unresolved error findings in this plan; the final severity check "
+            "runs only after --apply."
+        )
+
+
+@repair.command("bids")
+def repair_bids(
+    dataset: Path = typer.Argument(
+        ...,
+        help="BIDS dataset root to inspect.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+    ),
+    apply: bool = typer.Option(
+        False,
+        "--apply",
+        help="Apply safe planned repairs. By default this command is read-only.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Explicitly request a read-only repair plan (the default).",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    output_format: str = typer.Option(
+        "human",
+        "--format",
+        help="Output format: human or json.",
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["output"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """Plan repairs by default; pass --apply to modify dataset files."""
+    from npdb.bids_repair import plan_bids_repair
+    from npdb.external.bids import validate_and_repair_bids_dataset
+
+    output_format = output_format.lower()
+    if output_format not in {"human", "json"}:
+        raise UsageError("--format must be 'human' or 'json'.")
+    if apply and dry_run:
+        raise UsageError("--apply and --dry-run cannot be used together.")
+    aliases = _parse_suffix_aliases(suffix_alias)
+    try:
+        if apply:
+            report = validate_and_repair_bids_dataset(
+                dataset,
+                bids_version=bids_version,
+                suffix_aliases=aliases or None,
+                severity_threshold=bids_severity_threshold,
+            )
+            result = _repair_application_result(dataset, report)
+        else:
+            result = plan_bids_repair(
+                dataset,
+                bids_version=bids_version,
+                suffix_aliases=aliases or None,
+            )
+        _echo_repair_plan(result, output_format)
+    except BidsValidationError as exc:
+        _echo_repair_plan(
+            _repair_application_result(dataset, exc.report), output_format
+        )
+        raise typer.Exit(code=1) from exc
+
+
+def _repair_application_result(dataset: Path, report: dict) -> dict:
+    summary = report["repair"]
+    return {
+        "dataset": str(dataset),
+        "findings": summary["unresolved"],
+        "operations": summary["operations"],
+        "blocking": not summary["severity_gate"]["passed"],
+        "application": summary,
+    }
+
+
+@repair.command("recover")
+def recover_bids(
+    dataset: Path = typer.Argument(
+        ...,
+        help="BIDS dataset root with an incomplete repair journal.",
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        readable=True,
+        resolve_path=True,
+    ),
+    output_format: str = typer.Option(
+        "human",
+        "--format",
+        help="Output format: human or json.",
+        case_sensitive=False,
+        rich_help_panel=OPTION_GROUP_NAMES["output"],
+    ),
+):
+    """Recover the most recent incomplete journaled BIDS repair, if present."""
+    from npdb.bids_repair import recover_bids_repair
+
+    output_format = output_format.lower()
+    if output_format not in {"human", "json"}:
+        raise UsageError("--format must be 'human' or 'json'.")
+    result = recover_bids_repair(dataset)
+    if output_format == "json":
+        typer.echo(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        typer.echo(result.get("message", "BIDS repair recovery completed."))
+        if result.get("journal"):
+            typer.echo(f"Journal: {result['journal']}")
 
 
 @bagel.command("local")
@@ -143,16 +411,36 @@ def local2bagel(
         ),
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
-    help_: bool = help_option(),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
-    [bold]Convert a local BIDS dataset to Neurobagel JSON-LD format[/bold]
+    [bold]Convert local dataset metadata to Neurobagel JSON-LD[/bold]
 
-    This command automates annotation of phenotypic data using the selected mode:
-    * [cyan]manual[/cyan]: Interactive annotation tool
-    * [cyan]assist[/cyan]: Browser automation with user confirmation
-    * [cyan]auto[/cyan]: Fully automated with ML-based suggestions
-    * [cyan]full-auto[/cyan]: Experimental unattended mode (requires review!)
+    Use this when the dataset is already on disk and you need to convert the
+    tabular metadata into Neurobagel format. The command reads the dataset's
+    metadata files, standardizes them, resolves phenotype mappings, and writes
+    the final Neurobagel output in the selected directory.
+
+    This flow does not require remote credentials for a local dataset. Access is
+    governed by the dataset's local filesystem permissions only.
+
+    Annotation modes:
+    * [cyan]manual[/cyan]: interactive annotation and review
+    * [cyan]assist[/cyan]: browser-assisted annotation with user confirmation
+    * [cyan]auto[/cyan]: automated annotation using model suggestions
+    * [cyan]full-auto[/cyan]: fully unattended conversion (use with caution)
     """
     import asyncio
 
@@ -164,44 +452,29 @@ def local2bagel(
     try:
         mode_enum = AnnotationMode(mode)
     except ValueError:
-        typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError(
+            f"Invalid mode '{mode}'. Use one of: manual, assist, auto, full-auto."
+        ) from None
 
     if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:
-        typer.echo("Error: --ai-model required with --ai-provider.", err=True)
-        raise typer.Exit(code=1)
-
+        raise UsageError("--ai-model required with --ai-provider.")
     if ai_model and not ai_provider:
-        typer.echo("Error: --ai-provider required with --ai-model.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-provider required with --ai-model.")
+
+    suffix_aliases = _parse_suffix_aliases(suffix_alias)
 
     if header_map:
-        try:
-            hmap = load_header_map(header_map)
-            static = load_static_mappings()
-            valid_keys = set(static.get("mappings", {}).keys())
-            validate_header_map_keys(hmap, valid_keys)
-        except (ValueError, FileNotFoundError) as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        hmap = load_header_map(header_map)
+        static = load_static_mappings()
+        valid_keys = set(static.get("mappings", {}).keys())
+        validate_header_map_keys(hmap, valid_keys)
 
-    try:
-        output.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        typer.echo(f"Error creating output directory '{output}': {e}", err=True)
-        raise typer.Exit(code=1)
-
+    output.mkdir(parents=True, exist_ok=True)
     if artifacts_dir:
-        try:
-            artifacts_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            typer.echo(
-                f"Error creating artifacts directory '{artifacts_dir}': {e}", err=True
-            )
-            raise typer.Exit(code=1)
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     annotation_config = AnnotationConfigFactory.create_from_cli_args(
         mode=mode,
@@ -215,7 +488,6 @@ def local2bagel(
     )
 
     facade = DatasetConversionFacade(annotation_config)
-    extend_bids_description(input_dir.name, str(input_dir), online_url, access_type)
 
     with Progress(
         SpinnerColumn(),
@@ -223,26 +495,105 @@ def local2bagel(
         transient=True,
     ) as progress:
         progress.add_task(f"Converting {input_dir.name}...", total=None)
-        try:
-            asyncio.run(
-                facade.run(
-                    input_dir,
-                    output,
-                    extend_modalities=extend_modalities,
-                )
+        asyncio.run(
+            facade.run(
+                input_dir,
+                output,
+                extend_modalities=extend_modalities,
+                bids_version=bids_version,
+                suffix_aliases=suffix_aliases or None,
+                severity_threshold=bids_severity_threshold,
+                online_url=online_url,
+                access_type=access_type,
             )
-        except Exception as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        )
 
     typer.echo(f"Conversion complete! Output saved to: {output}")
+
+
+def _provider_call(
+    provider: str | ProviderName,
+    identifier: str,
+    *,
+    output: Path,
+    online_url: str,
+    access_type: str,
+    mode: str,
+    phenotype_dict: Optional[Path],
+    headless: bool,
+    timeout: int,
+    artifacts_dir: Optional[Path],
+    ai_provider: Optional[str],
+    ai_model: Optional[str],
+    header_map: Optional[Path],
+    extend_modalities: bool,
+    bids_version: Optional[str] = None,
+    suffix_alias: Optional[list[str]] = None,
+    bids_severity_threshold: BidsSeverity = BidsSeverity.WARNING,
+    cache_dir: Optional[Path] = None,
+    **kwargs,
+) -> None:
+    manager = ProviderManagerFactory.create(
+        provider,
+        cache_dir=str(cache_dir) if cache_dir else None,
+        credentials_path=kwargs.get("credentials_path"),
+        token=kwargs.get("token"),
+        endpoint=kwargs.get("endpoint"),
+    )
+    provider_id = (
+        manager.provider_name.value
+        if isinstance(manager.provider_name, ProviderName)
+        else str(manager.provider_name)
+    )
+
+    dataset_id = (
+        Path(identifier).name
+        if hasattr(identifier, "name")
+        else identifier.replace("/", "_")
+    )
+    dataset_id = dataset_id.replace(".", "_")
+    if isinstance(manager, GitProviderManager):
+        dataset_id = manager.dataset_id(identifier).replace("/", "_")
+    if isinstance(manager, MIDRCProviderManager):
+        dataset_id = manager.discovery_id(identifier) or dataset_id
+        online_url, access_type = manager.describe(identifier)
+    local_fetch = Path(output) / f"{provider_id}_{dataset_id}"
+
+    if isinstance(manager, (MIDRCProviderManager, MendeleyProviderManager)):
+        display = RepoDownloadDisplay()
+        manager.add_download_observer(display)
+        with Live(display, refresh_per_second=4, transient=False):
+            fetched = manager.fetch(identifier, local_fetch, **kwargs)
+    else:
+        fetched = manager.fetch(identifier, local_fetch, **kwargs)
+    if provider_id == ProviderName.MENDELEY.value:
+        access_type = manager.access_type
+
+    local2bagel(
+        input_dir=fetched,
+        online_url=online_url,
+        output=output,
+        access_type=access_type,
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+    )
 
 
 @bagel.command("gitea")
 def gitea2bagel(
     dataset: str = typer.Argument(
         ...,
-        help="Dataset name on Gitea (under the datasets organization).",
+        help="Dataset name on NeuroData (under the datasets organization).",
     ),
     output: Path = typer.Argument(
         ...,
@@ -254,7 +605,7 @@ def gitea2bagel(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to Gitea.",
+        help="Verify SSL certificates when connecting to NeuroData.",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     mode: str = typer.Option(
@@ -314,31 +665,40 @@ def gitea2bagel(
         ),
         rich_help_panel=OPTION_GROUP_NAMES["behavior"],
     ),
-    help_: bool = help_option(),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
 ):
     """
-    [bold]Convert a NeuroGitea dataset to Neurobagel JSON-LD format[/bold]
+    [bold]Convert NeuroData dataset metadata to Neurobagel JSON-LD[/bold]
 
-    This command automates annotation of phenotypic data using the selected mode:
-    * [cyan]manual[/cyan]: Interactive annotation tool
-    * [cyan]assist[/cyan]: Browser automation with user confirmation
-    * [cyan]auto[/cyan]: Fully automated with ML-based suggestions
-    * [cyan]full-auto[/cyan]: Experimental unattended mode (requires review!)
+    This command resolves a dataset from the configured NeuroData instance,
+    clones it locally, and then runs the metadata conversion flow: metadata
+    normalization, phenotype resolution, and Neurobagel export.
 
-    The dataset is cloned from NeuroGitea first, then converted via the local
-    conversion pipeline.
+    Access requirements:
+    * Requires the NeuroData connection variables in .env or the environment:
+      [cyan]NP_GITEA_APP_URL[/cyan], [cyan]NP_GITEA_APP_USER[/cyan],
+      [cyan]NP_GITEA_APP_TOKEN[/cyan].
+    * Private or restricted datasets may also require the instance-specific SSH
+      or token access described in docs/get-access.md.
+    * If the dataset itself is public, token-based authentication is often not
+      required beyond repository access policies.
     """
-    from dotenv import load_dotenv
-
     from npdb.factories import GiteaManagerFactory
 
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
-
-    try:
-        gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
-    except ValueError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1)
+    _load_env()
+    gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
 
     with tempfile.TemporaryDirectory(prefix="npdb_clone_") as tmp_dir:
         local_clone = Path(tmp_dir) / dataset
@@ -361,7 +721,914 @@ def gitea2bagel(
             ai_model=ai_model,
             header_map=header_map,
             extend_modalities=extend_modalities,
+            bids_version=bids_version,
+            suffix_alias=suffix_alias,
+            bids_severity_threshold=bids_severity_threshold,
         )
+
+
+@bagel.command("git")
+def git2bagel(
+    repository: str = typer.Argument(..., help="Git repository URL or path to clone."),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Optional local cache for large datasets. This is not required for repo metadata-only use.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert Git repository metadata to Neurobagel JSON-LD[/bold]
+
+    This command clones or reuses a Git repository, stages the dataset locally,
+    and then runs the metadata conversion sequence used by the other Bagel
+    providers: metadata normalization, phenotype standardization, and output
+    export.
+
+    Access requirements:
+    * Public repositories are usually usable without credentials.
+    * Private repositories may require Git HTTP credentials via
+      [cyan]NP_GIT_USER[/cyan] and [cyan]NP_GIT_TOKEN[/cyan].
+    * Large repositories or archive-heavy datasets should use a persistent
+      [cyan]--cache-dir[/cyan] so the local staging step is not exhausted by a
+      temporary download location.
+    * See the provider guide at
+      [cyan]https://github.com/neuropoly/neuropoly-db/wiki/Development-Provider-Git[/cyan]
+      and the environment template in [cyan]template.env[/cyan].
+    """
+    _provider_call(
+        "git",
+        repository,
+        output=output,
+        online_url=repository,
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        cache_dir=cache_dir,
+    )
+
+
+@bagel.command("kaggle")
+def kaggle2bagel(
+    dataset: str = typer.Argument(
+        ..., help="Kaggle dataset handle (for example: 'user/dataset_name')."
+    ),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Required. Local cache for the full Kaggle dataset download; this could be large.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert Kaggle dataset metadata to Neurobagel JSON-LD[/bold]
+
+    This command downloads the Kaggle dataset into a local cache or working
+    directory, stages the dataset locally, and converts its metadata into the
+    Neurobagel format.
+
+    Access requirements:
+    * Public Kaggle datasets may work without authentication.
+    * Private datasets require [cyan]NP_KAGGLE_USERNAME[/cyan] and
+      [cyan]NP_KAGGLE_KEY[/cyan].
+    * Large downloads should use [cyan]--cache-dir[/cyan] because the dataset may be
+      sizable and may require long staging time.
+    """
+    _provider_call(
+        "kaggle",
+        dataset,
+        output=output,
+        online_url=f"https://www.kaggle.com/datasets/{dataset}",
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        cache_dir=cache_dir,
+    )
+
+
+@bagel.command("mendeley")
+def mendeley2bagel(
+    dataset: str = typer.Argument(..., help="Mendeley Data dataset ID or DOI."),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        help="Optional Mendeley access token. Or set NP_MENDELEY_ACCESS_TOKEN.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Optional verified download cache. Or set NP_NPDB_CACHE_DIR.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert Mendeley dataset metadata to Neurobagel JSON-LD[/bold]
+
+    Download the dataset from Mendeley, stage it locally, and convert the
+    metadata records into the Neurobagel format. The command is useful when a
+    dataset is exposed through a public or controlled Mendeley archive.
+
+    Reuse verified downloads with [cyan]--cache-dir[/cyan] or
+    [cyan]NP_NPDB_CACHE_DIR[/cyan]. Cached archives survive extraction and
+    conversion failures. Leave space for cache, staging, and extracted data.
+
+    Access requirements:
+    * Public Mendeley datasets are downloaded without authentication.
+    * Restricted datasets require an OAuth access token via [cyan]--token[/cyan]
+      or [cyan]NP_MENDELEY_ACCESS_TOKEN[/cyan]. Client credentials alone are not
+      exchanged for a token by this command.
+    * See the provider guide and the template environment file for the required
+      variables.
+    """
+    _provider_call(
+        "mendeley",
+        dataset,
+        output=output,
+        online_url=f"https://data.mendeley.com/datasets/{dataset}",
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        token=token,
+        cache_dir=cache_dir,
+    )
+
+
+@bagel.command("midrc")
+def midrc2bagel(
+    manifest: str = typer.Argument(
+        ..., help="MIDRC Discovery URL or dataset ID, file GUID, or manifest JSON path."
+    ),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    credentials_path: Optional[Path] = typer.Option(
+        None,
+        help="Path to the MIDRC credentials.json file. Or set NP_MIDRC_CREDENTIALS.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    endpoint: Optional[str] = typer.Option(
+        None,
+        help="MIDRC endpoint. Defaults to https://data.midrc.org.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Persistent download cache (required for Discovery datasets). Or set NP_NPDB_CACHE_DIR.",
+        file_okay=False,
+        dir_okay=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert MIDRC dataset metadata to Neurobagel JSON-LD[/bold]
+
+    Resolve a Discovery dataset, file GUID, or Gen3 manifest and download its
+    files using authorized URLs. Archives and layouts use the shared provider
+    preparation pipeline before Neurobagel conversion; unsupported layouts fail
+    explicitly rather than being remapped using dataset-specific rules.
+
+    Access requirements:
+    * Restricted MIDRC data requires credentials from the MIDRC portal.
+    * Provide the credentials file through [cyan]NP_MIDRC_CREDENTIALS[/cyan] or the
+      [cyan]--credentials-path[/cyan] option.
+    * The endpoint is usually the default MIDRC endpoint unless you are using a
+      custom instance.
+    * Discovery datasets download all linked files and require a persistent cache.
+    """
+    _provider_call(
+        "midrc",
+        manifest,
+        output=output,
+        online_url="https://data.midrc.org",
+        access_type="restricted",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        cache_dir=cache_dir,
+        credentials_path=str(credentials_path) if credentials_path else None,
+        endpoint=endpoint,
+    )
+
+
+@bagel.command("openneuro")
+def openneuro2bagel(
+    dataset: str = typer.Argument(
+        ..., help="OpenNeuro dataset ID (for example: ds002799)."
+    ),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Optional local cache. Default is a temp directory for sparse metadata downloads.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert OpenNeuro dataset metadata to Neurobagel JSON-LD[/bold]
+
+    OpenNeuro is a common public BIDS repository, so this command is often used
+    for publicly accessible datasets. Once the dataset is staged locally, the
+    command converts the metadata records into Neurobagel format.
+
+    Access requirements:
+    * Public datasets usually work without credentials.
+    * Restricted or private datasets may require [cyan]NP_OPENNEURO_TOKEN[/cyan].
+    * Use [cyan]--cache-dir[/cyan] when downloads are large or when a persistent
+      local staging area is preferable.
+    """
+    _provider_call(
+        "openneuro",
+        dataset,
+        output=output,
+        online_url=f"https://openneuro.org/datasets/{dataset}",
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        cache_dir=cache_dir,
+    )
+
+
+@bagel.command("zenodo")
+def zenodo2bagel(
+    record: str = typer.Argument(..., help="Zenodo record ID or DOI."),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    cache_dir: Optional[Path] = typer.Option(
+        None,
+        "--cache-dir",
+        help="Required when record files are archive-only or the download is large.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        help="Optional Zenodo access token. Or set NP_ZENODO_TOKEN.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert Zenodo record metadata to Neurobagel JSON-LD[/bold]
+
+    This command resolves a Zenodo record or DOI, downloads the archive or files
+    into a working directory, and converts the metadata into Neurobagel format.
+    It is particularly useful for public records and for datasets with a large or
+    archive-only payload.
+
+    Access requirements:
+    * Public records often work without a token.
+    * Embargoed, restricted, or archive-only records may require
+      [cyan]NP_ZENODO_TOKEN[/cyan].
+    * Large downloads should use [cyan]--cache-dir[/cyan] and the local cache is
+      strongly recommended for archive-based datasets.
+    """
+    _provider_call(
+        "zenodo",
+        record,
+        output=output,
+        online_url=f"https://zenodo.org/record/{record}",
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        cache_dir=cache_dir,
+        token=token,
+    )
+
+
+@bagel.command("figshare")
+def figshare2bagel(
+    article: str = typer.Argument(..., help="Figshare article ID or DOI."),
+    output: Path = typer.Argument(
+        ...,
+        help="Output directory for generated Neurobagel files.",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+    ),
+    token: Optional[str] = typer.Option(
+        None,
+        help="Optional Figshare access token. Or set NP_FIGSHARE_TOKEN.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    mode: str = typer.Option(
+        AnnotationMode.MANUAL.value,
+        help="Annotation mode: manual|assist|auto|full-auto",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    phenotype_dict: Optional[Path] = typer.Option(
+        None,
+        help="Path to phenotype dictionary JSON for prefill.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    headless: bool = typer.Option(
+        True,
+        "--headless/--headed",
+        help="Run browser in headless mode (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    timeout: int = typer.Option(
+        300,
+        help="Timeout per step in seconds (automation modes).",
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    artifacts_dir: Optional[Path] = typer.Option(
+        None,
+        help="Directory for screenshots/traces (automation modes).",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        rich_help_panel=OPTION_GROUP_NAMES["automation"],
+    ),
+    ai_provider: Optional[str] = typer.Option(
+        None,
+        help="AI provider (e.g., 'ollama').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    ai_model: Optional[str] = typer.Option(
+        None,
+        help="AI model name (e.g., 'neural-chat').",
+        rich_help_panel=OPTION_GROUP_NAMES["ai"],
+    ),
+    header_map: Optional[Path] = typer.Option(
+        None,
+        "--header-map",
+        help="JSON file mapping desired Neurobagel headers to input variants.",
+        exists=True,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    extend_modalities: bool = typer.Option(
+        True,
+        "--extend-modalities/--neurobagel-modalities",
+        help="Use NeuroPoly custom modality mappings by default.",
+        rich_help_panel=OPTION_GROUP_NAMES["behavior"],
+    ),
+    bids_version: Optional[str] = typer.Option(
+        None,
+        "--bids-version",
+        help=BIDS_VERSION_HELP,
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+    bids_severity_threshold: BidsSeverityOption = BidsSeverity.WARNING,
+    suffix_alias: Optional[list[str]] = typer.Option(
+        None,
+        "--suffix-alias",
+        help="Explicit BIDS suffix mapping OLD=NEW; may be repeated.",
+        rich_help_panel=OPTION_GROUP_NAMES["input"],
+    ),
+):
+    """
+    [bold]Convert Figshare article metadata to Neurobagel JSON-LD[/bold]
+
+    This command resolves a Figshare article or DOI, stages the content locally,
+    and converts the metadata into Neurobagel format using the same provider
+    workflow used by the other Bagel commands.
+
+    Access requirements:
+    * Public Figshare content usually works without credentials.
+    * Private, embargoed, or restricted content may require
+      [cyan]NP_FIGSHARE_TOKEN[/cyan].
+    * Large article bundles should prefer a persistent [cyan]--cache-dir[/cyan].
+    * See the provider guide and template.env for the full authentication setup.
+    """
+    _provider_call(
+        "figshare",
+        article,
+        output=output,
+        online_url=f"https://figshare.com/articles/{article}",
+        access_type="public",
+        mode=mode,
+        phenotype_dict=phenotype_dict,
+        headless=headless,
+        timeout=timeout,
+        artifacts_dir=artifacts_dir,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        header_map=header_map,
+        extend_modalities=extend_modalities,
+        bids_version=bids_version,
+        suffix_alias=suffix_alias,
+        bids_severity_threshold=bids_severity_threshold,
+        token=token,
+    )
 
 
 @npdb.command("download")
@@ -397,7 +1664,7 @@ def download(
     ),
     verify_ssl: bool = typer.Option(
         True,
-        help="Verify SSL certificates when connecting to Gitea (git mode only).",
+        help="Verify SSL certificates when connecting to NeuroData (git mode only).",
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
     verbose: bool = typer.Option(
@@ -407,30 +1674,26 @@ def download(
         help="Print each git command before it runs (git mode only).",
         rich_help_panel=OPTION_GROUP_NAMES["troubleshooting"],
     ),
-    help_: bool = help_option(),
 ):
     """
     [bold]Download imaging data from query results TSV[/bold]
 
-        This command reads a TSV file containing query results and automatically
-        selects the download protocol per dataset:
+    This command reads a TSV file containing query results obtained from Neurobagel Query
+    and automatically selects the download protocol per dataset:
 
     * [cyan]HTTP:[/cyan] If [bold]AccessLink[/bold] is present for the dataset, download from
       link(s) directly.
     * [cyan]Git:[/cyan] Otherwise, clone from [bold]RepositoryURL[/bold] with sparse checkout.
     * [cyan]Git-annex:[/cyan] If the repository exposes a [bold]git-annex[/bold] branch,
       run annex content retrieval after git checkout.
+    * [magenta]Other protocols and hosts to come[/magenta]
 
-        Backend selection is automatic and can differ by dataset within the same TSV.
+    Backend selection is automatic and can differ by dataset within the same TSV.
 
     Git operations require [bold]NP_GITEA_APP_URL[/bold], [bold]NP_GITEA_APP_USER[/bold],
     and [bold]NP_GITEA_APP_TOKEN[/bold] environment variables.
     """
-    try:
-        rows = read_tsv(query_results)
-    except (OSError, ValueError) as exc:
-        typer.echo(f"Error reading TSV: {exc}", err=True)
-        raise typer.Exit(code=1)
+    rows = read_tsv(query_results)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -497,17 +1760,13 @@ def download(
 
     git_failures = 0
     if subjects:
-        load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
+        _load_env()
 
-        try:
-            if verbose:
-                typer.echo("Initializing Gitea manager...")
-            gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
-            if verbose:
-                typer.echo("Gitea manager initialized successfully.")
-        except ValueError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
+        if verbose:
+            typer.echo("Initializing Gitea manager...")
+        gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
+        if verbose:
+            typer.echo("Gitea manager initialized successfully.")
 
         gitea_manager.verbose = verbose
 
@@ -570,7 +1829,7 @@ def download(
     typer.echo("Download complete!")
 
 
-standardize = typer.Typer(
+standardize = NpdbTyper(
     help="Standardization tools for BIDS datasets.",
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -653,7 +1912,6 @@ def standardize_bids(
         exists=True,
         rich_help_panel=OPTION_GROUP_NAMES["input"],
     ),
-    help_: bool = help_option(),
 ):
     """
     [bold]Standardize BIDS dataset participants.tsv and participants.json[/bold]
@@ -672,31 +1930,30 @@ def standardize_bids(
     try:
         mode_enum = AnnotationMode(mode)
     except ValueError:
-        typer.echo(f"Error: Invalid mode '{mode}'.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError(
+            f"Invalid mode '{mode}'. Use one of: manual, auto, full-auto."
+        ) from None
 
     if mode_enum == AnnotationMode.ASSIST:
-        typer.echo(
-            "Error: --mode assist is no longer supported for 'npdb standardize bids'. "
-            "Use one of: manual, auto, full-auto.",
-            err=True,
+        raise UsageError(
+            "--mode assist is no longer supported for 'npdb standardize bids'. "
+            "Use one of: manual, auto, full-auto."
         )
-        raise typer.Exit(code=1)
 
     if mode_enum == AnnotationMode.MANUAL and (ai_provider or ai_model):
         typer.echo("Warning: AI options ignored in manual mode.", err=True)
 
     if ai_provider and not ai_model:
-        typer.echo("Error: --ai-model required with --ai-provider.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-model required with --ai-provider.")
     if ai_model and not ai_provider:
-        typer.echo("Error: --ai-provider required with --ai-model.", err=True)
-        raise typer.Exit(code=1)
+        raise UsageError("--ai-provider required with --ai-model.")
 
     participants_tsv = bids_dir / "participants.tsv"
     if not participants_tsv.exists():
-        typer.echo(f"Error: participants.tsv not found in {bids_dir}.", err=True)
-        raise typer.Exit(code=1)
+        raise ConfigurationError(
+            f"participants.tsv not found in {bids_dir}.",
+            hint="Point npdb standardize bids to the BIDS dataset root.",
+        )
 
     if dry_run:
         typer.echo("Dry-run mode: no files will be modified.\n")
@@ -716,17 +1973,13 @@ def standardize_bids(
     )
 
     facade = BIDSStandardizationFacade(config)
-
-    try:
-        asyncio.run(facade.run(bids_dir))
-    except FileNotFoundError as e:
-        typer.echo(f"Error: {e}", err=True)
-        raise typer.Exit(code=1)
-    except Exception as e:
-        typer.echo(f"Error during BIDS standardization: {e}", err=True)
-        raise typer.Exit(code=1)
+    asyncio.run(facade.run(bids_dir))
 
     if dry_run:
         typer.echo("\nDry-run complete. No files were modified.")
     else:
         typer.echo(f"\nBIDS standardization complete: {bids_dir}")
+
+
+def run() -> None:
+    npdb()

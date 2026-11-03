@@ -1,6 +1,6 @@
 [build-system]
-requires = ["uv_build>=0.8.17,<0.9.0"]
-build-backend = "uv_build"
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
 
 [project]
 name = "npdb"
@@ -9,30 +9,48 @@ description = "NeuroPoly database tooling and managers"
 requires-python = ">=3.12"
 dependencies = [
   "bagel==0.11.4",
-  "py-gitea==0.2.10",
-  "pybids>=0.16",
-  "pydicom>=2.4",
-  "jupyter",
-  "ipywidgets",
-  "pandas",
-  "tqdm",
-  "nibabel",
-  "python-dotenv>=1.2.2",
-  "typer>=0.24.1",
-  "rich>=14.3.3",
+  "gen3==4.28.4",
   "httpx>=0.25.0",
-  "pydantic>=2.0",
-  "rapidfuzz>=3.0",
-  "tenacity>=8.0",
-]
-
-[project.optional-dependencies]
-annotation-automation = [
+  "ipywidgets",
+  "jupyter",
+  "kagglehub==1.0.2",
+  "nibabel",
+  "openneuro-py==2026.9.1",
+  "pandas",
   "playwright>=1.58.0",
+  "pybids>=0.16",
+  "pydantic>=2.0",
+  "pydicom>=2.4",
+  "python-dotenv>=1.2.2",
+  "py-gitea==0.2.10",
+  "rapidfuzz>=3.0",
+  "rich>=14.3.3",
+  "tenacity>=8.0",
+  "tqdm",
+  "typer>=0.24.1",
+  "zenodo_get==3.1.0"
 ]
 
 [project.scripts]
-npdb = "npdb.cli.cli:npdb"
+npdb = "npdb.cli.cli:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/npdb"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tools/*.py",
+  "/tools/*.Dockerfile",
+  "/uv.lock",
+  "/scripts/install_bids_validator.sh",
+  "/hatch_build.py",
+  "/README.md",
+  "/docs/install.md",
+]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
@@ -41,7 +59,7 @@ testpaths = ["test"]
 
 [dependency-groups]
 dev = [
-    "isort>=8.0.1",
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
+  "isort>=8.0.1",
+  "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
 ]

@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Optional
 
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
+from npdb.external.bids import BidsSeverity, validate_and_repair_bids_dataset
 from npdb.external.neurobagel.errors import BagelCLIError
-from npdb.external.neurogitea.gitea import GiteaManager
+from npdb.external.neurodata.gitea import GiteaManager
 from npdb.managers.model import NeurobagelManager
 from npdb.managers.neurobagel import BagelMixin
-from npdb.managers.neurogitea import OrganizationMixin
+from npdb.managers.neurodata import OrganizationMixin
 
 
 class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
@@ -106,7 +107,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
 
         # Group sparse paths by (repo_url, dataset_name) so each repo is
         # cloned exactly once, regardless of how many subjects it contains.
-        groups: dict[tuple[str, str], list[str]] = defaultdict(list)
+        groups: defaultdict[tuple[str, str], list[str]] = defaultdict(list)
         for repo_url, sparse_path, dataset_name in subjects:
             key = (repo_url, dataset_name)
             if sparse_path not in groups[key]:
@@ -166,18 +167,22 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         warnings_out: dict | None,
     ) -> list[str]:
         """Phase 3: run all annotation pre-processing fixups on phenotype files."""
-        from npdb.annotation.autofix import (
+        from npdb.annotation.standardize import (
             auto_add_missing_value_sentinels,
             dedup_participant_ids,
             fill_empty_id_rows,
             fix_age_format,
             fix_missing_levels,
             fix_single_column_tsv,
+            fix_trailing_empty_tsv_cells,
+            strip_tsv_cell_whitespace,
         )
 
         preprocessing_warnings: list[str] = []
         if pheno_tsv_path.exists() and pheno_ann_path.exists():
             preprocessing_warnings.extend(fix_single_column_tsv(pheno_tsv_path))
+            preprocessing_warnings.extend(fix_trailing_empty_tsv_cells(pheno_tsv_path))
+            preprocessing_warnings.extend(strip_tsv_cell_whitespace(pheno_tsv_path))
             preprocessing_warnings.extend(dedup_participant_ids(pheno_tsv_path))
             preprocessing_warnings.extend(fill_empty_id_rows(pheno_tsv_path))
             preprocessing_warnings.extend(
@@ -381,7 +386,30 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
         extensions_config_path: str | None = None,
         ai_client=None,
         validate_schema: bool = True,
+        bids_version: str | None = None,
+        suffix_aliases: dict[str, str] | None = None,
+        validation_report: dict | None = None,
+        severity_threshold: BidsSeverity | str = BidsSeverity.WARNING,
     ):
+        if validation_report is None:
+            validation_report = validate_and_repair_bids_dataset(
+                bids_dir,
+                bids_version=bids_version,
+                suffix_aliases=suffix_aliases,
+                severity_threshold=severity_threshold,
+            )
+        if warnings_out is not None:
+            warnings_out["bids_repair"] = validation_report.get("repair", {})
+
+        description_path = Path(bids_dir) / "dataset_description.json"
+        with description_path.open("r", encoding="utf-8") as description_file:
+            current_description = json.load(description_file)
+        if isinstance(dataset_description, dict) and isinstance(
+            current_description, dict
+        ):
+            dataset_description.clear()
+            dataset_description.update(current_description)
+
         pheno_tsv_path = Path(phenotypes_tsv)
         pheno_ann_path = Path(phenotypes_annotations)
 
@@ -410,7 +438,11 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
                 json.dump(dataset_description, tmp_desc)
                 tmp_desc.flush()
 
-                self.bids2tsv(bids_directory=bids_dir, output_tsv=tmp_file.name)
+                self.bids2tsv(
+                    bids_directory=bids_dir,
+                    output_tsv=tmp_file.name,
+                    validation_report=validation_report,
+                )
 
                 # Phase 5a: schema pre-validation
                 if validate_schema and pheno_ann_path.exists():
@@ -442,3 +474,4 @@ class BagelNeuroPolyMTL(BagelMixin, NeurobagelManager):
             Path(tmp_file.name).unlink()
         with contextlib.suppress(OSError):
             Path(tmp_desc.name).unlink()
+        return validation_report

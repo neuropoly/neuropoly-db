@@ -1,0 +1,39 @@
+{
+  "source_commit": "b5c11828e104be88034ecccbe220ad1a20c72dfe",
+  "source_tree_sha256": "648bf22124d372c56ddb31fee12030306db639bd0024689d8479b946f8e761c6",
+  "notices_sha256": "7b00a7383a232afb337e6a635e9104c491486bc3cd82efe923b00fed57930945",
+  "artifacts": {
+    "x86_64-unknown-linux-gnu": [
+      {
+        "job": "p1peswf5nqfase4b",
+        "file": "bids-validator_lnx.zip",
+        "archive_sha256": "ebc1d105bdab7dc8f01344524532a07a8202b67411d42a88002ef3edb6ab475a",
+        "executable_sha256": "ac987cbddf3f25077cc8b7ee78101dca29f05ddddaa3ffea3811b60e82ea4d07"
+      }
+    ],
+    "x86_64-pc-windows-msvc": [
+      {
+        "job": "d6h32v86logl1exa",
+        "file": "bids-validator_win.zip",
+        "archive_sha256": "0d4eac1bcbdf622505cd0c798e335d4aefbe1d56678c15f2e9f4f876b2267086",
+        "executable_sha256": "3d6c08964ef95bd5a2243fa5aed7947487fa389238dea26696daa5af1d420ca3"
+      }
+    ],
+    "x86_64-apple-darwin": [
+      {
+        "job": "3scp706l4fewtltw",
+        "file": "bids-validator_mac.zip",
+        "archive_sha256": "584479acc9097b3ce37a7d1a957dcd0ff1978f7b0fefab994c28e3d56f87e843",
+        "executable_sha256": "feffd630d26cc764e7d64480ed6c201a04c13a511b991a5b4a4d7aee2e309fde"
+      }
+    ],
+    "aarch64-apple-darwin": [
+      {
+        "job": "3scp706l4fewtltw",
+        "file": "bids-validator_mac.zip",
+        "archive_sha256": "584479acc9097b3ce37a7d1a957dcd0ff1978f7b0fefab994c28e3d56f87e843",
+        "executable_sha256": "feffd630d26cc764e7d64480ed6c201a04c13a511b991a5b4a4d7aee2e309fde"
+      }
+    ]
+  }
+}

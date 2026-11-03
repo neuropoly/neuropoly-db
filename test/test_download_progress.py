@@ -19,8 +19,8 @@ from npdb.managers.neuropoly import DataNeuroPolyMTL
 def manager(tmp_path):
     """A DataNeuroPolyMTL instance with all network calls mocked."""
     with (
-        patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
-        patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None),
+        patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
+        patch("npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None),
     ):
         mock_client = MagicMock()
         mock_client.requests.verify = False
@@ -345,9 +345,9 @@ class TestDownloadSubjectsObserver:
 
     def _make_manager(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             mock_client = MagicMock()

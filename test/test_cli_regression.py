@@ -20,6 +20,13 @@ LOCAL_COMMAND = ["convert", "bagel", "local"]
 class TestCLIStructure:
     """Tests for CLI interface structure and help."""
 
+    def test_console_entry_delegates_to_app(self):
+        from npdb.cli.cli import run
+
+        with patch("npdb.cli.cli.npdb") as app:
+            run()
+        app.assert_called_once_with()
+
     def test_cli_app_exists(self):
         """Test that CLI app is properly initialized."""
         assert npdb is not None
@@ -52,6 +59,23 @@ class TestCLIStructure:
         result = runner.invoke(npdb, ["convert", "--help"])
         assert result.exit_code == 0
         assert "bagel" in result.stdout
+
+    def test_bagel_help_lists_provider_commands(self):
+        """Test that all provider-backed convert/bagel commands are exposed."""
+        result = runner.invoke(npdb, ["convert", "bagel", "--help"])
+        assert result.exit_code == 0
+        for command in [
+            "local",
+            "gitea",
+            "git",
+            "kaggle",
+            "mendeley",
+            "midrc",
+            "openneuro",
+            "zenodo",
+            "figshare",
+        ]:
+            assert command in result.stdout
 
     def test_gitea_help(self):
         """Test that the nested gitea help works."""
@@ -150,12 +174,9 @@ class TestCLINoRegressions:
         (input_dir / "dataset_description.json").write_text("{}", encoding="utf-8")
         output_dir = tmp_path / "output"
 
-        with (
-            patch("npdb.cli.cli.extend_bids_description") as mock_extend,
-            patch(
-                "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
-            ) as mock_run,
-        ):
+        with patch(
+            "npdb.cli.facade.DatasetConversionFacade.run", new_callable=AsyncMock
+        ) as mock_run:
             result = runner.invoke(
                 npdb,
                 LOCAL_COMMAND
@@ -169,13 +190,9 @@ class TestCLINoRegressions:
             )
 
         assert result.exit_code == 0, result.output
-        mock_extend.assert_called_once_with(
-            input_dir.name,
-            str(input_dir),
-            "https://example.com/repo",
-            "restricted",
-        )
         mock_run.assert_awaited_once()
+        assert mock_run.await_args.kwargs["online_url"] == "https://example.com/repo"
+        assert mock_run.await_args.kwargs["access_type"] == "restricted"
         assert "Conversion complete!" in result.stdout
 
 

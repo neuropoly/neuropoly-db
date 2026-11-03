@@ -11,7 +11,16 @@
 
 services:
   workspace:
-    image: mcr.microsoft.com/devcontainers/python:3.12-bookworm
+    image: neuropoly-db-workspace:local
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        NPDB_VALIDATOR_SOURCE: ${NPDB_VALIDATOR_SOURCE:-github}
+        NPDB_VALIDATOR_VERSION: ${NPDB_VALIDATOR_VERSION:-}
+    environment:
+      NPDB_VALIDATOR_SOURCE: ${NPDB_VALIDATOR_SOURCE:-github}
+      NPDB_VALIDATOR_VERSION: ${NPDB_VALIDATOR_VERSION:-}
     cap_add:
       - NET_ADMIN
       - SYS_MODULE

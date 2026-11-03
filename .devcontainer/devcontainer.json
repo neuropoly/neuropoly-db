@@ -10,6 +10,12 @@
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
 
   "features": {
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "1.90.0",
+      "profile": "minimal",
+      "targets": "x86_64-pc-windows-msvc",
+      "components": "rustfmt,clippy"
+    },
     "ghcr.io/devcontainers-extra/features/uv:1": { },
     "ghcr.io/devcontainers-extra/features/wireguard-apt-get:1": { },
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": { }

@@ -1,0 +1,147 @@
+name: Native validator wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      validator_source:
+        description: Validator acquisition source (Linux ARM64 always builds locally)
+        type: choice
+        options: [github, appveyor, local]
+        default: github
+      validator_version:
+        description: GitHub release tag or latest
+        default: latest
+  push:
+    branches: [main]
+    paths: &paths
+      - "src/npdb/**"
+      - "tools/**"
+      - "hatch_build.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".gitmodules"
+      - ".github/workflows/validator-wheels.yml"
+  pull_request:
+    paths: *paths
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      record: ${{ steps.resolve.outputs.record }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: resolve
+        if: ${{ (inputs.validator_source || 'github') == 'github' }}
+        env:
+          NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+        run: |
+          python - <<'PY'
+          import json, os, runpy
+          resolve = runpy.run_path("tools/validator_github.py")["resolve"]
+          record = resolve(os.environ["NPDB_VALIDATOR_VERSION"])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("record=" + json.dumps(record) + "\n")
+          PY
+  linux:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x86_64
+            source: github
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            source: local
+    runs-on: ${{ matrix.runner }}
+    env:
+      NPDB_VALIDATOR_SOURCE: ${{ matrix.source == 'local' && 'local' || inputs.validator_source || 'github' }}
+      NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+      NPDB_VALIDATOR_RELEASE: ${{ needs.release.outputs.record }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize only the pinned GitHub validator source
+        run: git submodule update --init --recursive -- tools/bids-validator-rust
+      - name: Build wheels and run disconnected acceptance
+        run: |
+          if [ "$NPDB_VALIDATOR_SOURCE" != github ]; then unset NPDB_VALIDATOR_VERSION; fi
+          python tools/build_wheels.py --targets ${{ matrix.target }} --verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npdb-${{ matrix.target }}
+          path: |
+            dist/wheels/${{ matrix.target }}/*.whl
+            dist/wheels/${{ matrix.target }}/*.tar.gz
+            dist/wheels/${{ matrix.target }}/validator-sizes.json
+
+  desktop:
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: macos-x86_64
+            tag: macosx_11_0_x86_64
+          - runner: macos-14
+            target: macos-arm64
+            tag: macosx_11_0_arm64
+          - runner: windows-2022
+            target: windows-x86_64
+            tag: win_amd64
+    runs-on: ${{ matrix.runner }}
+    env:
+      NPDB_VALIDATOR_SOURCE: ${{ inputs.validator_source || 'github' }}
+      NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+      NPDB_VALIDATOR_RELEASE: ${{ needs.release.outputs.record }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - run: git submodule update --init --recursive -- tools/bids-validator-rust
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v6
+      - uses: dtolnay/rust-toolchain@1.90.0
+        if: env.NPDB_VALIDATOR_SOURCE == 'local'
+      - name: Build wheels and run offline acceptance
+        run: |
+          if [ "$NPDB_VALIDATOR_SOURCE" != github ]; then unset NPDB_VALIDATOR_VERSION; fi
+          python tools/build_wheels.py --targets ${{ matrix.target }} --verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npdb-${{ matrix.target }}
+          path: |
+            dist/wheels/${{ matrix.target }}/*.whl
+            dist/wheels/${{ matrix.target }}/*.tar.gz
+            dist/wheels/${{ matrix.target }}/validator-sizes.json
+
+  python-compatibility:
+    needs: linux
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: npdb-linux-x86_64
+          path: wheel-artifact
+      - name: Prepare interpreter-specific dependency wheelhouse
+        run: python -m pip wheel --prefer-binary --wheel-dir wheelhouse wheel-artifact/*.whl
+      - name: Offline installed-wheel acceptance
+        run: |
+          python tools/verify_validator_wheel.py wheel-artifact/*.whl \
+            --wheelhouse wheelhouse --metrics validator-python-sizes.json

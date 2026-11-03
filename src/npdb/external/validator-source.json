@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/rordenlab/bids-validator-rs",
+  "source_commit": "b5c11828e104be88034ecccbe220ad1a20c72dfe",
+  "source_tree_sha256": "648bf22124d372c56ddb31fee12030306db639bd0024689d8479b946f8e761c6",
+  "rust_package_version": "0.1.20260517",
+  "upstream_version": "2.4.1",
+  "upstream_commit": "94ea9719efbbac7531fed8ad8a2a7bf764cee51f",
+  "schema_version": "1.2.1",
+  "bids_version": "1.11.1"
+}

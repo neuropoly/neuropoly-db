@@ -5,10 +5,13 @@ Provides runtime inspection of page DOM to discover and validate selectors.
 Helps diagnose selector mismatches and find alternative selectors when primary fails.
 """
 
-import json
-from typing import Any, Dict, List
+from __future__ import annotations
 
-from playwright.async_api import Page
+import json
+from typing import TYPE_CHECKING, Any, Dict, List
+
+if TYPE_CHECKING:
+    from playwright.async_api import Page
 
 
 class LocatorInspector:

@@ -88,8 +88,8 @@ def _write_tsv(tmp_path: Path, rows: list[str]) -> Path:
 def manager(tmp_path):
     """A DataNeuroPolyMTL instance with all network calls mocked (no server needed)."""
     with (
-        patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
-        patch("npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None),
+        patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
+        patch("npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None),
     ):
         mock_client = MagicMock()
         mock_client.requests.verify = False
@@ -118,9 +118,9 @@ class TestGiteaManagerURLParsing:
     )
     def test_host_and_proto_extracted(self, url, expected_host, expected_proto):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -130,9 +130,9 @@ class TestGiteaManagerURLParsing:
 
     def test_http_base_constructed(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -143,9 +143,9 @@ class TestGiteaManagerURLParsing:
 
     def test_gitea_client_receives_normalised_url(self):
         with (
-            patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea,
+            patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea,
             patch(
-                "npdb.managers.neurogitea.OrganizationMixin.__init__", return_value=None
+                "npdb.managers.neurodata.OrganizationMixin.__init__", return_value=None
             ),
         ):
             MockGitea.return_value = MagicMock()
@@ -516,7 +516,7 @@ class TestAnnexGet:
 @pytest.fixture()
 def dnp(tmp_path):
     """DataNeuroPolyMTL instance with Gitea client and git ops fully mocked."""
-    with patch("npdb.external.neurogitea.gitea.gt_client.Gitea") as MockGitea:
+    with patch("npdb.external.neurodata.gitea.gt_client.Gitea") as MockGitea:
         mock_client = MagicMock()
         mock_client.requests.verify = False
         MockGitea.return_value = mock_client

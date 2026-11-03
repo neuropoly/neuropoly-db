@@ -1,0 +1,36 @@
+**
+# Use a context-root ignore file so generated Dev Containers Dockerfiles use it too.
+!tools/
+!tools/bids-validator-rust/
+!tools/bids-validator-rust/Cargo.toml
+!tools/bids-validator-rust/Cargo.lock
+!tools/bids-validator-rust/build.rs
+!tools/bids-validator-rust/LICENSE
+!tools/bids-validator-rust/src/
+!tools/bids-validator-rust/src/**
+!tools/bids-validator-rust/crates/
+!tools/bids-validator-rust/crates/**
+!tools/bids-validator-rust/schemas/
+!tools/bids-validator-rust/schemas/**
+!tools/bids-validator-rust/benches/
+!tools/bids-validator-rust/benches/**
+!tools/build_validator.py
+!tools/validator_acquisition.py
+!tools/validator_appveyor.py
+!tools/validator_github.py
+!tools/validator_windows.py
+!tools/audit_validator.py
+!src/
+!src/npdb/
+!src/npdb/external/
+!src/npdb/external/native.py
+!src/npdb/external/validator-source.json
+!src/npdb/external/validator-appveyor.json
+!src/npdb/external/validator-appveyor-notices.txt.gz
+!.devcontainer/
+!.devcontainer/Dockerfile
+!.dockerignore
+tools/bids-validator-rust/**/target/
+tools/bids-validator-rust/**/__pycache__/
+# Submodule gitfiles point outside the copied source tree.
+**/.git

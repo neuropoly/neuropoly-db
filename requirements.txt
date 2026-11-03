@@ -5,6 +5,8 @@ bagel==0.11.4
 py-gitea==0.2.10
 
 # Neuroimaging metadata
+# Native tools: wheels bundle bids-validator; editable installs use scripts/install_bids_validator.sh.
+# dcm2niix remains a system dependency; see https://github.com/neuropoly/neuropoly-db/wiki/Development-Environment-Setup#native-tools
 pybids>=0.16
 pydicom>=2.4
 
