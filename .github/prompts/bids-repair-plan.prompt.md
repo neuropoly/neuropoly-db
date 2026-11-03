@@ -161,6 +161,11 @@ provider-specific download or extraction logic.
   validation.
 - Document supported rules, automatic conversion-time dataset changes,
   explicit-input requirements, unresolved-error behavior, and recovery.
+  Follow [documentation instructions](../instructions/documentation.instructions.md):
+  keep inspect/apply/recover procedures linear, with rule and audit reference
+  separate from the execution steps. Prefer lists, tables, or Mermaid graphs
+  to paragraphs of comma-separated items; avoid redundant representations.
+  Keep existing tables of contents and update their entries and anchors.
 - Show automatic repairs in conversion output; do not silently mutate datasets
   during downloads or extraction.
 

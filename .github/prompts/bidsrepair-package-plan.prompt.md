@@ -176,6 +176,11 @@ placeholders and unnecessary abstractions.
 - Update `pyproject.toml` build configuration to include both top-level packages.
 - Verify wheel and source-distribution contents, not only checkout imports.
 - Document the package boundary, public APIs, compatibility paths and migration.
+  Follow [documentation instructions](../instructions/documentation.instructions.md):
+  keep migration steps succinct; separate architecture and API reference.
+  Prefer lists, tables, or Mermaid graphs to paragraphs of comma-separated
+  items; avoid redundant representations.
+  Keep existing tables of contents and update their entries and anchors.
 - Keep the existing command entry point; no separate executable is required.
 
 ### Acceptance

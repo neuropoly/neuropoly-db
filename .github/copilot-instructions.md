@@ -1,5 +1,15 @@
 # Workspace Copilot Instructions
 
+## Documentation
+
+Follow [documentation instructions](instructions/documentation.instructions.md) when
+writing documentation. Use the repository's [documentation skill](skills/documentation/SKILL.md)
+for documentation overhauls. Procedures must be succinct and linear; keep
+architecture and reference detail outside the steps.
+Prefer lists, tables, and Mermaid graphs over paragraphs of comma-separated
+items, using the simplest structure that makes the information clear.
+Keep existing tables of contents and update them when sections or headings change.
+
 ## Hard Safety Rule: No Gitea Operations
 
 Never execute any command, script, subprocess, or tool action that can interact with the Gitea server at data.neuro.polymtl.ca.
@@ -25,7 +35,7 @@ If there is any uncertainty about whether a step could contact Gitea, treat it a
 
 ## Critical Terminal Management Rule
 
-**READ AND FOLLOW: [.github/prompts/terminal-management-CRITICAL.md](.github/prompts/terminal-management-CRITICAL.md)**
+**READ AND FOLLOW: [terminal-management-CRITICAL.md](prompts/terminal-management-CRITICAL.md)**
 
 This is an absolute, non-negotiable rule for all command execution:
 - DO NOT launch multiple commands in the same terminal while one is running
