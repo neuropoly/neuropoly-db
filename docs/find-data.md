@@ -5,30 +5,23 @@ Use the Neurobagel website to search all lab datasets at once.
 > [!NOTE]
 > You need the **VPN** (off campus) and to be a member of the **[neuropoly GitHub organization](https://github.com/neuropoly)**. See [Get access](get-access.md).
 
-## 1. Open Neurobagel
+## Search and export
 
-Go to **<https://data.neuro.polymtl.ca/bagel>** and click **Submit Query**. With no filters, it lists every dataset.
+1. Open <https://data.neuro.polymtl.ca/bagel>.
+2. Set any of the filters on the left of the page (age, sex, diagnosis, imaging modality, etc.), then select
+   **Submit Query**. Leave filters empty to list all datasets.
 
-![All datasets](assets/neurobagel_query/neurobagel_query_all.png)
+   ![Filtered search](assets/neurobagel_query/neurobagel_query_subset.png)
 
-Each card is one dataset. It shows:
+3. Select the datasets to include. Each card shows matching subjects and scan types.
 
-- how many subjects match your search, out of the total (e.g. **305** / 449),
-- the types of scans available (e.g. `T1W`, `T2W`, `DWI`).
+4. Select **Download** at the bottom right. Keep **Include term labels** selected.
 
-## 2. Filter
+   ![Export results](assets/neurobagel_query/neurobagel_query_export.png)
 
-Use the filters on the left (age, sex, diagnosis, imaging modality, ...), then click **Submit Query** again.
+5. Save the `.tsv` results file in your data folder, for example `~/neuropoly-data`.
 
-![Filtered search](assets/neurobagel_query/neurobagel_query_subset.png)
-
-## 3. Export your results
-
-Tick the box next to each dataset you want, then click **Download** (bottom right). Keep **Include term labels** selected.
-
-![Export](assets/neurobagel_query/neurobagel_query_export.png)
-
-You get a **results file** (`.tsv`): a table with one row per subject and session. You can open it in Excel or LibreOffice. Useful columns:
+## Results file reference
 
 | Column | Meaning |
 |--------|---------|

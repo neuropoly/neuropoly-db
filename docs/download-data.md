@@ -7,52 +7,49 @@
 - VPN on (off campus).
 - [npdb installed](install.md).
 - A `.env` file with your NeuroData credentials in your data folder ([Get access, step 5](get-access.md#5-save-your-credentials)).
+- An exported [results file](find-data.md)
 
 ## Download
 
-Go to your data folder and run:
+1. Open your data folder:
 
-```bash
-cd ~/neuropoly-data
-npdb download --no-verify-ssl results.tsv -o my-cohort
-```
+   ```bash
+   cd ~/neuropoly-data
+   ```
 
-Replace `results.tsv` with the name of your results file, and `my-cohort` with the folder to download into.
+2. Trigger the download:
 
-> [!IMPORTANT]
-> `--no-verify-ssl` is **required** for now: the NeuroData server certificate is not yet recognized by default. This is safe because NeuroData is only reachable through the VPN.
+   ```bash
+   npdb download results.tsv -o my-cohort
+   ```
 
-## What you get
+   Replace `results.tsv` with your export filename.
 
-One folder per dataset, organized in [BIDS](https://bids.neuroimaging.io):
+3. Check the output:
 
-```text
-my-cohort/
-├── canproco/
-│   ├── participants.tsv
-│   ├── sub-cal056/
-│   │   └── ses-M0/anat/sub-cal056_ses-M0_T2w.nii.gz
-│   └── derivatives/      # processed files (e.g. segmentations), when available
-└── dcm-oklahoma/
-    └── ...
-```
+   ```bash
+   ls my-cohort
+   ```
 
-## Useful options
+   Expect one folder per dataset, containing selected subjects and sessions.
+   Available derivatives are included by default for git-backed datasets.
 
-| Option | What it does |
-|--------|--------------|
-| `-o <folder>` | Where to save the data (default: the current folder). |
-| `--no-derivatives` | Skip processed files, download raw data only. |
-| `-v` | Show more details while downloading. |
+## Options
 
-## If it fails
+| Option | Use |
+|--------|-----|
+| `-o <folder>` | Set the output folder; default is the current folder. |
+| `--no-derivatives` | Download raw data only for git-backed datasets. |
+| `-v` | Show git commands. |
 
-| Message | What to do |
-|---------|------------|
-| `Missing required environment variables: NP_GITEA_APP_...` | You're not in the folder with your `.env`, or it's incomplete. See [Get access, step 5](get-access.md#5-save-your-credentials). |
-| Authentication / `401` / `403` errors | Your token is wrong or expired: [create a new one](get-access.md#4-create-a-download-token). |
-| Connection timeouts | Turn on the VPN. |
+## Troubleshooting
 
-Still stuck? Ask on the lab Slack, and share the command you ran and the error.
+| Failure | Action |
+|---------|--------|
+| Missing `NP_GITEA_APP_...` variables | Run from your data folder and check `.env`. |
+| Authentication / `401` / `403` | Check the username, token, and read permissions. |
+| Connection timeout | Check VPN access. |
 
-Next: [Tutorial: your first cohort](tutorial-first-cohort.md)
+For unresolved failures, share the command and error on lab Slack, without credentials.
+
+Example: [Your first cohort](tutorial-first-cohort.md).

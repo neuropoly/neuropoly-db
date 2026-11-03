@@ -29,25 +29,20 @@ Open `females-t2w.tsv` in Excel or LibreOffice. You should only see the two data
 
 ## 4. Download
 
-```bash
-cd ~/neuropoly-data
-npdb download --no-verify-ssl females-t2w.tsv -o females-t2w
-```
-
-Downloading only raw scans, without processed files:
-
-```bash
-npdb download --no-verify-ssl --no-derivatives females-t2w.tsv -o females-t2w
-```
+   ```bash
+   cd ~/neuropoly-data
+   npdb download females-t2w.tsv -o females-t2w
+   ```
 
 ## 5. Check what you got
 
-```bash
-ls females-t2w
-ls females-t2w/canproco
-```
+   ```bash
+   ls females-t2w
+   ls females-t2w/canproco
+   ```
 
-You should see one folder per dataset, and inside, one `sub-...` folder per subject with the `T2w` images.
+   Expect one folder per selected dataset and subject folders containing the
+   selected sessions. Subject counts depend on the current catalogue.
 
 ## Going further
 

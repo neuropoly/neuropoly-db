@@ -7,3 +7,6 @@
 [submodule "tools/bids-validator-rust"]
 	path = tools/bids-validator-rust
 	url = https://github.com/rordenlab/bids-validator-rs.git
+[submodule "wiki"]
+	path = wiki
+	url = https://github.com/neuropoly/neuropoly-db.wiki.git

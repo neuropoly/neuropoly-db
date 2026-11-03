@@ -2,53 +2,54 @@
 
 You do this **once**. It takes about 15 minutes.
 
-- [1. VPN and GitHub](#1-vpn-and-github)
-- [2. NeuroData account](#2-neurodata-account)
-- [3. Register your computer (SSH key)](#3-register-your-computer-ssh-key)
-- [4. Create a download token](#4-create-a-download-token)
-- [5. Save your credentials](#5-save-your-credentials)
+- [Get access](#get-access)
+  - [1. VPN and GitHub](#1-vpn-and-github)
+  - [2. NeuroData account](#2-neurodata-account)
+  - [3. Register your computer (SSH key)](#3-register-your-computer-ssh-key)
+  - [4. Create a download token](#4-create-a-download-token)
+  - [5. Save your credentials](#5-save-your-credentials)
 
 ## 1. VPN and GitHub
 
-- Off campus, connect to the **Polytechnique VPN** before anything else.
-- Make sure you're a member of the **[neuropoly GitHub organization](https://github.com/neuropoly)**. If not, ask your supervisor or the lab admins.
+- Connect to the Polytechnique VPN when off campus.
+- Join the [neuropoly GitHub organization](https://github.com/neuropoly).
+  Ask your supervisor or lab admins if you are not a member.
 
 ## 2. NeuroData account
 
-Go to <https://data.neuro.polymtl.ca> and log in.
+1. Log in at <https://data.neuro.polymtl.ca>. For an account, contact
+   [NeuroPoly IT support](https://github.com/orgs/neuropoly/teams/ansible-admins).
+2. Open your profile picture menu, then **Settings**.
 
-**No account?** Ask [NeuroPoly IT support](https://github.com/orgs/neuropoly/teams/ansible-admins) (Slack is fastest).
-
-Open your settings: click your profile picture (top right), then **Settings**.
-
-![NeuroData user settings](assets/neurodata_token/neurodata_user_settings.png)
+   ![NeuroData user settings](assets/neurodata_token/neurodata_user_settings.png)
 
 ## 3. Register your computer (SSH key)
 
-> [!IMPORTANT]
-> Do this **on every computer** you'll download data with.
+Complete this section on each computer used to download data. This is required to
+get access to large files indexed with `git-annex` in NeuroData..
 
-1. Open a terminal and check if this computer is already registered:
+1. Check authentication:
 
    ```bash
    ssh git@data.neuro.polymtl.ca
    ```
 
-   If you see `Hi there, ... You've successfully authenticated`, **skip to [step 4](#4-create-a-download-token)**.
+   If the response includes `You've successfully authenticated`, continue to
+   [Create a download token](#4-create-a-download-token).
 
-2. Check if you already have a key:
+2. Check for an existing public key:
 
    ```bash
    ls ~/.ssh/id_ed25519.pub
    ```
 
-   If a file name is printed, go to step 4 of this list. Otherwise, create a key (press **Enter** at every question):
+   If absent, create a key without overwriting an existing one:
 
    ```bash
    ssh-keygen -t ed25519
    ```
 
-3. Show your public key and copy everything it prints:
+3. Copy your public key:
 
    ```bash
    cat ~/.ssh/id_ed25519.pub
@@ -64,13 +65,13 @@ Open your settings: click your profile picture (top right), then **Settings**.
 
    ![Paste key](assets/neurodata_token/neurodata_add_ssh_key_form.png)
 
-6. Check it works: run `ssh git@data.neuro.polymtl.ca` again. You should see `You've successfully authenticated`.
+6. Repeat the authentication check from step 1.
 
 ## 4. Create a download token
 
-A token is a password made for programs. `npdb` uses it to download for you.
+A download token is required to give secure access to the `git` repositories in NeuroData, outside of large files.
 
-1. In NeuroData settings, click **Applications**.
+1. In NeuroData settings, open **Applications**.
 
    ![Applications](assets/neurodata_token/neurodata_applications.png)
 
@@ -78,35 +79,39 @@ A token is a password made for programs. `npdb` uses it to download for you.
 
    ![New token](assets/neurodata_token/neurodata_new_token.png)
 
-3. Set **organization**, **repository** and **user** to **Read**. Click **Generate Token**.
+3. Set **organization**, **repository**, and **user** to **Read**, then
+   select **Generate Token**.
 
-   ![Permissions](assets/neurodata_token/neurodata_token_permissions.png)
+   ![Token permissions](assets/neurodata_token/neurodata_token_permissions.png)
 
-4. **Copy the token now.** It is shown only once.
+4. **Copy the token now.** It is shown only once. You'll need it below at step 5.2.
 
    ![Generated token](assets/neurodata_token/neurodata_generated_token.png)
 
 ## 5. Save your credentials
 
-Pick a folder where you'll work with data, for example `~/neuropoly-data`. Create it, and inside, a file named `.env`:
+1. Create your data folder and open a credentials file:
 
-```bash
-mkdir -p ~/neuropoly-data
-cd ~/neuropoly-data
-nano .env
-```
+   ```bash
+   mkdir -p ~/neuropoly-data
+   cd ~/neuropoly-data
+   nano .env
+   ```
 
-Paste these 3 lines, with your NeuroData username and token:
+2. Save these values with your username and token:
 
-```bash
-NP_GITEA_APP_URL=https://data.neuro.polymtl.ca
-NP_GITEA_APP_USER=your-username
-NP_GITEA_APP_TOKEN=paste-your-token-here
-```
+   ```bash
+   NP_GITEA_APP_URL=https://data.neuro.polymtl.ca
+   NP_GITEA_APP_USER=your-username
+   NP_GITEA_APP_TOKEN=paste-your-token-here
+   ```
 
-Save (`Ctrl+O`, `Enter`) and quit (`Ctrl+X`).
+3. Save and close the editor. Restrict access:
 
-> [!IMPORTANT]
-> Always run `npdb` **from this folder**: that's where it looks for `.env`. Keep the token secret: never share or commit this file.
+   ```bash
+   chmod 600 .env
+   ```
 
-Next: [Install npdb](install.md)
+**Run downloads from this folder. Never share or commit the token or `.env`.**
+
+Next: [Install npdb](install.md).

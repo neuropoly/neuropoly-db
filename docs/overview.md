@@ -1,6 +1,6 @@
 # What's available to you
 
-NeuroPoly keeps its imaging datasets in one place and lets you search them like a catalogue. You pick the subjects you need, and a small tool downloads them for you.
+Search NeuroPoly imaging datasets, export a cohort, and download the selected subjects.
 
 ```mermaid
 flowchart LR
