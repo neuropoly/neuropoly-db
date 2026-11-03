@@ -1,0 +1,112 @@
+import json
+import subprocess
+from pathlib import Path
+import nibabel as nib
+import numpy as np
+
+LABEL_MAPPING = { # cf. https://github.com/neuropoly/totalspineseg/blob/main/totalspineseg/resources/labels_maps/tss_map.json
+    1: "SC",
+    2: "CSF",
+    11: "C1", 12: "C2", 13: "C3", 14: "C4", 15: "C5", 16: "C6", 17: "C7",
+    21: "T1", 22: "T2", 23: "T3", 24: "T4", 25: "T5", 26: "T6", 27: "T7", 
+    28: "T8", 29: "T9", 30: "T10", 31: "T11", 32: "T12",
+    41: "L1", 42: "L2", 43: "L3", 44: "L4", 45: "L5", 46: "L6", 47: "L7",
+    50: "sacrum",
+    63: "C2-C3", 64: "C3-C4", 65: "C4-C5", 66: "C5-C6", 67: "C6-C7",
+    71: "C7-T1", 72: "T1-T2", 73: "T2-T3", 74: "T3-T4", 75: "T4-T5", 
+    76: "T5-T6", 77: "T6-T7", 78: "T7-T8", 79: "T8-T9", 80: "T9-T10", 
+    81: "T10-T11", 82: "T11-T12",
+    91: "T12-L1", 92: "L1-L2", 93: "L2-L3", 94: "L3-L4", 95: "L4-L5", 
+    100: "L5-S"
+}
+
+class RegionLabelBPD:
+    def __init__(self, dataset_path):
+        self.dataset_path = dataset_path
+
+    def extract_vertebrae_from_segmentation(self, seg_path):
+        """
+        Reads a imaging file and returns the involved vertebrae
+        """
+        img = nib.load(seg_path)
+        data = img.get_fdata()
+        unique_labels = np.unique(data)
+
+        vertebrae = []
+        for label in unique_labels:
+            label_int = int(label)
+            if label_int in LABEL_MAPPING:
+                name = LABEL_MAPPING[label_int]
+                if name.startswith(("C", "T", "L", "S", "sacrum")) and "-" not in name and name != "SC" and name != "CSF":
+                    vertebrae.append(name)
+
+        return vertebrae
+
+    def compute_body_part_details_field(self, vertebrae_list):
+        """
+        Computes the BodyPartDetails field from the vertebrae list
+        """
+        if not vertebrae_list:
+            return None
+
+        body_part_details = ",".join(str(v) for v in vertebrae_list)
+        return body_part_details
+
+    def update_bids_sidecar(self, json_path, body_part_details):
+        """
+        Update the sidecar with the BodyPartDetail annotation
+        Actual problem: may overwrite the previous BPD field
+        """
+
+        json_path = Path(json_path)
+
+        if json_path.exists():
+            with open(json_path, 'r', encoding='utf-8') as f:
+                sidecar = json.load(f)
+        else:
+            sidecar = {}
+
+        sidecar["BodyPartDetails"] = body_part_details
+
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(sidecar, f, indent=4, ensure_ascii=False)
+
+
+    def process_dataset(self):
+        """
+        Process the whole dataset by reading every label and inject them into the BodyPartDetails field of the sidecar
+        If the dataset contains no label, the function asks the TotalSpineSeg tool to generate the annotations
+        """
+
+        bids_path = Path(self.dataset_path) # root folder
+
+        for img_path in bids_path.glob("sub-*/anat/*.nii.gz"):
+            if "dseg" in img_path.name:
+                continue
+            json_path = img_path.with_suffix("").with_suffix(".json")
+
+            relative_parts = img_path.relative_to(bids_path).parts
+            sub_id = relative_parts[0]
+            seg_filename = img_path.name.replace(".nii.gz", "_label-spine_dseg.nii.gz")
+            seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename
+            
+            vertebrae = []
+            if seg_path.exists():
+                vertebrae = self.extract_vertebrae_from_segmentation(seg_path)
+            else:
+                # execute TotalSpineSeg if the label doesn't exist yet
+                # to do: call TotalSpineSeg tool to generate the labels
+                continue
+                
+            if vertebrae:
+                bp_details = self.compute_body_part_details_field(vertebrae)
+                self.update_bids_sidecar(json_path, bp_details)
+                print(f"BodyPartDetails: {bp_details}")
+
+
+if __name__=="__main__":
+
+    target_dir = "" # to complete with your local path to the dataset
+
+    annotation = RegionLabelBPD(target_dir)
+    annotation.process_dataset()
