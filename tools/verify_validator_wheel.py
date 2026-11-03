@@ -25,7 +25,8 @@ def verify(wheel: Path, wheelhouse: Path) -> dict:
         binary = archive.getinfo(binaries[0])
         if not binaries[0].endswith(".exe") and not (binary.external_attr >> 16) & 0o111:
             raise RuntimeError("The bundled Unix executable lacks executable permissions.")
-        for name in ("schema.json", "LICENSE", "THIRD-PARTY-LICENSES", "provenance.json"):
+        for name in ("schema.json", "LICENSE", "THIRD-PARTY-LICENSES", "provenance.json",
+                     "identity.json"):
             archive.getinfo(f"npdb/_bin/{name}")
         provenance = json.loads(archive.read("npdb/_bin/provenance.json"))
         metrics = {
@@ -33,6 +34,10 @@ def verify(wheel: Path, wheelhouse: Path) -> dict:
             "executable_bytes": binary.file_size,
             "compressed_executable_bytes": binary.compress_size,
             "target": provenance["target"],
+            "acquisition": provenance["acquisition"],
+            "release_tag": provenance.get("release_tag"),
+            "source_commit": provenance["source_commit"],
+            "wheel_platform": provenance["wheel_platform"],
         }
     with tempfile.TemporaryDirectory(prefix="npdb-offline-wheel-") as temporary:
         root = Path(temporary)

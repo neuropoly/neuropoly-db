@@ -8,6 +8,7 @@ import runpy
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,20 +80,81 @@ def source_directory(root: Path) -> Path:
 
 
 def build_bundle(root: Path, destination: Path, target: str | None = None) -> Path:
+    common = runpy.run_path(str(root / "tools/validator_acquisition.py"))
+    settings = common["configuration"]()
+    target = target or common["host_target"]()
+    source = (root / "tools/bids-validator-rust").resolve()
+    destination = destination.resolve()
+    if destination.is_relative_to(source):
+        raise RuntimeError("Build destinations must be outside the submodule.")
+    # Stage a complete bundle so a failed acquisition cannot damage an installation.
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent, prefix=".validator-") as temporary:
+        stage = Path(temporary)
+        if settings["source"] == "github":
+            executable, identity = runpy.run_path(str(root / "tools/validator_github.py"))[
+                "acquire"
+            ](root, stage, target, settings["version"])
+        elif settings["source"] == "appveyor":
+            source = source_directory(root)
+            identity = native_helpers(root)["source_identity"]()
+            executable, provenance = runpy.run_path(str(root / "tools/validator_appveyor.py"))[
+                "acquire"
+            ](root, stage, target)
+            finish_bundle(source, stage, executable, target, identity, provenance)
+            identity = json.loads((stage / "provenance.json").read_text())
+        else:
+            executable = compile_bundle(root, stage, target)
+            identity = json.loads((stage / "provenance.json").read_text())
+        audit = runpy.run_path(str(root / "tools/audit_validator.py"))
+        if "windows" in target:
+            runpy.run_path(str(root / "tools/validator_windows.py"))["bundle"](
+                executable, settings["runtime"]
+            )
+            wheel_platform = "win_amd64"
+        elif "darwin" in target:
+            wheel_platform = "macosx_11_0_" + ("arm64" if target.startswith("aarch64") else "x86_64")
+        else:
+            baseline = audit["linux_baseline"](executable)
+            if settings["source"] == "local":
+                baseline = max((2, 28), baseline)
+            architecture = target.split("-")[0]
+            wheel_platform = f"manylinux_{baseline[0]}_{baseline[1]}_{architecture}"
+        audit["audit"](executable, wheel_platform)
+        identity["wheel_platform"] = wheel_platform
+        (stage / "provenance.json").write_text(json.dumps(identity, indent=2) + "\n")
+        common["write_manifest"](stage, identity)
+        publish_bundle(stage, destination)
+    return destination / executable.name
+
+
+def publish_bundle(stage: Path, destination: Path) -> None:
+    if destination.is_symlink():
+        raise RuntimeError(f"Bundle destination must not be a symlink: {destination}")
+    if not destination.exists():
+        stage.rename(destination)
+        return
+    backup = destination.with_name(destination.name + ".previous")
+    if backup.exists():
+        raise RuntimeError(f"Previous validator backup exists: {backup}")
+    destination.rename(backup)
+    try:
+        stage.rename(destination)
+    except OSError:
+        backup.rename(destination)
+        raise
+    shutil.rmtree(backup)
+
+
+def compile_bundle(root: Path, destination: Path, target: str | None = None) -> Path:
     source = source_directory(root).resolve()
     destination = destination.resolve()
     cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")).resolve()
     if destination.is_relative_to(source) or cargo_home.is_relative_to(source):
         raise RuntimeError("Build destinations and CARGO_HOME must be outside the submodule.")
     identity = native_helpers(root)["source_identity"]()
-    artifacts = runpy.run_path(str(root / "tools/validator_artifacts.py"))
+    artifacts = runpy.run_path(str(root / "tools/validator_acquisition.py"))
     artifact_target = target or artifacts["host_target"]()
-    acquired = artifacts["acquire"](root, destination, artifact_target)
-    if acquired is not None:
-        executable, provenance = acquired
-        finish_bundle(source, destination, executable, artifact_target, identity, provenance)
-        source_directory(root)
-        return executable
     host = artifacts["host_target"]()
     if artifact_target != host and not (
         host.endswith("-unknown-linux-gnu")
@@ -100,7 +162,7 @@ def build_bundle(root: Path, destination: Path, target: str | None = None) -> Pa
         and os.environ.get("NPDB_CARGO_XWIN") == "1"
     ):
         raise RuntimeError(
-            f"No usable prebuilt validator for {artifact_target}; source fallback cannot "
+            f"Local source compilation cannot "
             f"build this target on {host}. Use a matching native host, or enable "
             "cargo-xwin for a Windows build from Linux."
         )
@@ -206,17 +268,44 @@ def install(root: Path, prefix: Path) -> None:
     bundle = prefix.resolve() / ("Scripts" if os.name == "nt" else "bin") / "npdb-validator"
     if bundle.resolve().is_relative_to((root / "tools/bids-validator-rust").resolve()):
         raise RuntimeError("The installation prefix must be outside the validator submodule.")
+    common = runpy.run_path(str(root / "tools/validator_acquisition.py"))
+    settings = common["configuration"]()
+    expected_commit = None
+    expected_tag = None
+    if settings["source"] == "github":
+        record = runpy.run_path(str(root / "tools/validator_github.py"))["resolve"](settings["version"])
+        os.environ["NPDB_VALIDATOR_RELEASE"] = json.dumps(record)
+        expected_commit = record["commit"]
+        expected_tag = record["tag"]
+    else:
+        expected_commit = helpers["source_identity"]()["source_commit"]
     candidates = [bundle, Path("/usr/local/bin/npdb-validator")]
     for candidate in dict.fromkeys(candidates):
         if candidate.exists():
             try:
+                provenance = json.loads((candidate / "provenance.json").read_text())
+                if not isinstance(provenance, dict):
+                    raise ValueError(f"Invalid validator provenance: {candidate}")
+                acquisition = "source" if settings["source"] == "local" else settings["source"]
+                if (provenance.get("acquisition") != acquisition
+                        or provenance.get("source_commit") != expected_commit
+                        or (expected_tag and provenance.get("release_tag") != expected_tag)
+                        or provenance.get("target") != common["host_target"]()):
+                    continue
                 executable = helpers["verify_bundle"](candidate)
-            except RuntimeError as exc:
-                print(f"{exc}; rebuilding the pinned bundle instead.", file=sys.stderr)
+            except (RuntimeError, OSError, ValueError) as exc:
+                print(f"{exc}; reacquiring the selected validator bundle.", file=sys.stderr)
                 continue
             if candidate != bundle:
-                shutil.copytree(candidate, bundle, dirs_exist_ok=True)
-            print(f"Pinned Rust BIDS validator already installed: {executable}")
+                bundle.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(
+                    dir=bundle.parent, prefix=".validator-reuse-",
+                ) as temporary:
+                    stage = Path(temporary) / "bundle"
+                    shutil.copytree(candidate, stage)
+                    helpers["verify_bundle"](stage)
+                    publish_bundle(stage, bundle)
+            print(f"Matching native BIDS validator already installed: {executable}")
             break
     else:
         build_bundle(root, bundle)
@@ -230,8 +319,13 @@ if __name__ == "__main__":
     group.add_argument("--output", type=Path)
     group.add_argument("--install", type=Path)
     parser.add_argument("--target")
+    common = runpy.run_path(str(ROOT / "tools/validator_acquisition.py"))
+    common["add_arguments"](parser)
     args = parser.parse_args()
     try:
+        settings = common["configuration"](args.validator_source, args.validator_version,
+                                           args.windows_runtime_dir)
+        os.environ.update(common["environment"](settings))
         if args.install:
             install(ROOT, args.install)
         else:
@@ -239,5 +333,5 @@ if __name__ == "__main__":
     except subprocess.CalledProcessError as exc:
         diagnostics = [str(exc), exc.stdout, exc.stderr]
         parser.exit(1, "\n".join(part.rstrip() for part in diagnostics if part) + "\n")
-    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+    except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.exit(1, f"{exc}\n")

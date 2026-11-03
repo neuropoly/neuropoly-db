@@ -20,7 +20,7 @@ import pytest
 from npdb.external.native import source_identity, verify_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("validator_artifacts", ROOT / "tools/validator_artifacts.py")
+SPEC = importlib.util.spec_from_file_location("validator_appveyor", ROOT / "tools/validator_appveyor.py")
 assert SPEC is not None and SPEC.loader is not None
 ARTIFACTS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(ARTIFACTS)
@@ -53,13 +53,14 @@ def artifact_root(tmp_path, monkeypatch):
         shutil.copy2(ROOT / "src/npdb/external" / name, external / name)
     (root / "tools").mkdir()
     shutil.copy2(ROOT / "tools/audit_validator.py", root / "tools/audit_validator.py")
-    shutil.copy2(ROOT / "tools/validator_artifacts.py", root / "tools/validator_artifacts.py")
+    shutil.copy2(ROOT / "tools/validator_appveyor.py", root / "tools/validator_appveyor.py")
+    shutil.copy2(ROOT / "tools/validator_acquisition.py", root / "tools/validator_acquisition.py")
     source = root / "tools/bids-validator-rust"
     (source / "schemas").mkdir(parents=True)
     (source / "LICENSE").write_text("fixture license")
     (source / "schemas/schema-1.2.1.json").write_text("{}")
     compressed = gzip.compress(b"complete fixture notices", mtime=0)
-    (external / "validator-artifact-notices.txt.gz").write_bytes(compressed)
+    (external / "validator-appveyor-notices.txt.gz").write_bytes(compressed)
     binary = macho()
     data = archive(binary)
     manifest = {
@@ -71,15 +72,17 @@ def artifact_root(tmp_path, monkeypatch):
             "executable_sha256": hashlib.sha256(binary).hexdigest(),
         }]},
     }
-    (external / "validator-artifacts.json").write_text(json.dumps(manifest))
+    (external / "validator-appveyor.json").write_text(json.dumps(manifest))
     monkeypatch.delenv("NPDB_VALIDATOR_SOURCE_ONLY", raising=False)
+    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE", "appveyor")
+    monkeypatch.delenv("NPDB_VALIDATOR_VERSION", raising=False)
     monkeypatch.setenv("NPDB_VALIDATOR_CACHE", str(tmp_path / "cache"))
     monkeypatch.setattr(ARTIFACTS, "download", Mock(return_value=data))
     return root, manifest, data
 
 
 def save_manifest(root, manifest):
-    (root / "src/npdb/external/validator-artifacts.json").write_text(json.dumps(manifest))
+    (root / "src/npdb/external/validator-appveyor.json").write_text(json.dumps(manifest))
 
 
 def test_artifact_is_audited_cached_and_includes_notices(artifact_root, tmp_path):
@@ -100,10 +103,11 @@ def test_artifact_is_audited_cached_and_includes_notices(artifact_root, tmp_path
     urllib.error.URLError("offline"), TimeoutError("timeout"),
     http.client.IncompleteRead(b"truncated"), ssl.SSLError("transfer failed"),
 ])
-def test_unavailable_artifact_reports_source_fallback(artifact_root, tmp_path, capsys, error):
+def test_unavailable_artifact_fails_without_source_fallback(artifact_root, tmp_path, capsys, error):
     root, _, _ = artifact_root
     ARTIFACTS.download.side_effect = error
-    assert ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET) is None
+    with pytest.raises(RuntimeError, match="No usable AppVeyor"):
+        ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET)
     assert "unavailable" in capsys.readouterr().err
     assert not (tmp_path / "bundle").exists()
 
@@ -122,15 +126,16 @@ def test_wrong_source_never_downloads(artifact_root, tmp_path, change):
     root, manifest, _ = artifact_root
     manifest[change] = "wrong"
     save_manifest(root, manifest)
-    assert ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET) is None
+    with pytest.raises(RuntimeError, match="No approved AppVeyor"):
+        ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET)
     ARTIFACTS.download.assert_not_called()
 
 
-def test_source_only_never_downloads(artifact_root, tmp_path, monkeypatch):
-    root, _, _ = artifact_root
+def test_obsolete_source_only_is_rejected(monkeypatch):
     monkeypatch.setenv("NPDB_VALIDATOR_SOURCE_ONLY", "1")
-    assert ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET) is None
-    ARTIFACTS.download.assert_not_called()
+    common = runpy.run_path(str(ROOT / "tools/validator_acquisition.py"))
+    with pytest.raises(RuntimeError, match="was removed"):
+        common["configuration"]()
 
 
 @pytest.mark.parametrize("field", ["archive_sha256", "executable_sha256"])
@@ -164,7 +169,7 @@ def test_malformed_or_unsafe_archive_is_rejected(artifact_root, tmp_path, payloa
         ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET)
 
 
-def test_incompatible_binary_reports_fallback(artifact_root, tmp_path, capsys):
+def test_incompatible_binary_fails_at_bundle_audit(artifact_root, tmp_path):
     root, manifest, _ = artifact_root
     binary = macho(minimum=12 << 16)
     data = archive(binary)
@@ -174,13 +179,14 @@ def test_incompatible_binary_reports_fallback(artifact_root, tmp_path, capsys):
     )
     save_manifest(root, manifest)
     ARTIFACTS.download.return_value = data
-    assert ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET) is None
-    assert "incompatible" in capsys.readouterr().err
+    executable, _ = ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET)
+    with pytest.raises(RuntimeError, match="macOS"):
+        AUDIT["audit"](executable, "macosx_11_0_arm64")
 
 
 def test_notice_tampering_is_rejected(artifact_root, tmp_path):
     root, _, _ = artifact_root
-    (root / "src/npdb/external/validator-artifact-notices.txt.gz").write_bytes(b"tampered")
+    (root / "src/npdb/external/validator-appveyor-notices.txt.gz").write_bytes(b"tampered")
     with pytest.raises(RuntimeError, match="notices checksum mismatch"):
         ARTIFACTS.acquire(root, tmp_path / "bundle", TARGET)
 
@@ -194,8 +200,8 @@ def test_executable_size_limit_is_enforced(artifact_root, tmp_path, monkeypatch)
 
 def test_pinned_notices_cover_all_locked_packages():
     external = ROOT / "src/npdb/external"
-    manifest = json.loads((external / "validator-artifacts.json").read_text())
-    compressed = (external / "validator-artifact-notices.txt.gz").read_bytes()
+    manifest = json.loads((external / "validator-appveyor.json").read_text())
+    compressed = (external / "validator-appveyor-notices.txt.gz").read_bytes()
     assert hashlib.sha256(compressed).hexdigest() == manifest["notices_sha256"]
     assert manifest["source_commit"] == source_identity()["source_commit"]
     assert manifest["source_tree_sha256"] == source_identity()["source_tree_sha256"]
@@ -234,12 +240,12 @@ def test_bundle_acquisition_needs_no_cargo(artifact_root, tmp_path, monkeypatch)
     assert (binary.parent / "LICENSE").is_file()
 
 
-def test_unsupported_source_fallback_has_actionable_error(artifact_root, tmp_path, monkeypatch):
+def test_unsupported_local_target_has_actionable_error(artifact_root, tmp_path, monkeypatch):
     root, _, _ = artifact_root
-    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE_ONLY", "1")
+    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE", "local")
     monkeypatch.setitem(BUILD["build_bundle"].__globals__, "source_directory",
                         lambda root: root / "tools/bids-validator-rust")
-    with pytest.raises(RuntimeError, match="source fallback cannot.*matching native host"):
+    with pytest.raises(RuntimeError, match="Local source compilation cannot.*matching native host"):
         BUILD["build_bundle"](root, tmp_path / "bundle", TARGET)
 
 

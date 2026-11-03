@@ -10,6 +10,75 @@ def _output(*command: str) -> str:
     return subprocess.run(command, check=True, capture_output=True, text=True).stdout
 
 
+def linux_baseline(binary: Path) -> tuple[int, int]:
+    versions = _output("readelf", "--version-info", str(binary))
+    if re.search(r"GLIBC_[A-Z]", versions):
+        raise RuntimeError("Unsupported nonnumeric glibc ABI requirement.")
+    required = [tuple(map(int, value.split(".")))
+                for value in re.findall(r"GLIBC_([0-9.]+)", versions)]
+    return max([(2, 17), *required])
+
+
+def pe_imports(binary: Path) -> set[str]:
+    """Read x64 PE imports without executing the image or requiring Windows."""
+    data = binary.read_bytes()
+    try:
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        if data[:2] != b"MZ" or data[pe:pe + 4] != b"PE\0\0":
+            raise RuntimeError("Invalid PE executable.")
+        machine, sections = struct.unpack_from("<HH", data, pe + 4)
+        if machine != 0x8664 or not 1 <= sections <= 96:
+            raise RuntimeError("PE architecture does not match win_amd64.")
+        optional_size = struct.unpack_from("<H", data, pe + 20)[0]
+        optional = pe + 24
+        if struct.unpack_from("<H", data, optional)[0] != 0x20B:
+            raise RuntimeError("Expected PE32+ executable.")
+
+        def offset(rva: int) -> int:
+            for index in range(sections):
+                section = optional + optional_size + index * 40
+                size, address, raw_size, raw = struct.unpack_from("<IIII", data, section + 8)
+                if address <= rva < address + min(size, raw_size):
+                    result = raw + rva - address
+                    if result < len(data):
+                        return result
+            raise RuntimeError(f"Unmapped PE import RVA: {rva}")
+
+        imports = set()
+        # Normal and delay-load dependencies both participate in the closure.
+        for directory, stride, name_offset in ((120, 20, 12), (216, 32, 4)):
+            rva = struct.unpack_from("<I", data, optional + directory)[0]
+            if not rva:
+                continue
+            descriptor = offset(rva)
+            for _ in range(1024):
+                if descriptor + stride > len(data):
+                    raise RuntimeError("Truncated PE import table.")
+                if not any(data[descriptor:descriptor + stride]):
+                    break
+                if stride == 32 and struct.unpack_from("<I", data, descriptor)[0] != 1:
+                    raise RuntimeError("Unsupported PE delay import addressing.")
+                name = offset(struct.unpack_from("<I", data, descriptor + name_offset)[0])
+                end = data.index(b"\0", name, min(name + 256, len(data)))
+                dll = data[name:end].decode("ascii").lower()
+                if not re.fullmatch(r"[a-z0-9_.-]+\.dll", dll):
+                    raise RuntimeError("Unsafe PE DLL name.")
+                imports.add(dll)
+                descriptor += stride
+            else:
+                raise RuntimeError("PE import table exceeds size limit.")
+        return imports
+    except (struct.error, ValueError, UnicodeError) as error:
+        raise RuntimeError(f"Invalid PE image {binary}: {error}") from error
+
+
+def system_dll(name: str) -> bool:
+    return name in {
+        "kernel32.dll", "ntdll.dll", "bcrypt.dll", "bcryptprimitives.dll",
+        "advapi32.dll", "userenv.dll", "ws2_32.dll", "synchronization.dll",
+    } or name.startswith(("api-ms-win-", "ext-ms-win-"))
+
+
 def audit_macho(data: bytes, expected: int) -> None:
     """Check thin or universal Mach-O executables on any build host."""
     try:
@@ -73,15 +142,16 @@ def audit_macho(data: bytes, expected: int) -> None:
 def audit(binary: Path, wheel_platform: str) -> None:
     if wheel_platform.startswith(("manylinux_", "musllinux_")):
         if wheel_platform not in {
-            "manylinux_2_28_x86_64", "manylinux_2_28_aarch64",
             "musllinux_1_2_x86_64", "musllinux_1_2_aarch64",
-        }:
+        } and not re.fullmatch(r"manylinux_2_[0-9]+_(x86_64|aarch64)", wheel_platform):
             raise ValueError(f"Unsupported Linux baseline: {wheel_platform}")
         machine = "AArch64" if wheel_platform.endswith("aarch64") else "Advanced Micro Devices X86-64"
         if machine not in _output("readelf", "-h", str(binary)):
             raise RuntimeError("ELF architecture does not match the wheel tag.")
         dynamic = _output("readelf", "-d", str(binary))
         versions = _output("readelf", "--version-info", str(binary))
+        if re.search(r"GLIBC_[A-Z]", versions):
+            raise RuntimeError("Unsupported nonnumeric glibc ABI requirement.")
         libraries = set(re.findall(r"Shared library: \[(.*?)\]", dynamic))
         if wheel_platform.startswith("manylinux_"):
             allowed = {
@@ -90,8 +160,9 @@ def audit(binary: Path, wheel_platform: str) -> None:
             }
             required = [tuple(map(int, value.split(".")))
                         for value in re.findall(r"GLIBC_([0-9.]+)", versions)]
-            if required and max(required) > (2, 28):
-                raise RuntimeError(f"Executable requires glibc {max(required)}, above 2.28.")
+            baseline = tuple(map(int, wheel_platform.split("_")[1:3]))
+            if required and max(required) > baseline:
+                raise RuntimeError(f"Executable requires glibc {max(required)}, above {baseline}.")
         else:
             allowed = {"libc.musl-x86_64.so.1", "libc.musl-aarch64.so.1"}
             if "GLIBC_" in versions:
@@ -102,38 +173,20 @@ def audit(binary: Path, wheel_platform: str) -> None:
         expected = 0x0100000C if wheel_platform.endswith("arm64") else 0x01000007
         audit_macho(binary.read_bytes(), expected)
     elif wheel_platform == "win_amd64":
-        data = binary.read_bytes()
-        pe = struct.unpack_from("<I", data, 0x3C)[0]
-        if data[pe:pe + 4] != b"PE\0\0":
-            raise RuntimeError("Invalid PE executable.")
-        machine, sections = struct.unpack_from("<HH", data, pe + 4)
-        if machine != 0x8664:
-            raise RuntimeError("PE architecture does not match win_amd64.")
-        optional_size = struct.unpack_from("<H", data, pe + 20)[0]
-        optional = pe + 24
-        if struct.unpack_from("<H", data, optional)[0] != 0x20B:
-            raise RuntimeError("Expected PE32+ executable.")
-        import_rva = struct.unpack_from("<I", data, optional + 120)[0]
-
-        def offset(rva: int) -> int:
-            for index in range(sections):
-                section = optional + optional_size + index * 40
-                size, address, raw_size, raw = struct.unpack_from("<IIII", data, section + 8)
-                if address <= rva < address + max(size, raw_size):
-                    return raw + rva - address
-            raise RuntimeError(f"Unmapped PE import RVA: {rva}")
-
-        if import_rva:
-            descriptor = offset(import_rva)
-            while any(data[descriptor:descriptor + 20]):
-                name = offset(struct.unpack_from("<I", data, descriptor + 12)[0])
-                dll = data[name:data.index(b"\0", name)].decode("ascii").lower()
-                if dll not in {
-                    "kernel32.dll", "ntdll.dll", "bcrypt.dll", "bcryptprimitives.dll",
-                    "advapi32.dll", "userenv.dll", "ws2_32.dll", "synchronization.dll",
-                } and not dll.startswith(("api-ms-win-", "ext-ms-win-")):
+        pending = [binary]
+        visited = set()
+        while pending:
+            image = pending.pop()
+            if image.name.lower() in visited:
+                continue
+            visited.add(image.name.lower())
+            for dll in pe_imports(image):
+                if system_dll(dll):
+                    continue
+                dependency = binary.parent / dll
+                if not dependency.is_file():
                     raise RuntimeError(f"Unbundled Windows runtime dependency: {dll}")
-                descriptor += 20
+                pending.append(dependency)
     elif wheel_platform.startswith(("linux_", "macosx_")):
         # Local wheels use the build interpreter's exact platform, not a portable claim.
         import sysconfig

@@ -1,4 +1,4 @@
-"""Locate and verify npdb's pinned native validator, without provider imports."""
+"""Locate and verify npdb's bundled native validator, without provider imports."""
 
 import hashlib
 import json
@@ -33,11 +33,39 @@ def source_identity() -> dict[str, str]:
 def verify_bundle(directory: Path) -> Path:
     """Reject incomplete, altered or mismatched bundles before executing them."""
     try:
-        identity = source_identity()
         provenance = json.loads(
             (directory / "provenance.json").read_text(encoding="utf-8")
         )
-        if not isinstance(provenance, dict) or any(
+        if not isinstance(provenance, dict):
+            raise ValueError("invalid bundle provenance")
+        if provenance.get("acquisition") == "github":
+            identity = provenance
+            if (
+                identity.get("repository") != "https://github.com/rordenlab/bids-validator-rs"
+                or not re.fullmatch(r"[0-9a-f]{40}", identity.get("source_commit", ""))
+                or not re.fullmatch(r"[0-9a-f]{40}", identity.get("upstream_commit", ""))
+                or any(not isinstance(identity.get(key), str) or not identity[key]
+                       for key in ("rust_package_version", "upstream_version",
+                                   "schema_version", "bids_version", "release_tag"))
+            ):
+                raise ValueError("invalid GitHub release identity")
+        else:
+            identity = source_identity()
+        manifest_path = directory / "identity.json"
+        if manifest_path.exists() or provenance.get("acquisition") == "github":
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            files = manifest.get("files")
+            actual = {path.name for path in directory.iterdir()
+                      if path.name not in {"identity.json", "provenance.json"}}
+            if (manifest.get("identity") != provenance or not isinstance(files, dict)
+                    or set(files) != actual):
+                raise ValueError("bundle identity or file inventory does not match")
+            for name, digest in files.items():
+                path = directory / name
+                if (path.is_symlink() or not path.is_file()
+                        or hashlib.sha256(path.read_bytes()).hexdigest() != digest):
+                    raise ValueError(f"{name} checksum does not match bundle identity")
+        if any(
             provenance.get(key) != value for key, value in identity.items()
         ):
             raise ValueError("source identity does not match the pinned validator")
@@ -56,7 +84,7 @@ def verify_bundle(directory: Path) -> Path:
         embedded_commit = identity["source_commit"]
         if provenance.get("acquisition") == "appveyor":
             manifest = json.loads(
-                Path(__file__).with_name("validator-artifacts.json").read_text(encoding="utf-8")
+                Path(__file__).with_name("validator-appveyor.json").read_text(encoding="utf-8")
             )
             if not isinstance(manifest, dict) or any(manifest.get(key) != identity[key]
                    for key in ("source_commit", "source_tree_sha256")):
@@ -87,10 +115,12 @@ def verify_bundle(directory: Path) -> Path:
             f"rust {identity['rust_package_version']}"
         )
         reported_commit = re.search(r"^rust git commit ([0-9a-f]+)$", version, re.MULTILINE)
+        if provenance.get("acquisition") == "github":
+            embedded_commit = provenance.get("embedded_source_commit")
         if expected not in version or not reported_commit or reported_commit[1] != embedded_commit:
             raise ValueError("executable version does not match source identity")
         return executable
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+    except (OSError, ValueError, AttributeError, TypeError, subprocess.SubprocessError) as exc:
         raise RuntimeError(f"Invalid native validator bundle at {directory}: {exc}") from exc
 
 
@@ -115,6 +145,6 @@ def validator_executable() -> str:
         if candidate.is_file():
             return str(verify_bundle(candidate.parent / "npdb-validator"))
     raise RuntimeError(
-        "The pinned Rust BIDS validator is required. Run "
-        "bash scripts/install_bids_validator.sh after installing Rust 1.90+."
+        "The native Rust BIDS validator is required. Run "
+        "bash scripts/install_bids_validator.sh (downloads a GitHub release by default)."
     )

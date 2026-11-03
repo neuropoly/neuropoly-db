@@ -2,6 +2,15 @@ name: Native validator wheels
 
 on:
   workflow_dispatch:
+    inputs:
+      validator_source:
+        description: Validator acquisition source (Linux ARM64 always builds locally)
+        type: choice
+        options: [github, appveyor, local]
+        default: github
+      validator_version:
+        description: GitHub release tag or latest
+        default: latest
   push:
     branches: [main]
     paths: &paths
@@ -19,33 +28,59 @@ permissions:
   contents: read
 
 jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      record: ${{ steps.resolve.outputs.record }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: resolve
+        if: ${{ (inputs.validator_source || 'github') == 'github' }}
+        env:
+          NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+        run: |
+          python - <<'PY'
+          import json, os, runpy
+          resolve = runpy.run_path("tools/validator_github.py")["resolve"]
+          record = resolve(os.environ["NPDB_VALIDATOR_VERSION"])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("record=" + json.dumps(record) + "\n")
+          PY
   linux:
+    needs: release
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: ubuntu-24.04
             target: linux-x86_64
-            tag: manylinux_2_28_x86_64
+            source: github
           - runner: ubuntu-24.04-arm
             target: linux-arm64
-            tag: manylinux_2_28_aarch64
+            source: local
     runs-on: ${{ matrix.runner }}
+    env:
+      NPDB_VALIDATOR_SOURCE: ${{ matrix.source == 'local' && 'local' || inputs.validator_source || 'github' }}
+      NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+      NPDB_VALIDATOR_RELEASE: ${{ needs.release.outputs.record }}
     steps:
       - uses: actions/checkout@v4
       - name: Initialize only the pinned GitHub validator source
         run: git submodule update --init --recursive -- tools/bids-validator-rust
       - name: Build wheels and run disconnected acceptance
-        run: python tools/build_wheels.py --targets ${{ matrix.target }} --verify
+        run: |
+          if [ "$NPDB_VALIDATOR_SOURCE" != github ]; then unset NPDB_VALIDATOR_VERSION; fi
+          python tools/build_wheels.py --targets ${{ matrix.target }} --verify
       - uses: actions/upload-artifact@v4
         with:
-          name: npdb-${{ matrix.tag }}
+          name: npdb-${{ matrix.target }}
           path: |
             dist/wheels/${{ matrix.target }}/*.whl
             dist/wheels/${{ matrix.target }}/*.tar.gz
             dist/wheels/${{ matrix.target }}/validator-sizes.json
 
   desktop:
+    needs: release
     strategy:
       fail-fast: false
       matrix:
@@ -60,6 +95,10 @@ jobs:
             target: windows-x86_64
             tag: win_amd64
     runs-on: ${{ matrix.runner }}
+    env:
+      NPDB_VALIDATOR_SOURCE: ${{ inputs.validator_source || 'github' }}
+      NPDB_VALIDATOR_VERSION: ${{ inputs.validator_version || 'latest' }}
+      NPDB_VALIDATOR_RELEASE: ${{ needs.release.outputs.record }}
     defaults:
       run:
         shell: bash
@@ -71,11 +110,14 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v6
       - uses: dtolnay/rust-toolchain@1.90.0
+        if: env.NPDB_VALIDATOR_SOURCE == 'local'
       - name: Build wheels and run offline acceptance
-        run: python tools/build_wheels.py --targets ${{ matrix.target }} --verify
+        run: |
+          if [ "$NPDB_VALIDATOR_SOURCE" != github ]; then unset NPDB_VALIDATOR_VERSION; fi
+          python tools/build_wheels.py --targets ${{ matrix.target }} --verify
       - uses: actions/upload-artifact@v4
         with:
-          name: npdb-${{ matrix.tag }}
+          name: npdb-${{ matrix.target }}
           path: |
             dist/wheels/${{ matrix.target }}/*.whl
             dist/wheels/${{ matrix.target }}/*.tar.gz
@@ -95,7 +137,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - uses: actions/download-artifact@v4
         with:
-          name: npdb-manylinux_2_28_x86_64
+          name: npdb-linux-x86_64
           path: wheel-artifact
       - name: Prepare interpreter-specific dependency wheelhouse
         run: python -m pip wheel --prefer-binary --wheel-dir wheelhouse wheel-artifact/*.whl

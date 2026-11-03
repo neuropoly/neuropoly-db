@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from npdb.external.native import source_identity, validator_executable, verify_bundle
+from npdb.external.native import (source_identity, validator_executable,
+                                  verify_bundle)
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = runpy.run_path(str(ROOT / "tools/build_validator.py"))
@@ -18,8 +19,9 @@ AUDIT = runpy.run_path(str(ROOT / "tools/audit_validator.py"))
 
 
 @pytest.fixture(autouse=True)
-def source_only_builds(monkeypatch):
-    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE_ONLY", "1")
+def local_builds(monkeypatch):
+    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE", "local")
+    monkeypatch.delenv("NPDB_VALIDATOR_VERSION", raising=False)
 
 
 def _bundle(directory):
@@ -38,7 +40,7 @@ def _bundle(directory):
     for notice in ("LICENSE", "THIRD-PARTY-LICENSES"):
         (directory / notice).write_text("fixture notice")
     (directory / "provenance.json").write_text(json.dumps({
-        **pin, "target": "x86_64-unknown-linux-gnu",
+        **pin, "target": "x86_64-unknown-linux-gnu", "acquisition": "source",
         "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "schema_sha256": hashlib.sha256(schema.read_bytes()).hexdigest(),
     }))
@@ -55,6 +57,27 @@ def test_installer_reuses_a_verified_bundle_without_cargo(tmp_path):
     )
     assert "already installed" in result.stdout
     assert (prefix / "bin/bids-validator").read_bytes() == executable.read_bytes()
+
+
+def test_installer_replaces_old_bundle_instead_of_merging_files(tmp_path, monkeypatch):
+    prefix = tmp_path / "environment"
+    old = prefix / "bin/npdb-validator"
+    _bundle(old)
+    (old / "obsolete.dll").write_text("stale")
+    provenance = json.loads((old / "provenance.json").read_text())
+    provenance["source_commit"] = "wrong"
+    (old / "provenance.json").write_text(json.dumps(provenance))
+    system = tmp_path / "system-bundle"
+    _bundle(system)
+    common = runpy.run_path(str(ROOT / "tools/validator_acquisition.py"))
+    common["write_manifest"](system, json.loads((system / "provenance.json").read_text()))
+    monkeypatch.setitem(
+        BUILD["install"].__globals__, "Path",
+        lambda value: system if str(value) == "/usr/local/bin/npdb-validator" else Path(value),
+    )
+    BUILD["install"](ROOT, prefix)
+    assert not (old / "obsolete.dll").exists()
+    assert verify_bundle(old) == old / "bids-validator"
 
 
 def test_source_development_finds_a_verified_bundle_beside_python(tmp_path):
@@ -144,7 +167,8 @@ def exported_validator_source(tmp_path):
         ).encode()).hexdigest(),
     }))
     shutil.copy2(ROOT / "tools/build_validator.py", tmp_path / "tools/build_validator.py")
-    shutil.copy2(ROOT / "tools/validator_artifacts.py", tmp_path / "tools/validator_artifacts.py")
+    shutil.copy2(ROOT / "tools/validator_appveyor.py", tmp_path / "tools/validator_appveyor.py")
+    shutil.copy2(ROOT / "tools/validator_acquisition.py", tmp_path / "tools/validator_acquisition.py")
     return tmp_path
 
 
@@ -181,7 +205,7 @@ def test_windows_cross_build_uses_cargo_xwin(exported_validator_source, monkeypa
     monkeypatch.setattr(BUILD["subprocess"], "run", run)
     monkeypatch.setenv("NPDB_CARGO_XWIN", "1")
 
-    BUILD["build_bundle"](
+    BUILD["compile_bundle"](
         root, root / "build/bundle", "x86_64-pc-windows-msvc",
     )
 
@@ -192,7 +216,7 @@ def test_windows_cross_build_uses_cargo_xwin(exported_validator_source, monkeypa
     assert (root / "build/bundle/bids-validator.exe").is_file()
 
 
-@pytest.mark.parametrize("stage", ["rev-parse", "status", "-vV", "build", "metadata"])
+@pytest.mark.parametrize("stage", ["rev-parse", "status", "build", "metadata"])
 def test_build_cli_reports_subprocess_diagnostics(exported_validator_source, capsys, stage):
     root = exported_validator_source
     if stage in {"rev-parse", "status"}:
@@ -302,7 +326,8 @@ def test_native_build_preserves_local_submodule_checkout_and_update(tmp_path):
     external = parent / "src/npdb/external"
     external.mkdir(parents=True)
     shutil.copy2(ROOT / "src/npdb/external/native.py", external / "native.py")
-    shutil.copy2(ROOT / "tools/validator_artifacts.py", parent / "tools/validator_artifacts.py")
+    shutil.copy2(ROOT / "tools/validator_appveyor.py", parent / "tools/validator_appveyor.py")
+    shutil.copy2(ROOT / "tools/validator_acquisition.py", parent / "tools/validator_acquisition.py")
 
     def record(revision):
         git(source, "checkout", revision)
@@ -333,7 +358,7 @@ def test_native_build_preserves_local_submodule_checkout_and_update(tmp_path):
     )
     cargo.chmod(0o755)
     with patch("shutil.which", return_value=str(cargo)):
-        BUILD["build_bundle"](parent, parent / "build/bundle", "x86_64-unknown-linux-gnu")
+        BUILD["compile_bundle"](parent, parent / "build/bundle", "x86_64-unknown-linux-gnu")
     assert not (source / "target").exists()
     assert git(source, "status", "--porcelain") == ""
     for revision, expected_source in (

@@ -1,5 +1,8 @@
 import importlib.util
+import runpy
 import subprocess
+import sys
+import types
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,6 +13,13 @@ SPEC = importlib.util.spec_from_file_location("build_wheels", ROOT / "tools/buil
 assert SPEC is not None and SPEC.loader is not None
 BUILDER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(BUILDER)
+
+
+@pytest.fixture(autouse=True)
+def offline_source_selection(monkeypatch):
+    monkeypatch.setenv("NPDB_VALIDATOR_SOURCE", "local")
+    monkeypatch.delenv("NPDB_VALIDATOR_VERSION", raising=False)
+    monkeypatch.setenv("NPDB_VALIDATOR_RELEASE", "")
 
 
 @pytest.mark.parametrize(
@@ -188,6 +198,114 @@ def test_captured_docker_errors_are_visible(capsys, monkeypatch):
     assert "Registry unavailable" in capsys.readouterr().err
 
 
+def test_backend_error_is_repeated_last_without_wrapper_traceback(monkeypatch, capsys):
+    message = (
+        "vcruntime140.dll must be bundled. Set --windows-runtime-dir "
+        "to authorized x64 Visual Studio redist files with redistribution.json."
+    )
+    backend = (
+        "Traceback (most recent call last):\n"
+        '  File "hatch_build.py", line 41, in initialize\n'
+        f"RuntimeError: {message}\n"
+        "error: Failed to build `/tmp/project`\n"
+        "  cause: The build backend returned an error\n"
+        "hint: Build failures usually indicate a problem with the build environment\n"
+    )
+    monkeypatch.setattr(BUILDER, "main", Mock(side_effect=subprocess.CalledProcessError(
+        2, ["uv", "build", "--wheel"], stderr=backend,
+    )))
+    assert BUILDER.cli([]) == 1
+    result = capsys.readouterr().err
+    assert result.strip().splitlines()[-1] == f"error: {message}"
+    assert "CalledProcessError" not in result
+    assert "Traceback" not in result
+
+
+def test_nested_worker_error_preserves_root_message_at_bottom(monkeypatch, capsys):
+    message = "Cannot prepare the Windows runtime: network unavailable"
+    worker = (
+        "RuntimeError: old backend detail\n"
+        "error: Failed to build `/tmp/project`\n"
+        f"\nerror: {message}\n"
+        "Check network/cache access, or use --windows-runtime-dir.\n"
+    )
+    monkeypatch.setattr(BUILDER, "main", Mock(side_effect=subprocess.CalledProcessError(
+        1, ["python", "tools/build_wheels.py", "--stage", "build"], stderr=worker,
+    )))
+    assert BUILDER.cli([]) == 1
+    assert capsys.readouterr().err.strip() == (
+        f"error: {message}\nCheck network/cache access, or use --windows-runtime-dir."
+    )
+
+
+def test_real_child_failure_keeps_diagnostics_and_actionable_summary(monkeypatch, capsys):
+    command = [sys.executable, "-c", (
+        "import sys; print('build detail', flush=True); "
+        "raise RuntimeError('missing Windows runtime fixture; check --windows-runtime-dir')"
+    )]
+    monkeypatch.setattr(BUILDER, "main", lambda argv: BUILDER.run(command))
+    assert BUILDER.cli([]) == 1
+    result = capsys.readouterr()
+    assert "build detail" in result.out
+    assert result.out.count("Traceback") == 1
+    assert "Traceback" not in result.err
+    assert result.err.strip().splitlines()[-1] == (
+        "error: missing Windows runtime fixture; check --windows-runtime-dir"
+    )
+
+
+@pytest.mark.parametrize("error", [
+    RuntimeError("unknown validator source"), OSError("permission denied"),
+])
+def test_expected_cli_errors_are_concise(monkeypatch, capsys, error):
+    monkeypatch.setattr(BUILDER, "main", Mock(side_effect=error))
+    assert BUILDER.cli([]) == 1
+    assert capsys.readouterr().err.strip() == f"error: {error}"
+
+
+def test_unknown_subprocess_failure_reports_command_and_status(monkeypatch, capsys):
+    error = subprocess.CalledProcessError(17, ["docker", "create", "image"])
+    monkeypatch.setattr(BUILDER, "main", Mock(side_effect=error))
+    assert BUILDER.cli([]) == 1
+    message = capsys.readouterr().err
+    assert "exit status 17" in message
+    assert "docker create image" in message
+    assert "Traceback" not in message
+
+
+def test_unexpected_programming_errors_are_not_hidden(monkeypatch):
+    monkeypatch.setattr(BUILDER, "main", Mock(side_effect=TypeError("programming bug")))
+    with pytest.raises(TypeError, match="programming bug"):
+        BUILDER.cli([])
+
+
+def test_successful_command_output_is_still_shown(capsys):
+    result = BUILDER.run([sys.executable, "-c", "print('build complete')"])
+    assert result.returncode == 0
+    assert "build complete" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("error", [RuntimeError("runtime unavailable"), OSError("missing manifest")])
+@pytest.mark.parametrize("verbosity", [0, 1])
+def test_hatch_expected_errors_use_abort_unless_verbose(monkeypatch, error, verbosity):
+    module = types.ModuleType("hatchling.builders.hooks.plugin.interface")
+    module.__dict__["BuildHookInterface"] = object
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    hook_type = runpy.run_path(str(ROOT / "hatch_build.py"))["CustomBuildHook"]
+    hook = hook_type()
+    hook.app = Mock(verbosity=verbosity)
+    hook.app.abort.side_effect = SystemExit(1)
+    hook._initialize = Mock(side_effect=error)
+    if verbosity:
+        with pytest.raises(type(error), match=str(error)):
+            hook.initialize("standard", {})
+        hook.app.abort.assert_not_called()
+    else:
+        with pytest.raises(SystemExit, match="1"):
+            hook.initialize("standard", {})
+        hook.app.abort.assert_called_once_with(f"error: {error}")
+
+
 def test_native_build_uses_target_environment_and_optional_wheelhouse(monkeypatch, tmp_path):
     calls = Mock()
     monkeypatch.setattr(BUILDER, "run", calls)
@@ -238,7 +356,7 @@ def test_offline_container_has_no_network_or_bind_mounts(monkeypatch, tmp_path):
     )
     assert commands[0] == [
         "docker", "create", "--platform", "linux/amd64", "--workdir", "/project",
-        "--network", "none", "image", "verify",
+        "--network", "none", "--env", "NPDB_VALIDATOR_SOURCE=local", "image", "verify",
     ]
     assert commands[-2] == [
         "docker", "cp", "container-id:/output/validator-sizes.json",
@@ -277,17 +395,63 @@ def test_foreign_artifact_build_does_not_require_rust(monkeypatch, tmp_path, tar
     assert (tmp_path / "results" / target / "result.whl").is_file()
 
 
-def test_source_only_build_sets_override(monkeypatch, tmp_path):
+def test_local_source_is_forwarded_to_build(monkeypatch, tmp_path):
     calls = Mock()
     monkeypatch.setattr(BUILDER, "run", calls)
-    BUILDER.build("macos-arm64", tmp_path, False, source_only=True)
-    assert calls.call_args.kwargs["env"]["NPDB_VALIDATOR_SOURCE_ONLY"] == "1"
+    BUILDER.build("macos-arm64", tmp_path, False)
+    assert calls.call_args.kwargs["env"]["NPDB_VALIDATOR_SOURCE"] == "local"
 
 
-def test_source_only_is_forwarded_to_linux_container(monkeypatch, tmp_path):
+def test_local_linux_bootstrap_only_installs_rust_on_request(monkeypatch, tmp_path):
     calls = Mock()
     monkeypatch.setattr(BUILDER, "container_run", calls)
     BUILDER.build_linux(
-        "linux-x86_64", tmp_path / "project", tmp_path / "output", False, source_only=True,
+        "linux-x86_64", tmp_path / "project", tmp_path / "output", False,
     )
-    assert "--source-only" in calls.call_args.args[2]
+    assert 'if [ "$NPDB_VALIDATOR_SOURCE" = local ]' in calls.call_args.args[2][2]
+
+
+def test_github_selection_resolves_once_and_forwards_to_every_worker(monkeypatch, tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    monkeypatch.setattr(BUILDER, "ROOT", source)
+    monkeypatch.setattr(BUILDER, "source_paths", lambda root: [])
+    monkeypatch.setattr(BUILDER.shutil, "which", lambda tool: "/tools/uv")
+    record = {"tag": "v1", "commit": "a" * 40, "assets": []}
+    resolve = Mock(return_value=record)
+    real_run_path = BUILDER.runpy.run_path
+
+    def helpers(path, *args, **kwargs):
+        if str(path).endswith("validator_github.py"):
+            return {"ASSETS": {"x86_64-apple-darwin", "aarch64-apple-darwin"},
+                    "resolve": resolve}
+        return real_run_path(path, *args, **kwargs)
+
+    monkeypatch.setattr(BUILDER.runpy, "run_path", helpers)
+    environments = []
+
+    def run(command, **kwargs):
+        output = Path(command[command.index("--output") + 1])
+        output.mkdir()
+        (output / "result.whl").touch()
+        environments.append(kwargs["env"])
+
+    monkeypatch.setattr(BUILDER, "run", run)
+    BUILDER.main([
+        "--targets", "macos-x86_64", "macos-arm64", "--validator-source", "github",
+        "--validator-version", "v1", "--output", str(tmp_path / "results"),
+    ])
+    resolve.assert_called_once_with("v1")
+    assert len(environments) == 2
+    for environment in environments:
+        assert environment["NPDB_VALIDATOR_SOURCE"] == "github"
+        assert environment["NPDB_VALIDATOR_VERSION"] == "v1"
+        assert '"tag": "v1"' in environment["NPDB_VALIDATOR_RELEASE"]
+
+
+def test_obsolete_source_only_argument_is_rejected(monkeypatch):
+    run = Mock()
+    monkeypatch.setattr(BUILDER, "run", run)
+    with pytest.raises(SystemExit, match="2"):
+        BUILDER.main(["--source-only"])
+    run.assert_not_called()

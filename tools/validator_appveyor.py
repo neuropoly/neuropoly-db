@@ -7,7 +7,6 @@ import http.client
 import io
 import json
 import os
-import platform
 import runpy
 import ssl
 import sys
@@ -17,30 +16,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-PLATFORMS = {
-    "x86_64-unknown-linux-gnu": "manylinux_2_28_x86_64",
-    "x86_64-pc-windows-msvc": "win_amd64",
-    "x86_64-apple-darwin": "macosx_11_0_x86_64",
-    "aarch64-apple-darwin": "macosx_11_0_arm64",
-}
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXECUTABLE = 32 * 1024 * 1024
 
 
-def host_target() -> str:
-    machine = platform.machine().lower()
-    architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(machine, machine)
-    suffix = {
-        "Linux": "unknown-linux-gnu", "Darwin": "apple-darwin",
-        "Windows": "pc-windows-msvc",
-    }.get(platform.system())
-    if suffix is None:
-        raise RuntimeError(f"Unsupported validator build host: {platform.system()}")
-    return f"{architecture}-{suffix}"
-
-
 def approved_manifest(root: Path, identity: dict) -> dict | None:
-    path = root / "src/npdb/external/validator-artifacts.json"
+    path = root / "src/npdb/external/validator-appveyor.json"
     if not path.is_file():
         return None
     manifest = json.loads(path.read_text(encoding="utf-8"))
@@ -61,17 +42,12 @@ def download(url: str) -> bytes:
     return data
 
 
-def acquire(root: Path, destination: Path, target: str) -> tuple[Path, dict] | None:
-    if os.environ.get("NPDB_VALIDATOR_SOURCE_ONLY") == "1":
-        print("Validator artifact downloads disabled; building from source.", file=sys.stderr)
-        return None
+def acquire(root: Path, destination: Path, target: str) -> tuple[Path, dict]:
     identity = runpy.run_path(str(root / "src/npdb/external/native.py"))["source_identity"]()
     manifest = approved_manifest(root, identity)
     records = manifest.get("artifacts", {}).get(target, []) if manifest else []
     if not records:
-        print(f"No approved AppVeyor artifact for {target}; building from source.", file=sys.stderr)
-        return None
-    audit = runpy.run_path(str(root / "tools/audit_validator.py"))["audit"]
+        raise RuntimeError(f"No approved AppVeyor artifact for {target}; select another source explicitly.")
     cache = Path(os.environ.get("NPDB_VALIDATOR_CACHE", root / "build/artifact-cache"))
     if cache.resolve().is_relative_to((root / "tools/bids-validator-rust").resolve()):
         raise RuntimeError("Artifact cache must be outside the validator submodule.")
@@ -121,15 +97,7 @@ def acquire(root: Path, destination: Path, target: str) -> tuple[Path, dict] | N
             raise RuntimeError(f"Invalid approved AppVeyor archive: {error}") from error
         if hashlib.sha256(executable_data).hexdigest() != record["executable_sha256"]:
             raise RuntimeError(f"AppVeyor executable checksum mismatch for {target}.")
-        with tempfile.TemporaryDirectory(prefix="npdb-artifact-audit-") as temporary:
-            executable = Path(temporary) / name
-            executable.write_bytes(executable_data)
-            try:
-                audit(executable, PLATFORMS[target])
-            except RuntimeError as error:
-                print(f"AppVeyor artifact incompatible for {target}: {error}", file=sys.stderr)
-                continue
-        notices = root / "src/npdb/external/validator-artifact-notices.txt.gz"
+        notices = root / "src/npdb/external/validator-appveyor-notices.txt.gz"
         compressed = notices.read_bytes()
         if hashlib.sha256(compressed).hexdigest() != manifest["notices_sha256"]:
             raise RuntimeError("Pinned artifact license notices checksum mismatch.")
@@ -144,8 +112,7 @@ def acquire(root: Path, destination: Path, target: str) -> tuple[Path, dict] | N
             "archive_sha256": digest,
             "embedded_source_commit": identity["source_commit"][:12],
         }
-    print(f"No usable AppVeyor artifact for {target}; building from source.", file=sys.stderr)
-    return None
+    raise RuntimeError(f"No usable AppVeyor artifact for {target}; select another source explicitly.")
 
 
 if __name__ == "__main__":
@@ -157,6 +124,6 @@ if __name__ == "__main__":
     packages = json.loads(args.write_notices.read_text(encoding="utf-8"))["packages"]
     text = runpy.run_path(str(root / "tools/build_validator.py"))["third_party_notices"](packages)
     compressed = gzip.compress(text.encode("utf-8"), mtime=0)
-    output = root / "src/npdb/external/validator-artifact-notices.txt.gz"
+    output = root / "src/npdb/external/validator-appveyor-notices.txt.gz"
     output.write_bytes(compressed)
     print(f"{output}: sha256 {hashlib.sha256(compressed).hexdigest()}")

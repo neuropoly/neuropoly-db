@@ -4,11 +4,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from npdb.external.bids import (
-    _adapt_report,
-    get_bids_validation_report,
-    validate_bids_dataset,
-)
+from npdb.external.bids import (_adapt_report, get_bids_validation_report,
+                                validate_bids_dataset)
 
 
 def test_uses_only_the_rust_validator(tmp_path):
@@ -64,7 +61,8 @@ def test_workspace_image_includes_only_native_validation_tools():
     )
     devcontainer = json.loads((root / ".devcontainer/devcontainer.json").read_text())
     rust_feature = devcontainer["features"]["ghcr.io/devcontainers/features/rust:1"]
-    assert "FROM rust:1.90.0-bookworm AS validator" in dockerfile
+    assert "FROM python:3.12-bookworm AS validator" in dockerfile
+    assert "ARG NPDB_VALIDATOR_SOURCE=github" in dockerfile
     assert "build_validator.py --output /native/npdb-validator" in dockerfile
     assert "apt-get install -y --no-install-recommends dcm2niix" in dockerfile
     assert all(package in dockerfile for package in ("clang", "lld", "llvm"))
@@ -81,12 +79,16 @@ def test_workspace_image_includes_only_native_validation_tools():
     assert "!tools/bids-validator-rust/crates/**" in ignored
     assert "!tools/bids-validator-rust/schemas/**" in ignored
     for path in (
-        "tools/validator_artifacts.py", "tools/audit_validator.py",
-        "src/npdb/external/validator-artifacts.json",
-        "src/npdb/external/validator-artifact-notices.txt.gz",
+        "tools/audit_validator.py",
+        "src/npdb/external/validator-appveyor.json",
+        "src/npdb/external/validator-appveyor-notices.txt.gz",
     ):
         assert f"!{path}" in ignored
         assert path in dockerfile
+    for path in ("validator_acquisition.py", "validator_appveyor.py", "validator_github.py",
+                 "validator_windows.py"):
+        assert f"!tools/{path}" in ignored
+    assert "tools/validator_*.py" in dockerfile
     assert ignored[-1] == "**/.git"
     assert not (root / ".devcontainer/Dockerfile.dockerignore").exists()
     assert not any(line.startswith("!tmp") for line in ignored)
