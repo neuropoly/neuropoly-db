@@ -1,6 +1,7 @@
 import json
 import time
 import subprocess
+import argparse
 from pathlib import Path
 import nibabel as nib
 import numpy as np
@@ -35,6 +36,14 @@ class ExistingBodyPartDetailsError(Exception):
 class RegionLabelBPD:
     def __init__(self, dataset_path):
         self.dataset_path = dataset_path
+        self.sub_nb = self.count_subjects(self.dataset_path)
+
+    @staticmethod
+    def count_subjects(dataset_path):
+        """
+        Returns the number of subjects in a BIDS dataset (top-level sub-* folders)
+        """
+        return sum(1 for p in Path(dataset_path).iterdir() if p.is_dir() and p.name.startswith("sub-"))
 
     def extract_vertebrae_from_segmentation(self, seg_path):
         """
@@ -153,10 +162,17 @@ class RegionLabelBPD:
 if __name__=="__main__":
     start_time = time.perf_counter()
 
-    target_dir = "/Users/maximephan/Downloads/ds005616-1.1.2" # to complete with your local path to the dataset
+    parser = argparse.ArgumentParser(description="Write vertebral coverage into BodyPartDetails of each sidecar")
+    parser.add_argument('dataset_path', help="path to a locally downloaded BIDS dataset")
+
+    if not Path(parser.parse_args().dataset_path).is_dir():
+        parser.error(f"{parser.parse_args().dataset_path} is not a directory")
+
+    target_dir = parser.parse_args().dataset_path
+
     annotation = RegionLabelBPD(target_dir)
     annotation.process_dataset()
 
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
-    print(f"Execution time: {round(elapsed_time, 2)}sec")
+    print(f"Execution time: {round(elapsed_time, 2)}sec \n" + f"Number of subjects in the dataset: {annotation.sub_nb} \n" + f"Average time per subject: {round(elapsed_time/annotation.sub_nb, 2)}sec")
