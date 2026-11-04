@@ -29,15 +29,15 @@ class RegionLabelBPD:
         Reads a segmentation file and returns the involved vertebrae
         """
         img = nib.load(seg_path)
-        data = img.get_fdata()
-        unique_labels = np.unique(data)
+        data = img.get_fdata() # list of region code for each voxel
+        unique_labels = np.unique(data) # keep only one time a region code if it appears multiple times
 
         vertebrae = []
         for label in unique_labels:
             label_int = int(label)
             if label_int in LABEL_MAPPING:
                 name = LABEL_MAPPING[label_int]
-                if name.startswith(("C", "T", "L", "S", "sacrum")) and "-" not in name and name != "SC" and name != "CSF":
+                if name.startswith(("C", "T", "L", "S")) and "-" not in name and name != "SC" and name != "CSF":
                     vertebrae.append(name)
 
         return vertebrae
