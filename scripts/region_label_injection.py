@@ -26,7 +26,7 @@ class RegionLabelBPD:
 
     def extract_vertebrae_from_segmentation(self, seg_path):
         """
-        Reads a imaging file and returns the involved vertebrae
+        Reads a segmentation file and returns the involved vertebrae
         """
         img = nib.load(seg_path)
         data = img.get_fdata()
@@ -44,7 +44,7 @@ class RegionLabelBPD:
 
     def compute_body_part_details_field(self, vertebrae_list):
         """
-        Computes the BodyPartDetails field from the vertebrae list
+        Computes the BodyPartDetails field from the vertebrae list (convert the output of extract_vertebrae_from_segmentation into the conventionnal string)
         """
         if not vertebrae_list:
             return None
@@ -60,15 +60,15 @@ class RegionLabelBPD:
 
         json_path = Path(json_path)
 
-        if json_path.exists():
+        if json_path.exists(): # sidecar file loading
             with open(json_path, 'r', encoding='utf-8') as f:
                 sidecar = json.load(f)
         else:
             sidecar = {}
 
-        sidecar["BodyPartDetails"] = body_part_details
+        sidecar["BodyPartDetails"] = body_part_details # modification
 
-        with open(json_path, 'w', encoding='utf-8') as f:
+        with open(json_path, 'w', encoding='utf-8') as f: # saving of the updated sidecar
             json.dump(sidecar, f, indent=4, ensure_ascii=False)
 
 
@@ -81,32 +81,30 @@ class RegionLabelBPD:
         bids_path = Path(self.dataset_path) # root folder
 
         for img_path in bids_path.glob("sub-*/anat/*.nii.gz"):
-            if "dseg" in img_path.name:
+            if "dseg" in img_path.name: # escape segmentation files
                 continue
-            json_path = img_path.with_suffix("").with_suffix(".json")
+            json_path = img_path.with_suffix("").with_suffix(".json") # get sidecar path
 
-            relative_parts = img_path.relative_to(bids_path).parts
+            relative_parts = img_path.relative_to(bids_path).parts # splits the path into a list containing the folder names
             sub_id = relative_parts[0]
             seg_filename = img_path.name.replace(".nii.gz", "_label-spine_dseg.nii.gz")
-            seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename
+            seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename # retrieve the segmentation path of the subject, where the labels are stored
             
             vertebrae = []
             if seg_path.exists():
                 vertebrae = self.extract_vertebrae_from_segmentation(seg_path)
             else:
-                # execute TotalSpineSeg if the label doesn't exist yet
+                # execute TotalSpineSeg if the label doesn't exist
                 # to do: call TotalSpineSeg tool to generate the labels
                 continue
                 
             if vertebrae:
                 bp_details = self.compute_body_part_details_field(vertebrae)
                 self.update_bids_sidecar(json_path, bp_details)
-                print(f"BodyPartDetails: {bp_details}")
+                print(f"Subject id: {sub_id}, BodyPartDetails: {bp_details}")
 
 
 if __name__=="__main__":
-
     target_dir = "" # to complete with your local path to the dataset
-
     annotation = RegionLabelBPD(target_dir)
     annotation.process_dataset()
