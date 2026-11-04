@@ -1,4 +1,5 @@
 import json
+import time
 import subprocess
 from pathlib import Path
 import nibabel as nib
@@ -19,6 +20,17 @@ LABEL_MAPPING = { # cf. https://github.com/neuropoly/totalspineseg/blob/main/tot
     91: "T12-L1", 92: "L1-L2", 93: "L2-L3", 94: "L3-L4", 95: "L4-L5", 
     100: "L5-S"
 }
+
+ISSUE_MESSAGE = ("Please make sure to open an issue at https://github.com/neuropoly/neuropoly-db so the "
+                 "field content can be discussed and reviewed \n")
+
+class ExistingBodyPartDetailsError(Exception):
+    def __init__(self, conflicts, bids_path):
+        self.involved_subjects = [conflicts[i][0].relative_to(bids_path).parts[0] for i in range(len(conflicts))]
+        unique_subjects = np.unique(self.involved_subjects) # to make sure subjects doesn't appear multiple times
+        involved_subjects_string = ", ".join(str(sub_id) for sub_id in unique_subjects)
+        message = f"BodyPartDetails already contains a different value for {len(unique_subjects)} subjects in the given dataset and is not overwritten. " + ISSUE_MESSAGE + "\n" + "List of the subjects that already have a different BodyPartDetails field: " + involved_subjects_string
+        super().__init__(message)
 
 class RegionLabelBPD:
     def __init__(self, dataset_path):
@@ -65,8 +77,11 @@ class RegionLabelBPD:
                 sidecar = json.load(f)
         else:
             sidecar = {}
-
+        
         sidecar["BodyPartDetails"] = body_part_details # modification
+
+        if sidecar.get("BodyPartDetails") == body_part_details:
+            return
 
         with open(json_path, 'w', encoding='utf-8') as f: # saving of the updated sidecar
             json.dump(sidecar, f, indent=4, ensure_ascii=False)
@@ -78,33 +93,70 @@ class RegionLabelBPD:
         If the dataset contains no label, the function asks the TotalSpineSeg tool to generate the annotations
         """
 
-        bids_path = Path(self.dataset_path) # root folder
-
-        for img_path in bids_path.glob("sub-*/anat/*.nii.gz"):
-            if "dseg" in img_path.name: # escape segmentation files
-                continue
-            json_path = img_path.with_suffix("").with_suffix(".json") # get sidecar path
-
-            relative_parts = img_path.relative_to(bids_path).parts # splits the path into a list containing the folder names
-            sub_id = relative_parts[0]
-            seg_filename = img_path.name.replace(".nii.gz", "_label-spine_dseg.nii.gz")
-            seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename # retrieve the segmentation path of the subject, where the labels are stored
+        planned = self.plan_dataset()
+        conflicts = self.find_conflicts(planned)
+        if conflicts:
+            raise ExistingBodyPartDetailsError(conflicts=conflicts, bids_path=self.dataset_path)
+        
+        for path, _, bpd_value in planned:
+            self.update_bids_sidecar(path, bpd_value)
             
-            vertebrae = []
-            if seg_path.exists():
-                vertebrae = self.extract_vertebrae_from_segmentation(seg_path)
-            else:
+
+    def plan_dataset(self):
+        """
+        Compute (json_path, sub_id, bpd_value) for every image. No writing
+
+        json_path:  path to the sidecar file
+        sub_id:     id of the current subject 
+        bpd_value:  content of the field (eg. "C1,C2,C3,C4,C5")
+        """
+        bids_path = Path(self.dataset_path)
+        planned = []
+
+        for img_path in sorted(bids_path.glob("sub-*/anat/*.nii.gz")):
+            if "dseg" in img_path.name:  # escape segmentation files
+                continue
+
+            json_path = img_path.with_suffix("").with_suffix(".json") # get sidecar path
+            sub_id = img_path.relative_to(bids_path).parts[0] # splits the path into a list containing the folder names
+            seg_filename = img_path.name.replace(".nii.gz", "_label-spine_dseg.nii.gz") 
+            seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename  # retrieve the segmentation path of the subject, where the labels are stored
+
+            if not seg_path.exists():
                 # execute TotalSpineSeg if the label doesn't exist
                 # to do: call TotalSpineSeg tool to generate the labels
                 continue
-                
-            if vertebrae:
-                bp_details = self.compute_body_part_details_field(vertebrae)
-                self.update_bids_sidecar(json_path, bp_details)
-                print(f"Subject id: {sub_id}, BodyPartDetails: {bp_details}")
 
+            bpd_value = self.compute_body_part_details_field(self.extract_vertebrae_from_segmentation(seg_path))
+            if bpd_value:
+                planned.append((json_path, sub_id, bpd_value))
+        return planned
+
+    def find_conflicts(self, planned):
+        """
+        Search already existing BodyPartDetails field in the dataset to raise an error and avoid overwriting it
+        """
+        conflicts = []
+        for path, sidecar, new_value in planned:
+            if path.exists(): # sidecar file loading
+                with open(path, 'r', encoding='utf-8') as f:
+                    sidecar = json.load(f)
+            else:
+                sidecar = {}
+            if "BodyPartDetails" in sidecar and sidecar["BodyPartDetails"] != new_value:
+                conflicts.append((path, sidecar["BodyPartDetails"], new_value))
+        return conflicts
+
+    def run_total_spine_seg(self):
+        subprocess.run(["total-spine-seg"], capture_output=True, text=True) # TODO: add other arguments of the CLI in the list
 
 if __name__=="__main__":
-    target_dir = "" # to complete with your local path to the dataset
+    start_time = time.perf_counter()
+
+    target_dir = "/Users/maximephan/Downloads/ds005616-1.1.2" # to complete with your local path to the dataset
     annotation = RegionLabelBPD(target_dir)
     annotation.process_dataset()
+
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"Execution time: {round(elapsed_time, 2)}sec")
