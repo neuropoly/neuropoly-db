@@ -2,6 +2,8 @@ import json
 import time
 import subprocess
 import argparse
+import shutil
+import tempfile
 from pathlib import Path
 import nibabel as nib
 import numpy as np
@@ -34,9 +36,10 @@ class ExistingBodyPartDetailsError(Exception):
         super().__init__(message)
 
 class RegionLabelBPD:
-    def __init__(self, dataset_path):
+    def __init__(self, dataset_path, run_tss=False):
         self.dataset_path = dataset_path
         self.sub_nb = self.count_subjects(self.dataset_path)
+        self.run_tss = run_tss
 
     @staticmethod
     def count_subjects(dataset_path):
@@ -86,11 +89,11 @@ class RegionLabelBPD:
                 sidecar = json.load(f)
         else:
             sidecar = {}
-        
-        sidecar["BodyPartDetails"] = body_part_details # modification
 
         if sidecar.get("BodyPartDetails") == body_part_details:
             return
+
+        sidecar["BodyPartDetails"] = body_part_details # modification
 
         with open(json_path, 'w', encoding='utf-8') as f: # saving of the updated sidecar
             json.dump(sidecar, f, indent=4, ensure_ascii=False)
@@ -131,14 +134,14 @@ class RegionLabelBPD:
             seg_filename = img_path.name.replace(".nii.gz", "_label-spine_dseg.nii.gz") 
             seg_path = bids_path / "derivatives" / "labels" / sub_id / "anat" / seg_filename  # retrieve the segmentation path of the subject, where the labels are stored
 
-            if not seg_path.exists():
-                # execute TotalSpineSeg if the label doesn't exist
-                # to do: call TotalSpineSeg tool to generate the labels
-                continue
+            if not seg_path.exists() and self.run_tss:
+                seg_path = self.run_total_spine_seg(img_path, seg_path)
 
             bpd_value = self.compute_body_part_details_field(self.extract_vertebrae_from_segmentation(seg_path))
+
             if bpd_value:
                 planned.append((json_path, sub_id, bpd_value))
+        
         return planned
 
     def find_conflicts(self, planned):
@@ -156,23 +159,44 @@ class RegionLabelBPD:
                 conflicts.append((path, sidecar["BodyPartDetails"], new_value))
         return conflicts
 
-    def run_total_spine_seg(self):
-        subprocess.run(["total-spine-seg"], capture_output=True, text=True) # TODO: add other arguments of the CLI in the list
+    def run_total_spine_seg(self, img_path, seg_path, executable="totalspineseg"):
+        """
+        Run the TotalSpineSeg program to retrive the labels, then inject them into the BodyPartDetails field of the sidecar
+        """ 
+
+        if shutil.which(executable) is None:
+            raise FileNotFoundError(f"{executable} not found. Install TotalSpineSeg or add it to PATH")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run([executable, str(img_path), tmp, "--keep-only", "step2_output"], check=True)
+            results = list((Path(tmp) / "step2_output").glob("*.nii.gz"))
+
+            if len(results) != 1:
+                raise RuntimeError(f"Expected 1 file in step2_output for {img_path}, found {len(results)}")
+            
+            seg_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(results[0], seg_path)
+
+        return seg_path
 
 if __name__=="__main__":
     start_time = time.perf_counter()
 
     parser = argparse.ArgumentParser(description="Write vertebral coverage into BodyPartDetails of each sidecar")
-    parser.add_argument('dataset_path', help="path to a locally downloaded BIDS dataset")
 
-    if not Path(parser.parse_args().dataset_path).is_dir():
-        parser.error(f"{parser.parse_args().dataset_path} is not a directory")
+    parser.add_argument("-d", "--dataset-path", required=True, help="path to a locally downloaded BIDS dataset")
+    parser.add_argument("--run-totalspineseg", action="store_true", help="generate missing segmentations with TotalSpineSeg (slow, needs a lot of memory)")
+    args = parser.parse_args()
 
-    target_dir = parser.parse_args().dataset_path
+    if not Path(args.dataset_path).is_dir():
+        parser.error(f"{args.dataset_path} is not a directory")
 
-    annotation = RegionLabelBPD(target_dir)
+    annotation = RegionLabelBPD(dataset_path=args.dataset_path, run_tss=args.run_totalspineseg)
+    
     annotation.process_dataset()
 
     end_time = time.perf_counter()
     elapsed_time = end_time - start_time
-    print(f"Execution time: {round(elapsed_time, 2)}sec \n" + f"Number of subjects in the dataset: {annotation.sub_nb} \n" + f"Average time per subject: {round(elapsed_time/annotation.sub_nb, 2)}sec")
+    print(f"Execution time: {round(elapsed_time, 2)}sec \n" 
+        + f"Number of subjects in the dataset: {annotation.sub_nb} \n" 
+        + f"Average time per subject: {round(elapsed_time/annotation.sub_nb, 2)}sec")
