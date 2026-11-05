@@ -53,7 +53,9 @@ class RegionLabelBPD:
         Reads a segmentation file and returns the involved vertebrae
         """
         img = nib.load(seg_path)
-        data = img.get_fdata() # list of region code for each voxel
+
+        # list of region code for each voxel
+        data = img.get_fdata() # type: ignore
         unique_labels = np.unique(data) # keep only one time a region code if it appears multiple times
 
         vertebrae = []
@@ -179,11 +181,15 @@ class RegionLabelBPD:
 
         return seg_path
 
-if __name__=="__main__":
-    start_time = time.perf_counter()
+def run_labelling(display_stats=False):
+    """
+    Run the whole processus of annotation
+    """
+
+    start_time = 0
+    if display_stats: start_time = time.perf_counter()
 
     parser = argparse.ArgumentParser(description="Write vertebral coverage into BodyPartDetails of each sidecar")
-
     parser.add_argument("-d", "--dataset-path", required=True, help="path to a locally downloaded BIDS dataset")
     parser.add_argument("--run-totalspineseg", action="store_true", help="generate missing segmentations with TotalSpineSeg (slow, needs a lot of memory)")
     args = parser.parse_args()
@@ -195,8 +201,14 @@ if __name__=="__main__":
     
     annotation.process_dataset()
 
-    end_time = time.perf_counter()
-    elapsed_time = end_time - start_time
-    print(f"Execution time: {round(elapsed_time, 2)}sec \n" 
-        + f"Number of subjects in the dataset: {annotation.sub_nb} \n" 
-        + f"Average time per subject: {round(elapsed_time/annotation.sub_nb, 2)}sec")
+    if display_stats:
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+        avg_time = round(elapsed_time / annotation.sub_nb, 2) if annotation.sub_nb > 0 else 0
+        print(f"Execution time: {round(elapsed_time, 2)}sec \n"
+            + f"Number of subjects in the dataset: {annotation.sub_nb} \n"
+            + f"Average time per subject: {avg_time}sec")
+
+
+if __name__=="__main__":
+    run_labelling(display_stats=True)
