@@ -35,11 +35,12 @@ class ExistingBodyPartDetailsError(Exception):
         message = f"BodyPartDetails already contains a different value for {len(unique_subjects)} subjects in the given dataset and is not overwritten. " + ISSUE_MESSAGE + "\n" + "List of the subjects that already have a different BodyPartDetails field: " + involved_subjects_string
         super().__init__(message)
 
-class RegionLabelBPD:
-    def __init__(self, dataset_path, run_tss=False):
+class RegionLabelBodyPartDetails:
+    def __init__(self, dataset_path, label_map=None, run_tss=False):
         self.dataset_path = dataset_path
         self.sub_nb = self.count_subjects(self.dataset_path)
         self.run_tss = run_tss
+        self.label_map = label_map
 
     @staticmethod
     def count_subjects(dataset_path):
@@ -58,19 +59,21 @@ class RegionLabelBPD:
         data = img.get_fdata() # type: ignore
         unique_labels = np.unique(data) # keep only one time a region code if it appears multiple times
 
+        label_map = self.label_map if self.label_map is not None else LABEL_MAPPING
+
         vertebrae = []
         for label in unique_labels:
             label_int = int(label)
-            if label_int in LABEL_MAPPING:
-                name = LABEL_MAPPING[label_int]
+            if label_int in label_map:
+                name = label_map[label_int]
                 if name.startswith(("C", "T", "L", "S")) and "-" not in name and name != "SC" and name != "CSF":
                     vertebrae.append(name)
 
         return vertebrae
 
-    def compute_body_part_details_field(self, vertebrae_list):
+    def format_body_part_details_field(self, vertebrae_list):
         """
-        Computes the BodyPartDetails field from the vertebrae list (convert the output of extract_vertebrae_from_segmentation into the conventionnal string)
+        Formats the BodyPartDetails field from the vertebrae list (convert the output of extract_vertebrae_from_segmentation into the conventionnal string)
         """
         if not vertebrae_list:
             return None
@@ -139,7 +142,7 @@ class RegionLabelBPD:
             if not seg_path.exists() and self.run_tss:
                 seg_path = self.run_total_spine_seg(img_path, seg_path)
 
-            bpd_value = self.compute_body_part_details_field(self.extract_vertebrae_from_segmentation(seg_path))
+            bpd_value = self.format_body_part_details_field(self.extract_vertebrae_from_segmentation(seg_path))
 
             if bpd_value:
                 planned.append((json_path, sub_id, bpd_value))
@@ -181,6 +184,27 @@ class RegionLabelBPD:
 
         return seg_path
 
+
+def load_label_mapping(json_path):
+    """
+    Load a label mapping from a JSON file and normalize its numeric keys
+    """
+    json_path = Path(json_path)
+
+    if not json_path.is_file():
+        raise ValueError(f"{json_path} is not a valid JSON file")
+
+    with open(json_path, 'r', encoding='utf-8') as f:
+        mapping = json.load(f)
+
+    if not isinstance(mapping, dict):
+        raise ValueError(f"{json_path} must contain a JSON object")
+
+    try:
+        return {int(label): name for label, name in mapping.items()}
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{json_path} must use numeric label keys") from error
+
 def run_labelling(display_stats=False):
     """
     Run the whole processus of annotation
@@ -190,14 +214,16 @@ def run_labelling(display_stats=False):
     if display_stats: start_time = time.perf_counter()
 
     parser = argparse.ArgumentParser(description="Write vertebral coverage into BodyPartDetails of each sidecar")
-    parser.add_argument("-d", "--dataset-path", required=True, help="path to a locally downloaded BIDS dataset")
+    parser.add_argument("dataset_path", help="path to a locally downloaded BIDS dataset")
     parser.add_argument("--run-totalspineseg", action="store_true", help="generate missing segmentations with TotalSpineSeg (slow, needs a lot of memory)")
+    parser.add_argument("--label-map", "--label_map", type=load_label_mapping, help="path to a label map in JSON format for existing region labels")
+
     args = parser.parse_args()
 
     if not Path(args.dataset_path).is_dir():
         parser.error(f"{args.dataset_path} is not a directory")
 
-    annotation = RegionLabelBPD(dataset_path=args.dataset_path, run_tss=args.run_totalspineseg)
+    annotation = RegionLabelBodyPartDetails(dataset_path=args.dataset_path, label_map=args.label_map, run_tss=args.run_totalspineseg)
     
     annotation.process_dataset()
 
