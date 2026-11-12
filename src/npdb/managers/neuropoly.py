@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from npdb.annotation.preflight import PreflightError, check_bids_suffixes
 from npdb.external.neurobagel.errors import BagelCLIError
@@ -47,7 +48,7 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         else:
             target = local_path
 
-        command = ["git"] + self.git_http_config() + ["clone"]
+        command = ["git"] + self.git_http_config(clone_url) + ["clone"]
         if light:
             command.extend(["--depth", "1", "--filter=blob:none"])
         command.extend([clone_url, target])
@@ -108,6 +109,12 @@ class DataNeuroPolyMTL(OrganizationMixin, GiteaManager):
         # cloned exactly once, regardless of how many subjects it contains.
         groups: dict[tuple[str, str], list[str]] = defaultdict(list)
         for repo_url, sparse_path, dataset_name in subjects:
+            # NeuroBagel exports repository-relative paths with a leading
+            # slash. Git-annex interprets those as filesystem-absolute paths
+            sparse_path = sparse_path.lstrip("/")
+            repo_name = Path(urlparse(repo_url).path).name.removesuffix(".git")
+            if sparse_path == repo_name or sparse_path.startswith(f"{repo_name}/"):
+                sparse_path = sparse_path.removeprefix(f"{repo_name}/")
             key = (repo_url, dataset_name)
             if sparse_path not in groups[key]:
                 groups[key].append(sparse_path)

@@ -79,7 +79,7 @@ def repo_has_git_annex(gitea_manager, repo_url: str) -> bool:
     git_url = normalize_repo_url_for_git(repo_url)
     cmd = (
         ["git"]
-        + gitea_manager.git_http_config()
+        + gitea_manager.git_http_config(git_url)
         + ["ls-remote", "--heads", git_url, "refs/heads/git-annex"]
     )
 

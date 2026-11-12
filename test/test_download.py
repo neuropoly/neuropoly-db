@@ -208,12 +208,16 @@ class TestGitHttpConfig:
     """git_http_config returns properly formatted -c flags."""
 
     def test_contains_authorization_header(self, manager):
-        config = manager.git_http_config()
+        config = manager.git_http_config(
+            "https://data.neuro.polymtl.ca/datasets/whole-spine.git"
+        )
         joined = " ".join(config)
         assert "http.extraHeader=Authorization: Basic" in joined
 
     def test_flag_pairs(self, manager):
-        config = manager.git_http_config()
+        config = manager.git_http_config(
+            "https://data.neuro.polymtl.ca/datasets/whole-spine.git"
+        )
         # Must come in ["-c", "key=val"] pairs
         assert len(config) % 2 == 0
         for i in range(0, len(config), 2):
@@ -221,9 +225,28 @@ class TestGitHttpConfig:
             assert "=" in config[i + 1]
 
     def test_ssl_verify_false(self, manager):
-        config = manager.git_http_config()
+        config = manager.git_http_config(
+            "https://data.neuro.polymtl.ca/datasets/whole-spine.git"
+        )
         joined = " ".join(config)
         assert "http.sslVerify=false" in joined
+
+    def test_omits_credentials_for_third_party_host(self, manager):
+        config = manager.git_http_config(
+            "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git"
+        )
+        assert config == []
+
+    def test_redacts_credentials_in_commands(self, manager):
+        cmd = [
+            "git",
+            "-c",
+            "http.extraHeader=Authorization: Basic dXNlcjp0b2tlbg==",
+            "clone",
+            "https://data.neuro.polymtl.ca/datasets/whole-spine.git",
+        ]
+        assert "dXNlcjp0b2tlbg==" not in " ".join(manager._redact_git_command(cmd))
+        assert "[REDACTED]" in " ".join(manager._redact_git_command(cmd))
 
 
 class TestGitEnv:
@@ -326,6 +349,24 @@ class TestCloneSparse:
         assert clone_cmds, "Expected a clone call"
         assert "https://data.neuro.polymtl.ca/datasets/whole-spine.git" in clone_cmds[0]
 
+    def test_third_party_clone_has_no_credentials(self, manager, tmp_path):
+        dest = tmp_path / "repo"
+
+        with patch.object(manager, "_run_git") as mock_run_git:
+            manager.clone_sparse(
+                "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git",
+                ["sub-amuAP"],
+                dest,
+            )
+
+        clone_cmds = [
+            c.args[0]
+            for c in mock_run_git.call_args_list
+            if c.kwargs["context"].startswith("clone ")
+        ]
+        assert clone_cmds
+        assert "http.extraHeader=Authorization:" not in clone_cmds[0]
+
     def test_subprocess_failure_raises_runtime_error(self, manager, tmp_path):
         dest = tmp_path / "repo"
         popen_proc = MagicMock()
@@ -407,6 +448,30 @@ class TestAnnexGet:
         fetch_args = " ".join(fetch_cmds[0])
         assert "git-annex" in fetch_args
         assert "refs/remotes/origin/git-annex" in fetch_args
+
+    def test_third_party_fetch_has_no_credentials(self, manager, tmp_path):
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        captured = []
+
+        def fake_popen(cmd, **kwargs):
+            captured.append(list(cmd))
+            proc = MagicMock()
+            proc.stdout = io.StringIO(
+                "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git\n"
+                if "get-url" in cmd
+                else ""
+            )
+            proc.stderr = io.StringIO("")
+            proc.wait.return_value = 0
+            return proc
+
+        with patch("subprocess.Popen", side_effect=fake_popen):
+            manager.annex_get(repo_dir, ["sub-amuAP"])
+
+        fetch_cmds = [c for c in captured if "fetch" in c]
+        assert fetch_cmds
+        assert "http.extraHeader=Authorization:" not in fetch_cmds[0]
 
     def test_runs_annex_init(self, manager, tmp_path):
         cmds = self._capture_commands(manager, tmp_path, ["sub-amuAP"])
@@ -642,6 +707,57 @@ class TestDownloadSubjects:
         assert repo_dir == tmp_path / "whole-spine"
         assert "includes" in mock_annex.call_args_list[1].kwargs
         assert mock_annex.call_args_list[1].kwargs["includes"] == []
+
+    def test_annex_paths_are_repository_relative(self, dnp, tmp_path):
+        subjects = [
+            (
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                "/ds004011/sub-01",
+                "whole-spine",
+            ),
+        ]
+        with (
+            patch.object(dnp, "clone_sparse") as mock_clone,
+            patch.object(dnp, "annex_get") as mock_annex,
+        ):
+            dnp.download_subjects(
+                subjects, tmp_path, use_annex=True, derivatives=True
+            )
+
+        clone_paths = mock_clone.call_args.args[1]
+        assert clone_paths == [
+            "ds004011/sub-01",
+            "derivatives/*/ds004011/sub-01/*",
+        ]
+        assert mock_annex.call_args_list[0].args[1] == ["ds004011/sub-01"]
+        assert mock_annex.call_args_list[1].kwargs["includes"] == [
+            "derivatives/*/ds004011/sub-01/*"
+        ]
+
+    def test_annex_paths_drop_repository_name_prefix(self, dnp, tmp_path):
+        subjects = [
+            (
+                "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git",
+                "/ds004011/sub-01",
+                "ds004011",
+            ),
+        ]
+        with (
+            patch.object(dnp, "clone_sparse") as mock_clone,
+            patch.object(dnp, "annex_get") as mock_annex,
+        ):
+            dnp.download_subjects(
+                subjects, tmp_path, use_annex=True, derivatives=True
+            )
+
+        assert mock_clone.call_args.args[1] == [
+            "sub-01",
+            "derivatives/*/sub-01/*",
+        ]
+        assert mock_annex.call_args_list[0].args[1] == ["sub-01"]
+        assert mock_annex.call_args_list[1].kwargs["includes"] == [
+            "derivatives/*/sub-01/*"
+        ]
 
     def test_annex_get_not_called_without_use_annex(self, dnp, tmp_path):
         subjects = [
