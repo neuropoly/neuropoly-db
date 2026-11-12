@@ -40,13 +40,22 @@ class Manager(ABC):
 
 
 class GitManager(Manager):
-    def __init__(self, user: str, token: str, ssl_verify: bool = True):
+    def __init__(
+        self, user: str, token: str, ssl_verify: bool = True, *, auth_host: str
+    ):
         super().__init__()
         self._user = user
         self._token = token
         self._ssl_verify = ssl_verify
+        self._auth_host = auth_host.lower()
 
-    def git_http_config(self) -> list[str]:
+    def git_http_config(self, repo_url: str) -> list[str]:
+        """
+        Check the host before sending credentials
+        """
+        if not self._sends_credentials_to(repo_url):
+            return []
+
         git_auth = b64encode(f"{self._user}:{self._token}".encode("utf-8")).decode(
             "ascii"
         )
@@ -56,6 +65,13 @@ class GitManager(Manager):
             "-c",
             f"http.sslVerify={str(self._ssl_verify).lower()}",
         ]
+
+    def _sends_credentials_to(self, repo_url: str) -> bool:
+        """
+        Check that the dataset host is indeed Gitea (by default) before sending credentials (to avoir sending them to git for example)
+        """
+        parsed = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
+        return (parsed.hostname or "").lower() == self._auth_host
 
     def git_env(self) -> dict:
         """Return an environment dict with interactive git prompts disabled."""
@@ -108,7 +124,8 @@ class GitManager(Manager):
         skipped and only the sparse-checkout set is updated before re-checking
         out (idempotent, safe to call repeatedly).
 
-        Authentication is injected via http.extraHeader.
+        Authentication is injected via http.extraHeader only for the configured
+        Gitea host.
 
         Args:
             repo_url: Repository URL, with or without ``.git`` suffix.  May be a plain
@@ -151,7 +168,7 @@ class GitManager(Manager):
         repo_path = repo_path.removesuffix(".git")
         git_url = f"{base}{repo_path}.git"
         env = self.git_env()
-        git = ["git"] + self.git_http_config()
+        git = ["git"] + self.git_http_config(git_url)
 
         # Extract repository name from repo_url path
         repo_name = repo_path.split("/")[-1] if repo_path else "repository"
@@ -250,8 +267,9 @@ class GitManager(Manager):
         Raises:
             RuntimeError: If process exits non-zero or times out.
         """
+        redacted_cmd = self._redact_git_command(cmd)
         if getattr(self, "verbose", False):
-            print(f"+ {shlex.join(cmd)}", flush=True)
+            print(f"+ {shlex.join(redacted_cmd)}", flush=True)
 
         proc = subprocess.Popen(
             cmd,
@@ -313,13 +331,22 @@ class GitManager(Manager):
 
         if return_code != 0:
             detail = (
-                f"Command: {' '.join(cmd)}\n"
+                f"Command: {' '.join(redacted_cmd)}\n"
                 f"Stdout: {stdout_text}\n"
                 f"Stderr: {stderr_text}"
             )
             raise RuntimeError(f"{context} failed.\n{detail}")
 
         return stdout_text, stderr_text
+
+    @staticmethod
+    def _redact_git_command(cmd: list[str]) -> list[str]:
+        """Remove credentials from command output and error messages."""
+        redacted = list(cmd)
+        for index, argument in enumerate(redacted):
+            if argument.startswith("http.extraHeader=Authorization: Basic "):
+                redacted[index] = "http.extraHeader=Authorization: Basic [REDACTED]"
+        return redacted
 
 
 class BagelDB:

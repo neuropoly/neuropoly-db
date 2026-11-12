@@ -9,8 +9,6 @@ from npdb.managers.model import GitManager
 
 class GiteaManager(GitManager):
     def __init__(self, url: str, user: str, token: str, ssl_verify: bool = True):
-        super().__init__(user, token, ssl_verify)
-
         # Normalise the URL: strip protocol if present, remember it.
         # NP_GITEA_APP_URL may or may not include a scheme; both forms are
         # accepted and produce the same behaviour.
@@ -23,6 +21,10 @@ class GiteaManager(GitManager):
             self._host = url.split("/")[0]  # strip any trailing path
 
         self._http_base = f"{self._proto}://{self._host}"
+        parsed_host = urlparse(self._http_base) # extract the hostname of the URL
+        super().__init__(
+            user, token, ssl_verify, auth_host=(parsed_host.hostname or self._host)
+        )
 
         self.client = gt_client.Gitea(
             gitea_url=self._http_base, token_text=self._token, verify=self._ssl_verify
@@ -161,7 +163,14 @@ class GiteaManager(GitManager):
             repo_name = repo_dir.name
 
         env = self.git_env()
-        git = ["git"] + self.git_http_config()
+        get_url_cmd = ["git", "-C", str(repo_dir), "remote", "get-url", "origin"] # get the url of the repository
+        origin_stdout, _ = self._run_git(
+            get_url_cmd,
+            env=env,
+            context=f"get origin URL in '{repo_dir}'"
+        )
+        origin_url = origin_stdout.strip()
+        git = ["git"] + self.git_http_config(origin_url)
 
         # 1. Fetch the git-annex metadata branch as a proper tracking ref over
         #    HTTPS (token auth).  git clone --depth=1 only fetches the HEAD
@@ -189,19 +198,22 @@ class GiteaManager(GitManager):
         #    Done after the git-annex branch fetch so that plain-git operations
         #    (which work over HTTPS) are not affected.
         self._notify_repo_step(repo_name, "Configuring remote for git-annex…", 1, 5)
-        get_url_cmd = ["git", "-C", str(repo_dir), "remote", "get-url", "origin"]
         try:
-            origin_stdout, _ = self._run_git(
-                get_url_cmd,
-                env=env,
-                context=f"get origin URL in '{repo_dir}'",
-            )
-            ssh_url = self._to_ssh_url(origin_stdout.strip())
-            self._run_git(
-                ["git", "-C", str(repo_dir), "remote", "set-url", "origin", ssh_url],
-                env=env,
-                context=f"switch origin to SSH in '{repo_dir}'",
-            )
+            if self._sends_credentials_to(origin_url):
+                ssh_url = self._to_ssh_url(origin_url)
+                self._run_git(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_dir),
+                        "remote",
+                        "set-url",
+                        "origin",
+                        ssh_url,
+                    ],
+                    env=env,
+                    context=f"switch origin to SSH in '{repo_dir}'",
+                )
         except RuntimeError:
             # If origin URL cannot be read, continue with current remote config.
             pass
