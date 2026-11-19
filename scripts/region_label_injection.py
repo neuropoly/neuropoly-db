@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 import nibabel as nib
 import numpy as np
+from typing import Optional
 
 LABEL_MAPPING = { # cf. https://github.com/neuropoly/totalspineseg/blob/main/totalspineseg/resources/labels_maps/tss_map.json
     1: "SC",
@@ -32,23 +33,14 @@ DISCSLABEL_MAPPING = {
     19: "T11-T12", 20: "T12-L1", 21: "L1-L2", 22: "L2-L3", 23: "L3-L4", 24: "L4-L5", 25: "L5-S1"
 }
 
-VALID_VERTEBRAE = (
-    {f"C{k}" for k in range(1, 8)}
-    | {f"T{k}" for k in range(1, 13)}
-    | {f"L{k}" for k in range(1, 6)}
-    | {"S1"}
+VERTEBRAL_LEVELS = (
+    [f"C{i}" for i in range(1, 8)]     # C1-C7
+    + [f"T{i}" for i in range(1, 13)]  # T1-T12
+    + [f"L{i}" for i in range(1, 6)]   # L1-L5
+    + [f"S{i}" for i in range(1, 6)]   # S1-S5
 )
 
-ISSUE_MESSAGE = ("Please make sure to open an issue at https://github.com/neuropoly/neuropoly-db so the "
-                 "field content can be discussed and reviewed \n")
-
-class ExistingBodyPartDetailsError(Exception):
-    def __init__(self, conflicts, bids_path):
-        self.involved_subjects = [conflicts[i][0].relative_to(bids_path).parts[0] for i in range(len(conflicts))]
-        unique_subjects = np.unique(self.involved_subjects) # to make sure subjects doesn't appear multiple times
-        involved_subjects_string = ", ".join(str(sub_id) for sub_id in unique_subjects)
-        message = f"BodyPartDetails already contains a different value for {len(unique_subjects)} subjects in the given dataset and is not overwritten. " + ISSUE_MESSAGE + "\n" + "List of the subjects that already have a different BodyPartDetails field: " + involved_subjects_string
-        super().__init__(message)
+_LEVEL_RANK = {level: rank for rank, level in enumerate(VERTEBRAL_LEVELS)}
 
 class RegionLabelBodyPartDetails:
     def __init__(self, dataset_path, label_map=None, run_tss=False):
@@ -101,7 +93,7 @@ class RegionLabelBodyPartDetails:
             if label_int in DISCSLABEL_MAPPING:
                 disc_name = DISCSLABEL_MAPPING[label_int]
                 for vert in disc_name.split("-"):
-                    if vert in VALID_VERTEBRAE:
+                    if vert in VERTEBRAL_LEVELS:
                         vertebrae.append(vert)
 
         return list(dict.fromkeys(vertebrae))
@@ -148,7 +140,8 @@ class RegionLabelBodyPartDetails:
         planned = self.plan_dataset()
         conflicts = self.find_conflicts(planned)
         if conflicts:
-            raise ExistingBodyPartDetailsError(conflicts=conflicts, bids_path=self.dataset_path)
+            #raise ExistingBodyPartDetailsError(conflicts=conflicts, bids_path=self.dataset_path)
+            self.handle_existing_body_part_detail_field(conflicts=conflicts)
         
         for path, _, bpd_value in planned:
             self.update_bids_sidecar(path, bpd_value)
@@ -229,6 +222,86 @@ class RegionLabelBodyPartDetails:
 
         return seg_path
 
+    def cluster_similar_body_part_details_field(self, conflicts):
+        """
+        If some subjects already have a BodyPartDetails field that is filled, 
+        returns a dictionnary clustering distincts fields with their corresponding 
+        list of subjects that have exactly this BodyPartDetails field so that they can be handled separately
+        """
+        bids_path = self.dataset_path
+        distincts_bpd_fields = np.unique([conflicts[i][1] for i in range(len(conflicts))])
+        involved_subjects = dict()
+        for i in range(len(conflicts)):
+            for j in range(len(distincts_bpd_fields)):
+                if conflicts[i][1] == distincts_bpd_fields[j]:
+                    involved_subjects[conflicts[i][0].relative_to(bids_path)] = j
+
+        fields = dict()
+        for i in range(len(distincts_bpd_fields)):
+            subject_cluster = []
+            for subject, index in involved_subjects.items():
+                if index == i:
+                    subject_cluster.append(str(subject))
+            fields[distincts_bpd_fields[i]] = subject_cluster
+        return fields
+
+    def handle_existing_body_part_detail_field(self, conflicts):
+        clustered_subjects = self.cluster_similar_body_part_details_field(conflicts=conflicts)
+        message = "Some subjects already have a BodyPartDetails field containing information. Here is a list of the sidecars that have the same BodyPartDetails field:\n \n"
+        answer = ""
+
+        for field, subjects in clustered_subjects.items():
+
+            str_field = str(field)
+            message = ""
+            message += str_field
+            message += ": "
+            message += ", ".join(subjects)
+            message += "\n"
+
+            print(message)
+
+            if follow_body_part_details_convention(str_field):
+                print("ATTENTION POINT: the current labels are valid according to the convention but differ from the generated one." \
+                      " This may be due to segmentation tools that generate different labels, please open an issue at https://github.com/neuropoly/neuropoly-db," \
+                      " and mention the list of sidecars above ↑ \n \n")
+
+            if not follow_body_part_details_convention(str_field):
+                answer = input("Do you want to overwrite the BodyPartDetails field of the sidecars listed above ? [y/n] \n" \
+                                "If you answered no because you think the current field is relevant, but you still want to add the computed field, " \
+                                "please make sur to open an issue at https://github.com/neuropoly/neuropoly-db to discuss how handle this field: ")
+
+                while not (answer == "y" or answer=="no"):
+                    answer = input("Please answer either by 'y' (if your answer is yes) or 'n' (if your answer is no): ")
+
+        if answer == "y":
+            for conflict in conflicts:
+                self.update_bids_sidecar(conflict[0], conflict[2])
+
+def follow_body_part_details_convention(bodypartdetails: str):
+    """
+    Return True if the string follows the BodyPartDetails convention, else False
+
+    Convention: comma-separated vertebral levels, no spaces, e.g. "C1,C2,C3,T1", defined in https://github.com/neuropoly/neuropoly-db/issues/73
+
+    Valid levels: C1-C7, T1-T12, L1-L5, S1-S5. Each level appears at most once
+    """
+
+    if not isinstance(bodypartdetails, str) or not bodypartdetails:
+            return False
+
+    levels = bodypartdetails.split(",")
+    if any(level not in _LEVEL_RANK for level in levels):
+        return False
+
+    if len(set(levels)) != len(levels):
+        return False
+
+    ranks = [_LEVEL_RANK[level] for level in levels]
+    if ranks != sorted(ranks):
+        return False
+
+    return True
 
 def load_label_mapping(json_path):
     """
