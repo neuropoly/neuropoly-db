@@ -48,6 +48,7 @@ class GitManager(Manager):
         self._token = token
         self._ssl_verify = ssl_verify
         self._auth_host = auth_host.lower()
+        self.verbose: bool = False
 
     def git_http_config(self, repo_url: str) -> list[str]:
         """
@@ -106,6 +107,17 @@ class GitManager(Manager):
             )
 
             return stdout.strip()
+
+    @abstractmethod
+    def download_subjects(
+        self,
+        subjects: list[tuple[str, str, str]],
+        output_dir: Path,
+        use_annex: bool = False,
+        derivatives: bool = True,
+    ) -> list[tuple[bool, str, str]]:
+        """Download repository subjects into an output directory."""
+        pass
 
     def clone_sparse(
         self,

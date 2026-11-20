@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 
 from npdb.cli.cli import npdb
 from npdb.cli.helpers import fetch_url, read_tsv
+from npdb.managers.github import GithubManager
 from npdb.managers.neuropoly import DataNeuroPolyMTL
 
 runner = CliRunner()
@@ -77,6 +78,28 @@ def _write_tsv(tmp_path: Path, rows: list[str]) -> Path:
     tsv = tmp_path / "results.tsv"
     tsv.write_text(TSV_HEADER + "\n" + "\n".join(rows) + "\n", encoding="utf-8")
     return tsv
+
+
+# ---------------------------------------------------------------------------
+# GithubManager — public GitHub repository operations
+# ---------------------------------------------------------------------------
+
+
+class TestGithubManager:
+    def test_never_adds_gitea_credentials(self):
+        manager = GithubManager()
+
+        assert manager.git_http_config(
+            "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git"
+        ) == []
+
+    def test_normalizes_subject_path(self):
+        manager = GithubManager()
+
+        assert manager._normalize_subject_path(
+            "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git",
+            "/ds004011/sub-01",
+        ) == "sub-01"
 
 
 # ---------------------------------------------------------------------------
@@ -1016,7 +1039,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=False),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GitManagerFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
@@ -1061,7 +1084,7 @@ class TestDownloadCLI:
 
         with (
             patch("npdb.cli.helpers.httpx.stream", return_value=mock_response),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GitManagerFactory") as MockFactory,
         ):
             result = runner.invoke(
                 npdb, ["download", str(tsv), "--output-dir", str(tmp_path)]
@@ -1076,7 +1099,7 @@ class TestDownloadCLI:
         with (
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
-            patch("npdb.cli.cli.GiteaManagerFactory"),
+            patch("npdb.cli.cli.GitManagerFactory"),
         ):
             result = runner.invoke(
                 npdb,
@@ -1092,7 +1115,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=False),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GitManagerFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [
@@ -1113,7 +1136,7 @@ class TestDownloadCLI:
             patch("npdb.cli.cli.load_dotenv"),
             patch.dict("os.environ", ENV_VARS),
             patch("npdb.cli.cli.repo_has_git_annex", return_value=True),
-            patch("npdb.cli.cli.GiteaManagerFactory") as MockFactory,
+            patch("npdb.cli.cli.GitManagerFactory") as MockFactory,
         ):
             instance = MockFactory.create_from_env.return_value
             instance.download_subjects.return_value = [

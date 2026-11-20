@@ -26,7 +26,8 @@ from npdb.cli.helpers import (
     read_tsv,
     repo_has_git_annex,
 )
-from npdb.factories import GiteaManagerFactory
+from npdb.factories import GitManagerFactory
+from npdb.managers.neuropoly import DataNeuroPolyMTL
 
 npdb = typer.Typer(
     help="NeuroPoly Database CLI for converting, standardizing, and downloading BIDS datasets.",
@@ -330,12 +331,17 @@ def gitea2bagel(
     """
     from dotenv import load_dotenv
 
-    from npdb.factories import GiteaManagerFactory
+    from npdb.factories import GitManagerFactory
 
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
     try:
-        gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
+        gitea_manager = GitManagerFactory.create_from_env(
+            repo_url=os.environ.get("NP_GITEA_APP_URL", ""),
+            ssl_verify=verify_ssl
+        )
+        if not isinstance(gitea_manager, DataNeuroPolyMTL):
+            raise ValueError("The Gitea command requires a NeuroData manager")
     except ValueError as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(code=1)
@@ -343,7 +349,6 @@ def gitea2bagel(
     with tempfile.TemporaryDirectory(prefix="npdb_clone_") as tmp_dir:
         local_clone = Path(tmp_dir) / dataset
 
-        # 1. Clone the repository
         gitea_manager.clone_repository(dataset, str(local_clone), light=True)
         url, access_type = gitea_manager.get_description_extensions(dataset)
 
@@ -423,8 +428,9 @@ def download(
 
         Backend selection is automatic and can differ by dataset within the same TSV.
 
-    Git operations require [bold]NP_GITEA_APP_URL[/bold], [bold]NP_GITEA_APP_USER[/bold],
-    and [bold]NP_GITEA_APP_TOKEN[/bold] environment variables.
+    GitHub downloads do not require Gitea credentials. NeuroData downloads require
+    [bold]NP_GITEA_APP_URL[/bold], [bold]NP_GITEA_APP_USER[/bold], and
+    [bold]NP_GITEA_APP_TOKEN[/bold].
     """
     try:
         rows = read_tsv(query_results)
@@ -499,18 +505,6 @@ def download(
     if subjects:
         load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env"))
 
-        try:
-            if verbose:
-                typer.echo("Initializing Gitea manager...")
-            gitea_manager = GiteaManagerFactory.create_from_env(ssl_verify=verify_ssl)
-            if verbose:
-                typer.echo("Gitea manager initialized successfully.")
-        except ValueError as e:
-            typer.echo(f"Error: {e}", err=True)
-            raise typer.Exit(code=1)
-
-        gitea_manager.verbose = verbose
-
         grouped: dict[tuple[str, str], list[str]] = {}
         for repo_url, sparse_path, dataset in subjects:
             key = (repo_url, dataset)
@@ -525,16 +519,30 @@ def download(
         )
 
         display = RepoDownloadDisplay()
-        gitea_manager.add_download_observer(display)
 
         with Live(display, refresh_per_second=4, transient=False):
             for (repo_url, dataset), sparse_paths in grouped.items():
-                use_annex = repo_has_git_annex(gitea_manager, repo_url)
+                try:
+                    if verbose:
+                        typer.echo(f"Initializing git manager for {repo_url}...")
+                    git_manager = GitManagerFactory.create_from_env(
+                        repo_url=repo_url,
+                        ssl_verify=verify_ssl,
+                    )
+                except ValueError as e:
+                    typer.echo(f"Error: {e}", err=True)
+                    git_failures += 1
+                    continue
+
+                git_manager.verbose = verbose
+                git_manager.add_download_observer(display)
+
+                use_annex = repo_has_git_annex(git_manager, repo_url)
                 if verbose:
                     protocol = "git + git-annex" if use_annex else "git"
                     typer.echo(f"Protocol for {dataset}: {protocol}")
 
-                results = gitea_manager.download_subjects(
+                results = git_manager.download_subjects(
                     [(repo_url, p, dataset) for p in sparse_paths],
                     output_dir,
                     use_annex=use_annex,
