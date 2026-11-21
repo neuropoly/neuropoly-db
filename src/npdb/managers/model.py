@@ -52,7 +52,7 @@ class GitManager(Manager):
 
     def git_http_config(self, repo_url: str) -> list[str]:
         """
-        Check the host before sending credentials
+        Format header fields for git http requests.
         """
         if not self._sends_credentials_to(repo_url):
             return []
@@ -69,7 +69,7 @@ class GitManager(Manager):
 
     def _sends_credentials_to(self, repo_url: str) -> bool:
         """
-        Check that the dataset host is indeed Gitea (by default) before sending credentials (to avoir sending them to git for example)
+        Check if repository host matches authentication host for credentials sending.
         """
         parsed = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
         return (parsed.hostname or "").lower() == self._auth_host
@@ -136,8 +136,8 @@ class GitManager(Manager):
         skipped and only the sparse-checkout set is updated before re-checking
         out (idempotent, safe to call repeatedly).
 
-        Authentication is injected via http.extraHeader only for the configured
-        Gitea host.
+        Authentication is injected via http.extraHeader only when
+        the repository host matches the authentication host.
 
         Args:
             repo_url: Repository URL, with or without ``.git`` suffix.  May be a plain
