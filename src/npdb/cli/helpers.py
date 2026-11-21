@@ -75,19 +75,19 @@ def normalize_repo_url_for_git(repo_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{repo_path}"
 
 
-def repo_has_git_annex(gitea_manager, repo_url: str) -> bool:
+def repo_has_git_annex(git_manager, repo_url: str) -> bool:
     git_url = normalize_repo_url_for_git(repo_url)
     cmd = (
         ["git"]
-        + gitea_manager.git_http_config()
+        + git_manager.git_http_config(git_url)
         + ["ls-remote", "--heads", git_url, "refs/heads/git-annex"]
     )
 
     try:
-        stdout, _ = gitea_manager._run_git(
+        stdout, _ = git_manager._run_git(
             cmd,
-            env=gitea_manager.git_env(),
-            context=f"probe git-annex metadata branch for '{repo_url}'",
+            env=git_manager.git_env(),
+            context=f"probe git-annex metadata branch for '{repo_url}'"
         )
     except RuntimeError:
         return False

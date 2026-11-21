@@ -12,72 +12,66 @@ from npdb.annotation import AnnotationConfig
 from npdb.factories import (
     AIClientFactory,
     AnnotationConfigFactory,
-    GiteaManagerFactory,
+    GitManagerFactory,
     LedgerFactory,
 )
 from npdb.report import RunLedger
 
-# ── GiteaManagerFactory ────────────────────────────────────────────
+# ── GitManagerFactory ────────────────────────────────────────────
 
 
-class TestGiteaManagerFactory:
-    def test_raises_when_all_vars_missing(self):
-        env = {
-            "NP_GITEA_APP_URL": None,
-            "NP_GITEA_APP_USER": None,
-            "NP_GITEA_APP_TOKEN": None,
-        }
+class TestGitManagerFactory:
+    def test_github_does_not_require_gitea_environment(self):
         with patch.dict(os.environ, {}, clear=True):
-            for k in ("NP_GITEA_APP_URL", "NP_GITEA_APP_USER", "NP_GITEA_APP_TOKEN"):
-                os.environ.pop(k, None)
-            with pytest.raises(ValueError) as exc_info:
-                GiteaManagerFactory.create_from_env()
-        msg = str(exc_info.value)
-        assert "NP_GITEA_APP_URL" in msg
-        assert "NP_GITEA_APP_USER" in msg
-        assert "NP_GITEA_APP_TOKEN" in msg
+            with patch("npdb.factories.GithubManager") as MockManager:
+                manager = GitManagerFactory.create_from_env(
+                    "https://github.com/OpenNeuroDatasets-JSONLD/ds004011.git",
+                    ssl_verify=False,
+                )
 
-    def test_raises_when_one_var_missing(self):
-        env = {
-            "NP_GITEA_APP_URL": "https://example.com",
-            "NP_GITEA_APP_USER": "user",
-        }
-        with patch.dict(os.environ, env, clear=False):
-            os.environ.pop("NP_GITEA_APP_TOKEN", None)
-            with pytest.raises(ValueError) as exc_info:
-                GiteaManagerFactory.create_from_env()
-        assert "NP_GITEA_APP_TOKEN" in str(exc_info.value)
+        assert manager is not None
+        MockManager.assert_called_once_with(ssl_verify=False)
 
-    def test_creates_manager_with_all_vars(self):
+    def test_neurodata_requires_all_environment_variables(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError) as exc_info:
+                GitManagerFactory.create_from_env(
+                    "https://data.neuro.polymtl.ca/datasets/whole-spine"
+                )
+
+        message = str(exc_info.value)
+        assert "NP_GITEA_APP_URL" in message
+        assert "NP_GITEA_APP_USER" in message
+        assert "NP_GITEA_APP_TOKEN" in message
+
+    def test_creates_neurodata_manager_with_all_variables(self):
         env = {
-            "NP_GITEA_APP_URL": "https://gitea.example.com",
+            "NP_GITEA_APP_URL": "https://data.neuro.polymtl.ca",
             "NP_GITEA_APP_USER": "testuser",
             "NP_GITEA_APP_TOKEN": "tok_abc123",
         }
         with (
-            patch.dict(os.environ, env, clear=False),
-            patch("npdb.factories.DataNeuroPolyMTL") as MockMgr,
+            patch.dict(os.environ, env, clear=True),
+            patch("npdb.factories.DataNeuroPolyMTL") as MockManager,
         ):
-            MockMgr.return_value = object()
-            manager = GiteaManagerFactory.create_from_env(ssl_verify=False)
+            manager = GitManagerFactory.create_from_env(
+                "https://data.neuro.polymtl.ca/datasets/whole-spine",
+                ssl_verify=False,
+            )
+
         assert manager is not None
-        MockMgr.assert_called_once_with(
-            url="https://gitea.example.com",
+        MockManager.assert_called_once_with(
+            url="https://data.neuro.polymtl.ca",
             user="testuser",
             token="tok_abc123",
             ssl_verify=False,
         )
 
-    def test_error_message_lists_all_missing_vars(self):
-        """ValueError message must list every missing variable, not just the first."""
-        with patch.dict(os.environ, {}, clear=True):
-            for k in ("NP_GITEA_APP_URL", "NP_GITEA_APP_USER", "NP_GITEA_APP_TOKEN"):
-                os.environ.pop(k, None)
-            with pytest.raises(ValueError) as exc_info:
-                GiteaManagerFactory.create_from_env()
-        msg = str(exc_info.value)
-        # All three must appear in a single error
-        assert msg.count("NP_GITEA") == 3
+    def test_rejects_unsupported_host(self):
+        with pytest.raises(ValueError, match="Unsupported git host"):
+            GitManagerFactory.create_from_env(
+                "https://gitlab.example.com/group/repository.git"
+            )
 
 
 # ── AnnotationConfigFactory ────────────────────────────────────────
