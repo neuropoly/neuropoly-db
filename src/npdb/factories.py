@@ -11,56 +11,60 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from urllib.parse import urlparse
 
-from npdb.annotation import AnnotationConfig
+from npdb.annotation import AnnotationConfig, AnnotationMode
 from npdb.managers.neuropoly import DataNeuroPolyMTL
+from npdb.managers.github import GithubManager
+from npdb.managers.model import GitManager
 from npdb.report import RunLedger
 
-class GiteaManagerFactory:
-    """
-    Creates :class:`~npdb.managers.DataNeuroPolyMTL` from environment variables.
-
-    Required variables:
-    - ``NP_GITEA_APP_URL``   — base URL of the Gitea instance
-    - ``NP_GITEA_APP_USER``  — Gitea username
-    - ``NP_GITEA_APP_TOKEN`` — Gitea personal-access token
-
-    Raises:
-        ValueError: when any required variable is absent.
-    """
+class GitManagerFactory:
+    """Create the appropriate Git manager for a repository URL."""
 
     _URL_VAR = "NP_GITEA_APP_URL"
     _USER_VAR = "NP_GITEA_APP_USER"
     _TOKEN_VAR = "NP_GITEA_APP_TOKEN"
 
     @classmethod
-    def create_from_env(cls, ssl_verify: bool = True) -> DataNeuroPolyMTL:
-        """Return a :class:`DataNeuroPolyMTL` configured from environment variables."""
+    def create_from_env(cls, repo_url: str, ssl_verify: bool = True) -> GitManager:
+        """Select a Git manager based on the repository hostname"""
+
+        parsed = urlparse(repo_url if "://" in repo_url else f"https://{repo_url}")
+        hostname = (parsed.hostname or "").lower()
+
+        if not hostname:
+            raise ValueError(f"Invalid repository URL: {repo_url}")
+
+        if hostname == "github.com":
+            return cls._create_github_manager(ssl_verify=ssl_verify)
+
+        if hostname == "data.neuro.polymtl.ca":
+            return cls._create_neurodata_manager(ssl_verify=ssl_verify)
+
+        raise ValueError(f"Unsupported git host: {hostname}")
+
+    @classmethod
+    def _create_github_manager(cls, ssl_verify: bool) -> GithubManager:
+        return GithubManager(ssl_verify=ssl_verify)
+
+    @classmethod
+    def _create_neurodata_manager(cls, ssl_verify: bool) -> DataNeuroPolyMTL:
         url = os.environ.get(cls._URL_VAR)
         user = os.environ.get(cls._USER_VAR)
         token = os.environ.get(cls._TOKEN_VAR)
 
         missing = [
             var
-            for var, val in [
-                (cls._URL_VAR, url),
-                (cls._USER_VAR, user),
-                (cls._TOKEN_VAR, token),
-            ]
-            if not val
+            for var, value in ((cls._URL_VAR, url), (cls._USER_VAR, user), (cls._TOKEN_VAR, token))
+            if not value
         ]
-        if missing:
-            raise ValueError(
-                f"Missing required environment variables: {', '.join(missing)}"
-            )
 
-        return DataNeuroPolyMTL(
-            url=url,  # type: ignore[arg-type]
-            user=user,  # type: ignore[arg-type]
-            token=token,  # type: ignore[arg-type]
-            ssl_verify=ssl_verify,
-        )
+        if missing:
+            raise ValueError("Missing required environment variables: " + ", ".join(missing))
+
+        return DataNeuroPolyMTL(url=cast(str, url), user=cast(str, user), token=cast(str, token), ssl_verify=ssl_verify)
 
 class AnnotationConfigFactory:
     """
@@ -90,7 +94,7 @@ class AnnotationConfigFactory:
         the CLI option names.
         """
         return AnnotationConfig(
-            mode=mode,
+            mode=AnnotationMode(mode),
             headless=headless,
             timeout=timeout,
             artifacts_dir=artifacts_dir,
