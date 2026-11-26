@@ -28,6 +28,12 @@ from npdb.cli.helpers import (
 )
 from npdb.errors import UsageError
 from npdb.factories import GiteaProviderFactory, ProviderFactory
+from npdb.providers.detection import (
+    DatasetMatch,
+    bids_relative_path,
+    detect_provider,
+    route_for,
+)
 from npdb.providers.git import GitProvider
 from npdb.providers.mendeley import MendeleyProvider
 from npdb.providers.midrc import MIDRCProvider
@@ -1491,6 +1497,70 @@ def figshare2bagel(
     )
 
 
+def _collect_provider_jobs(
+    rows: list[dict[str, str]],
+) -> tuple[dict[DatasetMatch, set[str]], set[str]]:
+    """Group rows handled by a registered provider and collect the BIDS paths to fetch."""
+    jobs: dict[DatasetMatch, set[str]] = {}
+    dataset_names: set[str] = set()
+    for row in rows:
+        match = detect_provider(row)
+        if match is None:
+            continue
+        dataset_names.add((row.get("DatasetName") or "unknown").strip())
+        paths = jobs.setdefault(match, set())
+        path = bids_relative_path((row.get("ImagingSessionPath") or "").strip())
+        if path:
+            paths.add(path)
+    return jobs, dataset_names
+
+
+def _download_with_providers(
+    jobs: dict[DatasetMatch, set[str]], output_dir: Path
+) -> int:
+    """Fetch the matching paths of each dataset with its provider. Returns the failure count."""
+    _load_env()
+    providers: dict = {}
+    failures = 0
+
+    typer.echo(f"Downloading {len(jobs)} dataset(s) via provider backends...")
+    for match, paths in sorted(
+        jobs.items(), key=lambda item: (item[0].provider.value, item[0].identifier)
+    ):
+        label = f"{match.provider.value}:{match.identifier}"
+        if not paths:
+            failures += 1
+            typer.echo(
+                f"FAIL {label}: no imaging paths in TSV; "
+                "refusing to download the whole dataset.",
+                err=True,
+            )
+            continue
+        try:
+            provider = providers.get(match.provider)
+            if provider is None:
+                provider = providers[match.provider] = ProviderFactory.create(
+                    match.provider,
+                    cache_dir=None,
+                    credentials_path=None,
+                    token=None,
+                    endpoint=None,
+                )
+            provider.fetch(
+                match.identifier,
+                output_dir / match.folder_name,
+                **route_for(match.provider).fetch_kwargs(sorted(paths), match.version),
+            )
+        except Exception as exc:
+            failures += 1
+            typer.echo(f"FAIL {label}: {exc}", err=True)
+            continue
+        typer.echo(f"SUCCESS {label}: {len(paths)} path(s)")
+
+    typer.echo("Provider download phase complete.")
+    return failures
+
+
 @npdb.command("download")
 def download(
     query_results: Path = typer.Argument(
@@ -1557,12 +1627,19 @@ def download(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    provider_jobs, provider_datasets = _collect_provider_jobs(rows)
+    provider_failures = (
+        _download_with_providers(provider_jobs, output_dir) if provider_jobs else 0
+    )
+
     datasets_with_http: set[str] = set()
     seen_urls: set[str] = set()
     http_jobs: list[tuple[str, Path, str, str]] = []
 
     for row in rows:
         dataset = (row.get("DatasetName") or "unknown").strip()
+        if dataset in provider_datasets:
+            continue
         subject = (row.get("SubjectID") or "unknown").strip()
         url = (row.get("AccessLink") or "").strip()
         if not is_http_url(url):
@@ -1610,7 +1687,8 @@ def download(
     subjects: list[tuple[str, str, str]] = []
     for row in rows:
         dataset = (row.get("DatasetName") or "unknown").strip()
-        if dataset in datasets_with_http:
+
+        if dataset in datasets_with_http or dataset in provider_datasets:
             continue
         repo_url = (row.get("RepositoryURL") or "").strip()
         imaging_path = (row.get("ImagingSessionPath") or "").strip()
@@ -1672,16 +1750,17 @@ def download(
                     else:
                         typer.echo(f"FAIL {label}: {message}", err=True)
 
-    if not http_jobs and not subjects:
+    if not http_jobs and not subjects and not provider_jobs:
         typer.echo(
             "Warning: No download targets found in TSV (no valid AccessLink or git imaging rows).",
             err=True,
         )
         return
 
-    if git_failures or http_failures:
+    if provider_failures or git_failures or http_failures:
         typer.echo(
-            f"Download completed with failures (HTTP: {http_failures}, git: {git_failures}).",
+            "Download completed with failures "
+            f"(providers: {provider_failures}, HTTP: {http_failures}, git: {git_failures}).",
             err=True,
         )
         raise typer.Exit(code=1)
